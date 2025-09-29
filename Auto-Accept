@@ -1,0 +1,291 @@
+--====================================================
+-- Pet Counter UI + Auto Accept Gift (Combined Script)
+--====================================================
+
+local Players = game:GetService("Players")
+local UIS     = game:GetService("UserInputService")
+local VIM     = game:GetService("VirtualInputManager")
+
+local LP
+while not LP do LP = Players.LocalPlayer; task.wait() end
+
+local PG
+local t0 = os.clock()
+while not PG and os.clock() - t0 < 15 do
+    PG = LP:FindFirstChildOfClass("PlayerGui")
+    if not PG then task.wait(0.1) end
+end
+if not PG then
+    warn("[PetCounter] PlayerGui not found -> using CoreGui fallback.")
+    PG = game:GetService("CoreGui")
+end
+
+------------------------------------------------------
+-- ========== PHẦN 1: UI ĐẾM PET =====================
+------------------------------------------------------
+local PANEL_WIDTH   = 300   -- rộng hơn
+local PANEL_HEIGHT  = 200   -- cao hơn
+local ROW_HEIGHT    = 26
+local TITLE         = "Pet Counter"
+
+local BACKPACK = LP:WaitForChild("Backpack")
+
+local function baseName(s)
+    s = tostring(s or "")
+    local cut = s:match("^(.-)%s*%[")
+    return (cut and cut ~= "") and cut or s
+end
+
+local function countFromSources(sources)
+    local counts = {}
+    local function add(inst)
+        local n = baseName(inst.Name)
+        counts[n] = (counts[n] or 0) + 1
+    end
+    for _,src in ipairs(sources) do
+        if src and src.Parent then
+            for _,it in ipairs(src:GetChildren()) do
+                if it:IsA("Tool") or it:IsA("Model") or it:IsA("Folder") or it:IsA("Accessory") then
+                    add(it)
+                end
+            end
+        end
+    end
+    return counts
+end
+
+-- UI panel
+local Screen = Instance.new("ScreenGui")
+Screen.Name = "PetCounterUI"
+Screen.ResetOnSpawn = false
+Screen.IgnoreGuiInset = true
+Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Screen.Parent = PG
+
+local Frame = Instance.new("Frame")
+Frame.Name = "Panel"
+Frame.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
+Frame.AnchorPoint = Vector2.new(0.5, 0.5)         -- neo vào tâm
+Frame.Position = UDim2.new(0.5, 0, 0.5, 60)        -- chính giữa màn
+Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Frame.BackgroundTransparency = 0.25
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Parent = Screen
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, -20, 0, 28)
+Title.Position = UDim2.fromOffset(10, 6)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextColor3 = Color3.fromRGB(0, 200, 0)  -- màu xanh lá
+Title.Text = string.format("%s - %s", TITLE, LP.DisplayName or LP.Name)	--tên nv
+Title.Parent = Frame
+
+
+--PHẦN UI ĐẾM PET & ITEM TRONG TÚI
+
+local List = Instance.new("ScrollingFrame")
+List.Name = "List"
+List.Size = UDim2.new(1, -12, 1, -40)
+List.Position = UDim2.fromOffset(6, 34)
+List.BackgroundTransparency = 1
+List.ScrollBarThickness = 6
+List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+List.Parent = Frame
+local Layout = Instance.new("UIListLayout", List)
+Layout.Padding = UDim.new(0, 4)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function makeRow(text)
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+    tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)       -- nền đen xì
+    tl.BackgroundTransparency = 0                       -- không trong suốt
+    tl.BorderSizePixel = 0
+    tl.Font = Enum.Font.Gotham
+    tl.TextSize = 18
+    tl.TextColor3 = Color3.fromRGB(255, 0, 0)           -- chữ đỏ
+    tl.TextXAlignment = Enum.TextXAlignment.Left
+    tl.Text = text
+    Instance.new("UICorner", tl).CornerRadius = UDim.new(0, 8)
+    local pad = Instance.new("UIPadding", tl); pad.PaddingLeft = UDim.new(0, 8)
+    return tl
+end
+
+local function refresh()
+    local character = LP.Character or LP.CharacterAdded:Wait()
+    local counts = countFromSources({BACKPACK, character})
+
+    for _,ch in ipairs(List:GetChildren()) do
+        if ch:IsA("TextLabel") then ch:Destroy() end
+    end
+
+    local arr = {}
+    for name,cnt in pairs(counts) do table.insert(arr, {name=name, cnt=cnt}) end
+    table.sort(arr, function(a,b) return a.cnt==b.cnt and a.name<b.name or a.cnt>b.cnt end)
+
+    for _,it in ipairs(arr) do
+        makeRow(("%s  × %d"):format(it.name, it.cnt)).Parent = List
+    end
+end
+refresh()
+
+local function wireFolder(folder)
+    folder.ChildAdded:Connect(refresh)
+    folder.ChildRemoved:Connect(refresh)
+    for _,ch in ipairs(folder:GetChildren()) do
+        ch:GetPropertyChangedSignal("Name"):Connect(refresh)
+    end
+    folder.DescendantAdded:Connect(function(obj)
+        if obj and obj.GetPropertyChangedSignal then
+            obj:GetPropertyChangedSignal("Name"):Connect(refresh)
+        end
+    end)
+end
+
+wireFolder(BACKPACK)
+LP.CharacterAdded:Connect(function(char) refresh(); wireFolder(char) end)
+if LP.Character then wireFolder(LP.Character) end
+
+UIS.InputBegan:Connect(function(i,gp)
+    if not gp and i.KeyCode == Enum.KeyCode.K then
+        Screen.Enabled = not Screen.Enabled
+    end
+end)
+
+do
+    local dragging, offset
+    Frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and UIS:IsKeyDown(Enum.KeyCode.LeftAlt) then
+            dragging = true
+            offset = input.Position - Frame.AbsolutePosition
+        end
+    end)
+    Frame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local pos = input.Position - offset
+            Frame.Position = UDim2.fromOffset(pos.X, pos.Y)
+        end
+    end)
+end
+
+------------------------------------------------------
+-- ========== PHẦN 2: AUTO ACCEPT GIFT ==============
+------------------------------------------------------
+local done = setmetatable({}, {__mode="k"})
+
+local function isGiftPopup(container)
+    for _,d in ipairs(container:GetDescendants()) do
+        if (d:IsA("TextLabel") or d:IsA("TextButton")) then
+            local t = tostring(d.Text or ""):lower()
+            if t:find("gift from @") then return true end
+        end
+    end
+    return false
+end
+
+local function findAcceptNode(container)
+    for _,u in ipairs(container:GetDescendants()) do
+        if u:IsA("GuiObject") and u.Visible then
+            local nm = u.Name:lower()
+            if nm:find("accept") then return u end
+        end
+    end
+    for _,u in ipairs(container:GetDescendants()) do
+        if u:IsA("GuiObject") and u.Visible then
+            local lbl = u:FindFirstChildWhichIsA("TextLabel", true)
+            if lbl and lbl.Text and tostring(lbl.Text):lower():match("^%s*accept%s*$") then
+                return u
+            end
+        end
+    end
+    return nil
+end
+
+local function clickCenter(guiObj, tag)
+    if not (guiObj and guiObj.Visible and guiObj.AbsoluteSize.X > 3) then return end
+    local p,s = guiObj.AbsolutePosition, guiObj.AbsoluteSize
+    local x,y = p.X + s.X/2, p.Y + s.Y/2
+
+    VIM:SendMouseButtonEvent(x,y,0,true,  game,0); task.wait(0.02)
+    VIM:SendMouseButtonEvent(x,y,0,false, game,0)
+    pcall(function() VIM:SendTouchEvent(x,y,0,true) end); task.wait()
+    pcall(function() VIM:SendTouchEvent(x,y,0,false) end)
+    pcall(function() if guiObj.MouseButton1Click then firesignal(guiObj.MouseButton1Click) end end)
+    pcall(function() if guiObj.Activated then firesignal(guiObj.Activated) end end)
+    pcall(function() if guiObj.Activate then guiObj:Activate() end end)
+    print(("[Gift][UI] Click %s @(%d,%d)"):format(tag or guiObj.Name, x, y))
+end
+
+local function acceptOnce(container)
+    if done[container] then return end
+    if not isGiftPopup(container) then return end
+    done[container] = true
+
+    local target = findAcceptNode(container)
+    if target then
+        clickCenter(target, "Accept")
+        return
+    end
+
+    local val = container:FindFirstChildWhichIsA("NumberValue", true)
+    if val then
+        if val.Value ~= 0 then val.Value = 0; task.wait() end
+        val.Value = 1
+        print("[Gift][UI] Fallback: set VAL_OBJ = 1 ->", val:GetFullName())
+        return
+    end
+
+    if container:IsA("GuiObject") then
+        local p,s = container.AbsolutePosition, container.AbsoluteSize
+        local x = p.X + s.X*0.30
+        local y = p.Y + s.Y*0.80
+        VIM:SendMouseButtonEvent(x,y,0,true,  game,0); task.wait(0.02)
+        VIM:SendMouseButtonEvent(x,y,0,false, game,0)
+        print(("[Gift][UI] Fallback click left-bottom %% @(%d,%d)"):format(x,y))
+    end
+end
+
+for _,n in ipairs(PG:GetDescendants()) do
+    if n:IsA("Frame") and n.Visible then acceptOnce(n) end
+end
+
+PG.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Frame") then
+        task.wait(0.05)
+        acceptOnce(obj)
+    end
+end)
+
+-- ========== PHẦN 3: TELEPORT =======================
+-- Hàm teleport
+local function teleportTo(x, y, z)
+    local character = LP.Character or LP.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    hrp.CFrame = CFrame.new(Vector3.new(x, y, z))
+    print(string.format("[Teleport] Moved to (%.1f, %.1f, %.1f)", x, y, z))
+end
+
+-- Teleport 1 lần khi vào game (spawn)
+LP.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart")
+    task.wait(1)  -- đợi game load ổn định 1s
+    teleportTo(80, 80, -50) -- đổi tọa độ tại đây
+end)
+
+-- Nếu đã có sẵn character (khi inject script sau khi vào game) thì cũng teleport luôn:
+if LP.Character then
+    task.wait(1)
+    teleportTo(80, 80, -50)
+end
+
+print("[PetCounter+Gift+Teleport] Ready. Press K để bật/tắt counter, auto-accept gift, bấm T để teleport.")
+
