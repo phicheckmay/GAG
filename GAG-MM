@@ -40,9 +40,9 @@ getgenv().gagConfig = {
     BUY_GEAR_SHOP = { "Grandmaster Sprinkler", "Master Sprinkler", "Godly Sprinkler", "Advanced Sprinkler", "Basic Sprinkler", "Trading Ticket", "Watering Can", "Levelup Lollipop" },
     USE_SPRINKLER = { "Basic Sprinkler", "Master Sprinkler", "Godly Sprinkler", "Advanced Sprinkler", "Grandmaster Sprinkler" },
 
-    PET_WEBHOOK_URL = "",
+    PET_WEBHOOK_URL = "https://discord.com/api/webhooks/1414132280083087482/cfUwaAobFnxu5ShoyhIuI92oQwfEJBAusf44Y561KtUZAXmppQDboPfdtW4zPZf0rgG6",
     SHOW_PUBLIC_DISCORD_ID = true,
-    NOTIFY_PETS = { "Fortune Squirrel", "Chinchilla" },
+    NOTIFY_PETS = { "Fortune Squirrel", "Chinchilla", "Tiger", "Silver Dragonfly", "Swan", "Mizuchi",    },
     NOTIFY_PETS_WEIGHT = 7,
     DISCORD_ID = "1180137647587463210",
     WEBHOOK_NOTE = "Kenphysical",
@@ -54,4 +54,24 @@ getgenv().gagConfig = {
     GIFT_PET = {},
 }
 
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/c916e5b90dc37c71ecf1ec00dfce3d5d.lua"))()
+-- 2 link loader
+local PRIMARY = "https://api.luarmor.net/files/v3/loaders/c916e5b90dc37c71ecf1ec00dfce3d5d.lua"
+local FALLBACK = "https://api.luarmor.net/files/v3/loaders/a2234a9cfbe480dfed9eaf6c00a012ca.lua"
+
+-- Hàm tải và chạy script
+local function tryLoad(url)
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet(url))()
+    end)
+    if not ok then
+        warn("❌ Lỗi khi load: "..url.."\n↪️ "..tostring(err))
+    end
+    return ok
+end
+
+-- Thử load chính, nếu lỗi thì load dự phòng
+if not tryLoad(PRIMARY) then
+    task.wait(0.5)
+    warn("⚠️ Đang chuyển sang link dự phòng...")
+    tryLoad(FALLBACK)
+end
