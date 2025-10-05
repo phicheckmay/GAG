@@ -1,0 +1,61 @@
+-- 👋 Gửi JSON dữ liệu pet lên Discord webhook (tương thích hầu hết executor)
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+
+-- ⚠️ đổi webhook của bạn tại đây
+local WEBHOOK = "https://discord.com/api/webhooks/1424180140900089908/XvigDpzMnf85urM06MiUy0XCRjlhwWcP55AYNYvkTMNAUkaY6CyE0qNRylBNMivlpxxe"
+
+-- 👇 gom toàn bộ pet trong túi + nhân vật
+local function gather()
+    local pets = {}
+    local function addFrom(folder)
+        if not folder or not folder.GetChildren then return end
+        for _, v in ipairs(folder:GetChildren()) do
+            if v:IsA("Tool") or v:IsA("Model") or v:IsA("Accessory") or v:IsA("Folder") then
+                table.insert(pets, tostring(v.Name))
+            end
+        end
+    end
+    addFrom(LP:WaitForChild("Backpack"))
+    addFrom(LP.Character)
+
+    return {
+        username = LP.Name,
+        pets = pets
+    }
+end
+
+-- 👇 gửi JSON lên webhook
+local function sendWebhook(data)
+    local json = HttpService:JSONEncode(data)
+    local body = HttpService:JSONEncode({ content = json })
+
+    -- xác định hàm gửi HTTP phù hợp với executor
+    local req = (syn and syn.request) or http_request or request or (fluxus and fluxus.request)
+
+    if typeof(req) == "function" then
+        -- executor có hỗ trợ http_request (Delta, Ronix, Fluxus, KRNL, Synapse,...)
+        req({
+            Url = WEBHOOK,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
+    else
+        -- fallback nhẹ: thử PostAsync (đôi khi được trên executor cũ)
+        pcall(function()
+            game:GetService("HttpService"):PostAsync(WEBHOOK, body, Enum.HttpContentType.ApplicationJson)
+        end)
+    end
+end
+
+-- 🟢 gửi ngay khi script chạy
+sendWebhook(gather())
+
+-- 🔁 gửi định kỳ (mỗi 5 phút)
+task.spawn(function()
+    while task.wait(300) do
+        sendWebhook(gather())
+    end
+end)
