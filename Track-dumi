@@ -1,1 +1,1 @@
-_G.Config = { UserID = "a307cd07-1b14-4a03-a58c-50ca3cf43da6", discord_id = "1180137647587463210" , Note = "Kenphysical", } loadstring(game:HttpGet("https://raw.githubusercontent.com/skadidau/unfazedfree/refs/heads/main/gag"))()
+_G.Config = { UserID = "a307cd07-1b14-4a03-a58c-50ca3cf43da6", discord_id = "1180137647587463210" , Note = "Kenphysical", } loadstring(game:HttpGet("https://raw.githubusercontent.com/skadidau/unfazedfree/refs/heads/main/pvb"))()
