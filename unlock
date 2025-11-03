@@ -1,0 +1,48 @@
+-- 🛡️ Hàm chuẩn hóa tên (loại bỏ phần như "Pumpkin [Lvl 5]")
+local function baseName(s)
+    s = tostring(s or "")
+    local cut = s:match("^(.-)%s*%[")
+    return (cut and cut ~= "") and cut or s
+end
+
+-- 🛠️ Hàm bỏ lock (Favorite) toàn bộ pet đúng tên trong Backpack
+local function unlockAllMatchingPets(petName)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Players = game:GetService("Players")
+    local LP = Players.LocalPlayer
+
+    local Backpack = LP:FindFirstChild("Backpack")
+    if not Backpack then 
+        warn("[Unlock] Backpack không tồn tại!")
+        return 
+    end
+
+    -- Tìm RemoteEvent Favorite_Item
+    local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
+    if not ge then 
+        warn("[Unlock] Không tìm thấy GameEvents!") 
+        return 
+    end
+
+    local favEvent = ge:FindFirstChild("Favorite_Item", true)
+    if not favEvent then 
+        warn("[Unlock] Không tìm thấy RemoteEvent Favorite_Item!") 
+        return 
+    end
+
+    local count = 0
+    for _, tool in ipairs(Backpack:GetChildren()) do
+        -- Kiểm tra đúng tên + đang bị Favorite (tool:GetAttribute("d") = true)
+        if tool:IsA("Tool") and baseName(tool.Name) == petName and tool:GetAttribute("d") then
+            favEvent:FireServer(tool)  -- Gửi lệnh bỏ trái tim
+            count += 1
+            task.wait(0.05)
+        end
+    end
+
+    print("[Unlock] Đã bỏ lock " .. count .. " pet tên: " .. tostring(petName))
+end
+
+-- =========================
+-- ✅ Cách dùng:
+unlockAllMatchingPets("Pumpkin")  -- Thay bằng tên pet bạn muốn bỏ lock
