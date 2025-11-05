@@ -1,0 +1,143 @@
+--====================================================
+-- ✅ Auto Đào → Unlock → Tele → Gift → hết thì Kick 267
+--====================================================
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lp = Players.LocalPlayer
+
+-- ✅ Lấy config từ file bên ngoài
+local PLANT_NAME = getgenv().PLANT_NAME or "King Limone"
+local TARGET_PLAYER = getgenv().TARGET_PLAYER or "Phingoc223"
+
+local HRP = lp.Character and lp.Character:WaitForChild("HumanoidRootPart")
+
+local function baseName(s)
+    s = tostring(s or "")
+    return s:gsub("%s*%[.-%]", ""):gsub("%s*%(.-%)", ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+end
+
+local TARGET_BASE = baseName(PLANT_NAME)
+
+local function findExactPlant()
+    local bp = lp:FindFirstChild("Backpack")
+    if not bp then return nil end
+    for _, item in ipairs(bp:GetChildren()) do
+        if item:IsA("Tool") and baseName(item.Name) == TARGET_BASE and not item.Name:lower():find("seed") then
+            return item
+        end
+    end
+end
+
+local function stillHasPlant()
+    if findExactPlant() then return true end
+    local char = lp.Character
+    if char then
+        for _, it in ipairs(char:GetChildren()) do
+            if it:IsA("Tool") and baseName(it.Name) == TARGET_BASE then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function isMyPlot(plot)
+    local ownerAttr = plot:GetAttribute("Owner")
+    if ownerAttr and string.lower(ownerAttr) == string.lower(lp.Name) then
+        return true
+    end
+    return false
+end
+
+-- ✅ 1. Đào cây
+local RemoveEvent = ReplicatedStorage.Remotes:WaitForChild("RemoveItem")
+local function digAllMyPlants(name)
+    print("⛏ Đang đào:", name)
+    local plots = workspace:FindFirstChild("Plots")
+    if not plots then return end
+    local myPlot
+    for _, p in ipairs(plots:GetChildren()) do
+        if isMyPlot(p) then
+            myPlot = p
+            break
+        end
+    end
+    if not myPlot then return end
+
+    local plantFolder = myPlot:FindFirstChild("Plants")
+    if not plantFolder then return end
+
+    for _, plant in ipairs(plantFolder:GetChildren()) do
+        if plant.Name == name then
+            local base = plant:FindFirstChildWhichIsA("BasePart")
+            local id = plant:GetAttribute("ID")
+            if base and id then
+                HRP.CFrame = base.CFrame + Vector3.new(0,3,0)
+                task.wait(0.2)
+                RemoveEvent:FireServer(id)
+                print("✅ Đã đào:", plant.Name)
+                task.wait(0.2)
+            end
+        end
+    end
+end
+
+-- ✅ 2. Bỏ tim
+local function unlockAll()
+    local bp = lp:FindFirstChild("Backpack")
+    local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
+    local fav = ge and ge:FindFirstChild("Favorite_Item", true)
+    if not bp or not fav then return end
+    for _, item in ipairs(bp:GetChildren()) do
+        if item:IsA("Tool") and baseName(item.Name) == TARGET_BASE and item:GetAttribute("d") then
+            fav:FireServer(item)
+            task.wait(0.05)
+        end
+    end
+    print("💖 Đã bỏ tim xong")
+end
+
+-- ✅ 3. Tele
+local function teleportToPlayer(name)
+    local target = Players:FindFirstChild(name)
+    if target and target.Character then
+        HRP.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
+        print("🚀 Tele tới:", name)
+    end
+end
+
+-- ✅ 4. Gift
+local GiftEvent = ReplicatedStorage.Remotes.GiftItem
+local function giftOne()
+    local tool = findExactPlant()
+    if not tool then return false end
+    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    hum:EquipTool(tool)
+    task.wait(2)
+    GiftEvent:FireServer({ Item = tool, ToGift = TARGET_PLAYER })
+    print("🎁 Gift:", tool.Name)
+    task.wait(3)
+    return true
+end
+
+-- ✅ MAIN
+task.spawn(function()
+    digAllMyPlants(PLANT_NAME)
+    task.wait(1)
+    unlockAll()
+    task.wait(1)
+    teleportToPlayer(TARGET_PLAYER)
+    task.wait(1)
+
+    while true do
+        if stillHasPlant() then
+            giftOne()
+            task.wait(5)
+        else
+            lp:Kick("🎉 Gift done (267)")
+            break
+        end
+    end
+end)
