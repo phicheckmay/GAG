@@ -1,5 +1,5 @@
 --====================================================
--- ✅ 1) ĐỢI GAME LOAD
+-- ✅ 0) ĐỢI GAME LOAD
 --====================================================
 repeat task.wait() until game:IsLoaded()
 
@@ -9,76 +9,86 @@ local LP = Players.LocalPlayer
 local Backpack = LP:WaitForChild("Backpack")
 
 --====================================================
--- ✅ 2) UNLOCK TOÀN BỘ TRANG BỊ/PET BỊ GẮN TIM ❤️
+-- ✅ 1) UNLOCK TOÀN BỘ TOOL/PET CÓ TIM ❤️
 --====================================================
 local function unlockAllFavorites()
     local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
-    if not ge then
-        warn("❌ Không tìm thấy GameEvents!")
-        return
-    end
+    if not ge then return end
 
     local favEvent = ge:FindFirstChild("Favorite_Item", true)
-    if not favEvent then
-        warn("❌ Không tìm thấy RemoteEvent Favorite_Item!")
-        return
-    end
+    if not favEvent then return end
 
     local count = 0
     for _, tool in ipairs(Backpack:GetChildren()) do
-        if tool:IsA("Tool") and tool:GetAttribute("d") then -- Attribute "d" = đang được Favorite
+        if tool:IsA("Tool") and tool:GetAttribute("d") then
             favEvent:FireServer(tool)
             count += 1
             task.wait(0.05)
         end
     end
-
-    print("✅ [Unlock] Đã bỏ lock " .. count .. " món đồ trong Backpack!")
+    print("✅ [Unlock] Đã bỏ tim", count, "tool")
 end
 
--- 🚀 GỌI CHẠY UNLOCK TRƯỚC
 unlockAllFavorites()
-
--- Chờ 0.5s để server cập nhật xong lock status
 task.wait(0.5)
 
 --====================================================
--- ✅ 3) BẬT AUTOSELL + BÁN TOÀN BỘ BRAINROT
+-- ✅ 2) BẬT AUTOSELL + BÁN HẾT BRAINROTS
 --====================================================
-local RS = game:GetService("ReplicatedStorage")
-local AutoSellRemote = RS.Remotes and RS.Remotes:FindFirstChild("AutoSell")
-local SellAllRemote = RS.Remotes:WaitForChild("ItemSell")
+local AutoSellRemote = ReplicatedStorage.Remotes:FindFirstChild("AutoSell")
+local SellAllRemote  = ReplicatedStorage.Remotes:WaitForChild("ItemSell")
 
-if not AutoSellRemote then
-    warn("❌ Không tìm thấy Remote AutoSell!")
-    return
-end
-
--- Config độ hiếm nào sẽ bị bán (xám)
 local DesiredConfig = {
-    Normal=true, Rare=true, Epic=true, Legendary=true, Mythic=true,
-    Secret=true, Godly=true, Limited=true, Diamond=true, Neon=true,
-    CandyCorn=true, Rainbow=true, Magma=true, Headless=true, Ruby=true,
+    Normal=true, Rare=true, Epic=true, Legendary=true,
+    Mythic=true, Secret=true, Godly=true, Limited=true,
+    Diamond=true, Neon=true, CandyCorn=true, Rainbow=true,
+    Magma=true, Headless=true, Ruby=true
 }
 
 getgenv().SellStatus = getgenv().SellStatus or {}
 
-local function setAutoSellIfNeeded(rarity, wantGray)
-    if getgenv().SellStatus[rarity] == wantGray then return end
-    AutoSellRemote:FireServer(rarity, wantGray)
-    getgenv().SellStatus[rarity] = wantGray
-    print("⚙ AutoSell:", rarity, "→", wantGray and "BÁN (xám)" or "GIỮ (màu)")
+local function setAutoSellIfNeeded(rarity, wantSell)
+    if getgenv().SellStatus[rarity] == wantSell then return end
+    AutoSellRemote:FireServer(rarity, wantSell)
+    getgenv().SellStatus[rarity] = wantSell
+    print("⚙ AutoSell:", rarity, "→", wantSell and "SELL" or "KEEP")
 end
 
--- Thi hành config
-for rarity, wantGray in pairs(DesiredConfig) do
-    setAutoSellIfNeeded(rarity, wantGray)
-    task.wait(0.15)
-end
+task.spawn(function()
+    for rarity, wantSell in pairs(DesiredConfig) do
+        setAutoSellIfNeeded(rarity, wantSell)
+        task.wait(0.15)
+    end
+    -- Bán 1 lần đầu tiên
+    task.wait(1.5)
+    SellAllRemote:FireServer(nil, nil, true)
+    print("💰 Đã bán toàn bộ Brainrots lần đầu!")
+end)
 
-print("🎯 ĐÃ SET AUTOSSELL XONG! Chuẩn bị bán toàn bộ...")
+--====================================================
+-- ✅ 3) AUTOBUY HẠT (BuyItem + RequestAsset)
+--====================================================
+local BuyItem = ReplicatedStorage.Remotes.BuyItem
+local RequestAsset = ReplicatedStorage.Remotes.SelectiveAssetService.RequestAsset
 
--- Bán toàn bộ
-task.wait(1.5)
-SellAllRemote:FireServer(nil, nil, true)
-print("💰 ✅ BÁN TOÀN BỘ BRAINROTS THÀNH CÔNG!")
+local SellerName = "George"  -- đổi nếu NPC khác
+local SeedList = {
+    "Mr Carrot",
+    "King Limone",
+    "Sunflower Seed",
+    "Eggplant Seed",
+    "Dragon Fruit Seed",
+}
+
+task.spawn(function()
+    while task.wait(0.25) do
+        for _, seed in ipairs(SeedList) do
+            BuyItem:FireServer(seed, true)
+            RequestAsset:FireServer("Brainrots", SellerName)
+            print("🛒 Đã mua:", seed)
+            task.wait(0.2)
+        end
+    end
+end)
+
+print("✅ ✅ Script đã chạy: Unlock + AutoSell + AutoBuy cùng lúc!")
