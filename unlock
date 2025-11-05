@@ -21,19 +21,19 @@ local function unlockAllFavorites()
     local count = 0
     for _, tool in ipairs(Backpack:GetChildren()) do
         if tool:IsA("Tool") and tool:GetAttribute("d") then
-            favEvent:FireServer(tool)
+            favEvent:FireServer(tool) -- Bỏ trái tim
             count += 1
             task.wait(0.05)
         end
     end
-    print("✅ [Unlock] Đã bỏ tim", count, "tool")
+    print("✅ [Unlock] Đã bỏ tim:", count, "tool/pet")
 end
 
 unlockAllFavorites()
 task.wait(0.5)
 
 --====================================================
--- ✅ 2) BẬT AUTOSELL + BÁN HẾT BRAINROTS
+-- ✅ 2) BẬT AUTOSELL + SELL ALL BRAINROTS
 --====================================================
 local AutoSellRemote = ReplicatedStorage.Remotes:FindFirstChild("AutoSell")
 local SellAllRemote  = ReplicatedStorage.Remotes:WaitForChild("ItemSell")
@@ -59,10 +59,10 @@ task.spawn(function()
         setAutoSellIfNeeded(rarity, wantSell)
         task.wait(0.15)
     end
-    -- Bán 1 lần đầu tiên
+    -- Sell ALL lần đầu tiên
     task.wait(1.5)
     SellAllRemote:FireServer(nil, nil, true)
-    print("💰 Đã bán toàn bộ Brainrots lần đầu!")
+    print("💰 Đã SELL ALL Brainrots lần đầu!")
 end)
 
 --====================================================
@@ -71,13 +71,15 @@ end)
 local BuyItem = ReplicatedStorage.Remotes.BuyItem
 local RequestAsset = ReplicatedStorage.Remotes.SelectiveAssetService.RequestAsset
 
-local SellerName = "George"  -- đổi nếu NPC khác
+-- Tên NPC bán hạt (bạn có thể đổi thành "Madung", "Tim Cheese", ...)
+local SellerName = "George"
+
+-- Danh sách hạt cần mua liên tục
 local SeedList = {
-    "Mr Carrot",
+    "Shroombino",
+    "Mango",
     "King Limone",
-    "Sunflower Seed",
-    "Eggplant Seed",
-    "Dragon Fruit Seed",
+    "Starfruit",
 }
 
 task.spawn(function()
@@ -85,10 +87,10 @@ task.spawn(function()
         for _, seed in ipairs(SeedList) do
             BuyItem:FireServer(seed, true)
             RequestAsset:FireServer("Brainrots", SellerName)
-            print("🛒 Đã mua:", seed)
-            task.wait(0.2)
+            print("🌱 Đã mua:", seed)
+            task.wait(0.25)
         end
     end
 end)
 
-print("✅ ✅ Script đã chạy: Unlock + AutoSell + AutoBuy cùng lúc!")
+print("✅ Script chạy thành công: unlock tim + autosell + autobuy seed")
