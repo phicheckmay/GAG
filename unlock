@@ -1,48 +1,84 @@
--- 🛡️ Hàm chuẩn hóa tên (loại bỏ phần như "Pumpkin [Lvl 5]")
-local function baseName(s)
-    s = tostring(s or "")
-    local cut = s:match("^(.-)%s*%[")
-    return (cut and cut ~= "") and cut or s
-end
+--====================================================
+-- ✅ 1) ĐỢI GAME LOAD
+--====================================================
+repeat task.wait() until game:IsLoaded()
 
--- 🛠️ Hàm bỏ lock (Favorite) toàn bộ pet đúng tên trong Backpack
-local function unlockAllMatchingPets(petName)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Players = game:GetService("Players")
-    local LP = Players.LocalPlayer
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LP = Players.LocalPlayer
+local Backpack = LP:WaitForChild("Backpack")
 
-    local Backpack = LP:FindFirstChild("Backpack")
-    if not Backpack then 
-        warn("[Unlock] Backpack không tồn tại!")
-        return 
-    end
-
-    -- Tìm RemoteEvent Favorite_Item
+--====================================================
+-- ✅ 2) UNLOCK TOÀN BỘ TRANG BỊ/PET BỊ GẮN TIM ❤️
+--====================================================
+local function unlockAllFavorites()
     local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
-    if not ge then 
-        warn("[Unlock] Không tìm thấy GameEvents!") 
-        return 
+    if not ge then
+        warn("❌ Không tìm thấy GameEvents!")
+        return
     end
 
     local favEvent = ge:FindFirstChild("Favorite_Item", true)
-    if not favEvent then 
-        warn("[Unlock] Không tìm thấy RemoteEvent Favorite_Item!") 
-        return 
+    if not favEvent then
+        warn("❌ Không tìm thấy RemoteEvent Favorite_Item!")
+        return
     end
 
     local count = 0
     for _, tool in ipairs(Backpack:GetChildren()) do
-        -- Kiểm tra đúng tên + đang bị Favorite (tool:GetAttribute("d") = true)
-        if tool:IsA("Tool") and baseName(tool.Name) == petName and tool:GetAttribute("d") then
-            favEvent:FireServer(tool)  -- Gửi lệnh bỏ trái tim
+        if tool:IsA("Tool") and tool:GetAttribute("d") then -- Attribute "d" = đang được Favorite
+            favEvent:FireServer(tool)
             count += 1
             task.wait(0.05)
         end
     end
 
-    print("[Unlock] Đã bỏ lock " .. count .. " pet tên: " .. tostring(petName))
+    print("✅ [Unlock] Đã bỏ lock " .. count .. " món đồ trong Backpack!")
 end
 
--- =========================
--- ✅ Cách dùng:
-unlockAllMatchingPets("Pumpkin")  -- Thay bằng tên pet bạn muốn bỏ lock
+-- 🚀 GỌI CHẠY UNLOCK TRƯỚC
+unlockAllFavorites()
+
+-- Chờ 0.5s để server cập nhật xong lock status
+task.wait(0.5)
+
+--====================================================
+-- ✅ 3) BẬT AUTOSELL + BÁN TOÀN BỘ BRAINROT
+--====================================================
+local RS = game:GetService("ReplicatedStorage")
+local AutoSellRemote = RS.Remotes and RS.Remotes:FindFirstChild("AutoSell")
+local SellAllRemote = RS.Remotes:WaitForChild("ItemSell")
+
+if not AutoSellRemote then
+    warn("❌ Không tìm thấy Remote AutoSell!")
+    return
+end
+
+-- Config độ hiếm nào sẽ bị bán (xám)
+local DesiredConfig = {
+    Normal=true, Rare=true, Epic=true, Legendary=true, Mythic=true,
+    Secret=true, Godly=true, Limited=true, Diamond=true, Neon=true,
+    CandyCorn=true, Rainbow=true, Magma=true, Headless=true, Ruby=true,
+}
+
+getgenv().SellStatus = getgenv().SellStatus or {}
+
+local function setAutoSellIfNeeded(rarity, wantGray)
+    if getgenv().SellStatus[rarity] == wantGray then return end
+    AutoSellRemote:FireServer(rarity, wantGray)
+    getgenv().SellStatus[rarity] = wantGray
+    print("⚙ AutoSell:", rarity, "→", wantGray and "BÁN (xám)" or "GIỮ (màu)")
+end
+
+-- Thi hành config
+for rarity, wantGray in pairs(DesiredConfig) do
+    setAutoSellIfNeeded(rarity, wantGray)
+    task.wait(0.15)
+end
+
+print("🎯 ĐÃ SET AUTOSSELL XONG! Chuẩn bị bán toàn bộ...")
+
+-- Bán toàn bộ
+task.wait(1.5)
+SellAllRemote:FireServer(nil, nil, true)
+print("💰 ✅ BÁN TOÀN BỘ BRAINROTS THÀNH CÔNG!")
