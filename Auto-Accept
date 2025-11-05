@@ -2,20 +2,43 @@
 -- ✅ 1) ĐỢI GAME LOAD (chỉ chạy 1 lần duy nhất)
 --====================================================
 repeat task.wait() until game:IsLoaded()
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 
+-- Đợi chắc folder Remotes (tránh nil)
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+if not Remotes then
+    warn("❌ Không tìm thấy ReplicatedStorage.Remotes")
+    return
+end
+
+-- Helper log lỗi có stack
+local function run_async(name, fn)
+    task.spawn(function()
+        local ok, err = xpcall(fn, function(e)
+            return debug.traceback(("[THREAD:%s] %s"):format(name, tostring(e)), 2)
+        end)
+        if not ok then
+            warn(err)
+        end
+    end)
+end
+
 ------------------------------------------------------
 -- ✅ THREAD 1: AUTO SET + BÁN TẤT CẢ BRAINROTS
 ------------------------------------------------------
-task.spawn(function()
-    local RS = ReplicatedStorage
-    local AutoSellRemote = RS.Remotes and RS.Remotes:FindFirstChild("AutoSell")
-    local SellAllRemote = RS.Remotes:WaitForChild("ItemSell")
+run_async("AutoSell+SellAll", function()
+    local AutoSellRemote = Remotes:FindFirstChild("AutoSell")
+    local SellAllRemote  = Remotes:WaitForChild("ItemSell", 10)
 
     if not AutoSellRemote then
         warn("❌ Không tìm thấy Remote AutoSell!")
+        return
+    end
+    if not SellAllRemote then
+        warn("❌ Không tìm thấy Remote ItemSell!")
         return
     end
 
@@ -28,7 +51,10 @@ task.spawn(function()
     getgenv().SellStatus = getgenv().SellStatus or {}
 
     local function setAutoSellIfNeeded(rarity, wantGray)
-        if getgenv().SellStatus[rarity] == wantGray then return end
+        if getgenv().SellStatus[rarity] == wantGray then
+            print("✅", rarity, "đã đúng trạng thái")
+            return
+        end
         AutoSellRemote:FireServer(rarity, wantGray)
         getgenv().SellStatus[rarity] = wantGray
         print("⚙ AutoSell:", rarity, "→", wantGray and "BÁN" or "GIỮ")
@@ -38,7 +64,8 @@ task.spawn(function()
         setAutoSellIfNeeded(rarity, wantGray)
         task.wait(0.15)
     end
-    task.wait(1.5)
+
+    task.wait(1.5) -- cho UI/flag xám đồng bộ
     SellAllRemote:FireServer(nil, nil, true)
     print("💰 ✅ ĐÃ BÁN TOÀN BỘ BRAINROTS!")
 end)
@@ -46,191 +73,189 @@ end)
 ------------------------------------------------------
 -- ✅ THREAD 2: PET COUNTER + AUTO ACCEPT GIFT
 ------------------------------------------------------
-task.spawn(function()
-    --====================================================
--- ✅ PET COUNTER + AUTO ACCEPT GIFT (All-in-One)
---====================================================
+run_async("PetCounter+AcceptGift", function()
+    ------------------------[ UI CONFIG ]-----------------------
+    local PANEL_WIDTH, PANEL_HEIGHT = 600, 400
+    local ROW_HEIGHT = 36
+    local TITLE = "Pet Counter"
+    local BACKPACK = LP:WaitForChild("Backpack")
 
-------------------------[ SERVICES ]------------------------
-local Players = game:GetService("Players")
-local UIS     = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-------------------------[ LOCAL PLAYER ]--------------------
-local LP = Players.LocalPlayer
-repeat task.wait() until LP
-
-local PG = LP:FindFirstChildOfClass("PlayerGui") or game:GetService("CoreGui")
-
-------------------------[ UI CONFIG ]-----------------------
-local PANEL_WIDTH, PANEL_HEIGHT = 600, 400
-local ROW_HEIGHT = 36
-local TITLE = "Pet Counter"
-local BACKPACK = LP:WaitForChild("Backpack")
-
-------------------------[ FORMAT NAME ]---------------------
-local function baseName(s)
-    s = tostring(s or "")
-    s = s:gsub("%s*%[.-KG%]", "")
-    s = s:gsub("%[.-%]", "")
-    s = s:gsub("[%z\1-\31\127]", ""):gsub("[\u{200B}-\u{200D}\u{FEFF}]", "")
-    s = s:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
-    s = s:lower():gsub("^%l", string.upper)
-    return s
-end
-
-------------------------[ COUNT FUNCTION ]------------------
-local function countFromSources(sources)
-    local counts = {}
-    local function add(inst)
-        local n = baseName(inst.Name)
-        counts[n] = (counts[n] or 0) + 1
+    ------------------------[ FORMAT NAME ]---------------------
+    local function baseName(s)
+        s = tostring(s or "")
+        s = s:gsub("%s*%[.-KG%]", "")
+        s = s:gsub("%[.-%]", "")
+        s = s:gsub("[%z\1-\31\127]", ""):gsub("[\u{200B}-\u{200D}\u{FEFF}]", "")
+        s = s:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
+        s = s:lower():gsub("^%l", string.upper)
+        return s
     end
-    for _,src in ipairs(sources) do
-        if src and src.Parent then
-            for _,it in ipairs(src:GetChildren()) do
-                if it:IsA("Tool") or it:IsA("Model") or it:IsA("Folder") or it:IsA("Accessory") then
-                    add(it)
+
+    ------------------------[ COUNT FUNCTION ]------------------
+    local function countFromSources(sources)
+        local counts = {}
+        local function add(inst)
+            local n = baseName(inst.Name)
+            counts[n] = (counts[n] or 0) + 1
+        end
+        for _,src in ipairs(sources) do
+            if src and src.Parent then
+                for _,it in ipairs(src:GetChildren()) do
+                    if it:IsA("Tool") or it:IsA("Model") or it:IsA("Folder") or it:IsA("Accessory") then
+                        add(it)
+                    end
                 end
             end
         end
-    end
-    return counts
-end
-
-------------------------[ UI CREATION ]---------------------
-local Screen = Instance.new("ScreenGui")
-Screen.Name = "PetCounterUI"
-Screen.ResetOnSpawn = false
-Screen.IgnoreGuiInset = true
-Screen.Parent = PG
-
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
-Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-Frame.Position = UDim2.new(0.5, 0, 0.5, 60)
-Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Frame.BackgroundTransparency = 0.15
-Frame.BorderSizePixel = 0
-Frame.Active = true
-Frame.Parent = Screen
-Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
-
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -20, 0, 38)
-TitleLabel.Position = UDim2.fromOffset(10, 8)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextSize = 26
-TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-TitleLabel.Text = string.format("%s - %s", TITLE, LP.DisplayName or LP.Name)
-TitleLabel.Parent = Frame
-
-local List = Instance.new("ScrollingFrame")
-List.Name = "List"
-List.Size = UDim2.new(1, -20, 1, -60)
-List.Position = UDim2.fromOffset(10, 48)
-List.BackgroundTransparency = 1
-List.ScrollBarThickness = 8
-List.AutomaticCanvasSize = Enum.AutomaticSize.Y
-List.Parent = Frame
-
-local Layout = Instance.new("UIListLayout", List)
-Layout.Padding = UDim.new(0, 6)
-Layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-local function makeRow(text)
-    local tl = Instance.new("TextLabel")
-    tl.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
-    tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    tl.BackgroundTransparency = 0.25
-    tl.BorderSizePixel = 0
-    tl.Font = Enum.Font.GothamBold
-    tl.TextSize = 22
-    tl.TextColor3 = Color3.fromRGB(255, 100, 100)
-    tl.TextXAlignment = Enum.TextXAlignment.Left
-    tl.Text = text
-    Instance.new("UICorner", tl).CornerRadius = UDim.new(0, 10)
-    Instance.new("UIPadding", tl).PaddingLeft = UDim.new(0, 10)
-    return tl
-end
-
-------------------------[ REFRESH FUNCTION ]----------------
-local function refresh()
-    local character = LP.Character or LP.CharacterAdded:Wait()
-    local counts = countFromSources({BACKPACK, character})
-
-    for _,ch in ipairs(List:GetChildren()) do
-        if ch:IsA("TextLabel") then ch:Destroy() end
+        return counts
     end
 
-    local arr, total = {}, 0
-    for name,cnt in pairs(counts) do
-        total += cnt
-        table.insert(arr, {name=name, cnt=cnt})
+    ------------------------[ UI CREATION ]---------------------
+    local PG = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui")
+    local Screen = Instance.new("ScreenGui")
+    Screen.Name = "PetCounterUI"
+    Screen.ResetOnSpawn = false
+    Screen.IgnoreGuiInset = true
+
+    -- bảo vệ UI nếu executor hỗ trợ
+    if syn and syn.protect_gui then
+        syn.protect_gui(Screen)
     end
-    table.sort(arr, function(a,b) return a.cnt==b.cnt and a.name<b.name or a.cnt>b.cnt end)
+    Screen.Parent = PG
 
-    TitleLabel.Text = string.format("%s - %s (%d pets)", TITLE, LP.DisplayName or LP.Name, total)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
+    Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    Frame.Position = UDim2.new(0.5, 0, 0.5, 60)
+    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Frame.BackgroundTransparency = 0.15
+    Frame.BorderSizePixel = 0
+    Frame.Active = true
+    Frame.Parent = Screen
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
 
-    for _,it in ipairs(arr) do
-        makeRow(("%s  × %d"):format(it.name, it.cnt)).Parent = List
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -20, 0, 38)
+    TitleLabel.Position = UDim2.fromOffset(10, 8)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 26
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    TitleLabel.Text = string.format("%s - %s", TITLE, LP.DisplayName or LP.Name)
+    TitleLabel.Parent = Frame
+
+    local List = Instance.new("ScrollingFrame")
+    List.Name = "List"
+    List.Size = UDim2.new(1, -20, 1, -60)
+    List.Position = UDim2.fromOffset(10, 48)
+    List.BackgroundTransparency = 1
+    List.ScrollBarThickness = 8
+    List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    List.Parent = Frame
+
+    local Layout = Instance.new("UIListLayout", List)
+    Layout.Padding = UDim.new(0, 6)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local function makeRow(text)
+        local tl = Instance.new("TextLabel")
+        tl.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+        tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        tl.BackgroundTransparency = 0.25
+        tl.BorderSizePixel = 0
+        tl.Font = Enum.Font.GothamBold
+        tl.TextSize = 22
+        tl.TextColor3 = Color3.fromRGB(255, 100, 100)
+        tl.TextXAlignment = Enum.TextXAlignment.Left
+        tl.Text = text
+        Instance.new("UICorner", tl).CornerRadius = UDim.new(0, 10)
+        Instance.new("UIPadding", tl).PaddingLeft = UDim.new(0, 10)
+        return tl
     end
-end
-refresh()
 
-local function wireFolder(folder)
-    folder.ChildAdded:Connect(refresh)
-    folder.ChildRemoved:Connect(refresh)
-end
+    ------------------------[ REFRESH FUNCTION ]----------------
+    local function refresh()
+        local character = LP.Character or LP.CharacterAdded:Wait()
+        local counts = countFromSources({BACKPACK, character})
 
-wireFolder(BACKPACK)
-LP.CharacterAdded:Connect(function(char)
+        for _,ch in ipairs(List:GetChildren()) do
+            if ch:IsA("TextLabel") then ch:Destroy() end
+        end
+
+        local arr, total = {}, 0
+        for name,cnt in pairs(counts) do
+            total += cnt
+            table.insert(arr, {name=name, cnt=cnt})
+        end
+        table.sort(arr, function(a,b) return a.cnt==b.cnt and a.name<b.name or a.cnt>b.cnt end)
+
+        TitleLabel.Text = string.format("%s - %s (%d pets)", TITLE, LP.DisplayName or LP.Name, total)
+
+        for _,it in ipairs(arr) do
+            makeRow(("%s  × %d"):format(it.name, it.cnt)).Parent = List
+        end
+    end
     refresh()
-    wireFolder(char)
-end)
-if LP.Character then wireFolder(LP.Character) end
 
-UIS.InputBegan:Connect(function(i,gp)
-    if not gp and i.KeyCode == Enum.KeyCode.K then
-        Screen.Enabled = not Screen.Enabled
+    local function wireFolder(folder)
+        if not folder then return end
+        folder.ChildAdded:Connect(refresh)
+        folder.ChildRemoved:Connect(refresh)
     end
-end)
 
---========================================================
--- ✅ AUTO ACCEPT GIFT (Plants vs Brainrot)
---========================================================
-local AcceptRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("AcceptGift")
-local lastGiftPayload = nil
+    wireFolder(BACKPACK)
+    LP.CharacterAdded:Connect(function(char)
+        refresh()
+        wireFolder(char)
+    end)
+    if LP.Character then wireFolder(LP.Character) end
 
--- Lắng nghe tất cả RemoteEvent để lấy Gift Payload
-for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-    if obj:IsA("RemoteEvent") then
-        obj.OnClientEvent:Connect(function(...)
-            for _, data in ipairs({...}) do
-                if typeof(data) == "table" and (data.From or data.Item or data.GiftId) then
-                    lastGiftPayload = data
+    game:GetService("UserInputService").InputBegan:Connect(function(i,gp)
+        if not gp and i.KeyCode == Enum.KeyCode.K then
+            Screen.Enabled = not Screen.Enabled
+        end
+    end)
+
+    --========================================================
+    -- ✅ AUTO ACCEPT GIFT
+    --========================================================
+    local AcceptRemote = Remotes:WaitForChild("AcceptGift", 10)
+    if not AcceptRemote then
+        warn("❌ Không thấy Remotes.AcceptGift")
+        return
+    end
+
+    local lastGiftPayload = nil
+
+    -- Lắng nghe mọi RemoteEvent để chộp payload quà
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            obj.OnClientEvent:Connect(function(...)
+                for _, data in ipairs({...}) do
+                    if typeof(data) == "table" and (data.From or data.Item or data.GiftId) then
+                        lastGiftPayload = data
+                    end
                 end
-            end
-        end)
-    end
-end
-
--- Tự động Accept
-task.spawn(function()
-    while task.wait(1) do
-        if lastGiftPayload then
-            pcall(function()
-                AcceptRemote:FireServer(lastGiftPayload)
-                print("✅ Accepted gift from:", lastGiftPayload.From)
             end)
-            lastGiftPayload = nil
-            task.wait(1.5)
         end
     end
-end)
 
-print("🎉 Loaded: Pet Counter + Auto Accept Gift")
+    -- Worker accept
+    run_async("AcceptWorker", function()
+        while task.wait(1) do
+            if lastGiftPayload then
+                pcall(function()
+                    AcceptRemote:FireServer(lastGiftPayload)
+                    print("✅ Accepted gift from:", lastGiftPayload.From)
+                end)
+                lastGiftPayload = nil
+                task.wait(1.5)
+            end
+        end
+    end)
+
+    print("🎉 Loaded: Pet Counter + Auto Accept Gift")
+end)
 
 print("✅ ✅ CẢ 2 SCRIPT ĐÃ CHẠY SONG SONG!")
