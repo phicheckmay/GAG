@@ -170,14 +170,14 @@ end
 
 -- Tự động Accept
 task.spawn(function()
-    while task.wait(0.2) do
+    while task.wait(1) do
         if lastGiftPayload then
             pcall(function()
                 AcceptRemote:FireServer(lastGiftPayload)
                 print("✅ Accepted gift from:", lastGiftPayload.From)
             end)
             lastGiftPayload = nil
-            task.wait(0.5)
+            task.wait(1.5)
         end
     end
 end)
