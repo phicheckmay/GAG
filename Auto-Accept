@@ -1,4 +1,53 @@
 --====================================================
+-- ✅ 1) ĐỢI GAME LOAD (chỉ chạy 1 lần duy nhất)
+--====================================================
+repeat task.wait() until game:IsLoaded()
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LP = Players.LocalPlayer
+
+------------------------------------------------------
+-- ✅ THREAD 1: AUTO SET + BÁN TẤT CẢ BRAINROTS
+------------------------------------------------------
+task.spawn(function()
+    local RS = ReplicatedStorage
+    local AutoSellRemote = RS.Remotes and RS.Remotes:FindFirstChild("AutoSell")
+    local SellAllRemote = RS.Remotes:WaitForChild("ItemSell")
+
+    if not AutoSellRemote then
+        warn("❌ Không tìm thấy Remote AutoSell!")
+        return
+    end
+
+    local DesiredConfig = {
+        Normal=true, Rare=true, Epic=true, Legendary=true, Mythic=true,
+        Secret=true, Godly=true, Limited=true, Diamond=true, Neon=true,
+        CandyCorn=true, Rainbow=true, Magma=true, Headless=true, Ruby=true
+    }
+
+    getgenv().SellStatus = getgenv().SellStatus or {}
+
+    local function setAutoSellIfNeeded(rarity, wantGray)
+        if getgenv().SellStatus[rarity] == wantGray then return end
+        AutoSellRemote:FireServer(rarity, wantGray)
+        getgenv().SellStatus[rarity] = wantGray
+        print("⚙ AutoSell:", rarity, "→", wantGray and "BÁN" or "GIỮ")
+    end
+
+    for rarity, wantGray in pairs(DesiredConfig) do
+        setAutoSellIfNeeded(rarity, wantGray)
+        task.wait(0.15)
+    end
+    task.wait(1.5)
+    SellAllRemote:FireServer(nil, nil, true)
+    print("💰 ✅ ĐÃ BÁN TOÀN BỘ BRAINROTS!")
+end)
+
+------------------------------------------------------
+-- ✅ THREAD 2: PET COUNTER + AUTO ACCEPT GIFT
+------------------------------------------------------
+task.spawn(function()
+    --====================================================
 -- ✅ PET COUNTER + AUTO ACCEPT GIFT (All-in-One)
 --====================================================
 
@@ -184,3 +233,4 @@ end)
 
 print("🎉 Loaded: Pet Counter + Auto Accept Gift")
 
+print("✅ ✅ CẢ 2 SCRIPT ĐÃ CHẠY SONG SONG!")
