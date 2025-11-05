@@ -1,61 +1,36 @@
---[[ 🔹 CONFIG + LOADER 🔹 ]]
-script_key = "bnjmfeqqvbjlaSqVGVDNZshhjuSonYhN";
-setfpscap(20)
+--====================================================
+-- ✅ PET COUNTER + AUTO ACCEPT GIFT (All-in-One)
+--====================================================
 
-getgenv().pvbConfig = {
-    LOW_CPU = false,
-    AUTO_COLLECT_GIFT = true,
-    AUTO_SELL_RARITY = {"Rare", "Epic", "Legendary"},
-}
-
-task.spawn(function()
-    pcall(function()
-        loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/9d39e9a9887113322badcaff06f0b034.lua"))()
-    end)
-end)
-
---[[ 🔹 UI ĐẾM PET (TO GẤP 2 + GỘP THEO TÊN) 🔹 ]]
+------------------------[ SERVICES ]------------------------
 local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+------------------------[ LOCAL PLAYER ]--------------------
 local LP = Players.LocalPlayer
 repeat task.wait() until LP
 
-local PG = LP:FindFirstChildOfClass("PlayerGui")
-if not PG then
-    warn("[PetCounter] PlayerGui not found -> using CoreGui fallback.")
-    PG = game:GetService("CoreGui")
-end
+local PG = LP:FindFirstChildOfClass("PlayerGui") or game:GetService("CoreGui")
 
--- UI thông số
-local PANEL_WIDTH, PANEL_HEIGHT = 600, 400     -- ✅ to gấp 2 lần
-local ROW_HEIGHT = 36                         -- ✅ cao dòng hơn
+------------------------[ UI CONFIG ]-----------------------
+local PANEL_WIDTH, PANEL_HEIGHT = 600, 400
+local ROW_HEIGHT = 36
 local TITLE = "Pet Counter"
 local BACKPACK = LP:WaitForChild("Backpack")
 
--- ✅ Hàm bỏ phần trọng lượng, ví dụ "Chinchilla [1.23KG]" -> "Chinchilla"
+------------------------[ FORMAT NAME ]---------------------
 local function baseName(s)
     s = tostring(s or "")
-
-    -- Xoá phần trọng lượng [1.23KG] hoặc [xKG]
     s = s:gsub("%s*%[.-KG%]", "")
-
-    -- Xoá toàn bộ phần trong ngoặc vuông còn lại (ví dụ [Epic], [Rare], [x5])
     s = s:gsub("%[.-%]", "")
-
-    -- Xoá ký tự điều khiển, khoảng trắng ẩn (zero width, tab, newline, v.v.)
     s = s:gsub("[%z\1-\31\127]", ""):gsub("[\u{200B}-\u{200D}\u{FEFF}]", "")
-
-    -- Xoá toàn bộ khoảng trắng thừa đầu/cuối và khoảng trắng kép giữa
     s = s:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
-
-    -- Chuẩn hoá chữ hoa/thường: chỉ viết hoa chữ cái đầu tiên
     s = s:lower():gsub("^%l", string.upper)
-
     return s
 end
 
-
+------------------------[ COUNT FUNCTION ]------------------
 local function countFromSources(sources)
     local counts = {}
     local function add(inst)
@@ -74,16 +49,14 @@ local function countFromSources(sources)
     return counts
 end
 
--- UI panel
+------------------------[ UI CREATION ]---------------------
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "PetCounterUI"
 Screen.ResetOnSpawn = false
 Screen.IgnoreGuiInset = true
-Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Screen.Parent = PG
 
 local Frame = Instance.new("Frame")
-Frame.Name = "Panel"
 Frame.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
 Frame.AnchorPoint = Vector2.new(0.5, 0.5)
 Frame.Position = UDim2.new(0.5, 0, 0.5, 60)
@@ -95,7 +68,6 @@ Frame.Parent = Screen
 Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Name = "Title"
 TitleLabel.Size = UDim2.new(1, -20, 0, 38)
 TitleLabel.Position = UDim2.fromOffset(10, 8)
 TitleLabel.BackgroundTransparency = 1
@@ -106,7 +78,6 @@ TitleLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 TitleLabel.Text = string.format("%s - %s", TITLE, LP.DisplayName or LP.Name)
 TitleLabel.Parent = Frame
 
--- Danh sách pet
 local List = Instance.new("ScrollingFrame")
 List.Name = "List"
 List.Size = UDim2.new(1, -20, 1, -60)
@@ -115,6 +86,7 @@ List.BackgroundTransparency = 1
 List.ScrollBarThickness = 8
 List.AutomaticCanvasSize = Enum.AutomaticSize.Y
 List.Parent = Frame
+
 local Layout = Instance.new("UIListLayout", List)
 Layout.Padding = UDim.new(0, 6)
 Layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -131,12 +103,11 @@ local function makeRow(text)
     tl.TextXAlignment = Enum.TextXAlignment.Left
     tl.Text = text
     Instance.new("UICorner", tl).CornerRadius = UDim.new(0, 10)
-    local pad = Instance.new("UIPadding", tl)
-    pad.PaddingLeft = UDim.new(0, 10)
+    Instance.new("UIPadding", tl).PaddingLeft = UDim.new(0, 10)
     return tl
 end
 
--- Làm mới danh sách
+------------------------[ REFRESH FUNCTION ]----------------
 local function refresh()
     local character = LP.Character or LP.CharacterAdded:Wait()
     local counts = countFromSources({BACKPACK, character})
@@ -145,8 +116,7 @@ local function refresh()
         if ch:IsA("TextLabel") then ch:Destroy() end
     end
 
-    local arr = {}
-    local total = 0
+    local arr, total = {}, 0
     for name,cnt in pairs(counts) do
         total += cnt
         table.insert(arr, {name=name, cnt=cnt})
@@ -161,15 +131,9 @@ local function refresh()
 end
 refresh()
 
--- Theo dõi thay đổi
 local function wireFolder(folder)
     folder.ChildAdded:Connect(refresh)
     folder.ChildRemoved:Connect(refresh)
-    for _,ch in ipairs(folder:GetChildren()) do
-        if ch.GetPropertyChangedSignal then
-            ch:GetPropertyChangedSignal("Name"):Connect(refresh)
-        end
-    end
 end
 
 wireFolder(BACKPACK)
@@ -179,9 +143,44 @@ LP.CharacterAdded:Connect(function(char)
 end)
 if LP.Character then wireFolder(LP.Character) end
 
--- Ẩn/hiện UI bằng phím K
 UIS.InputBegan:Connect(function(i,gp)
     if not gp and i.KeyCode == Enum.KeyCode.K then
         Screen.Enabled = not Screen.Enabled
     end
 end)
+
+--========================================================
+-- ✅ AUTO ACCEPT GIFT (Plants vs Brainrot)
+--========================================================
+local AcceptRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("AcceptGift")
+local lastGiftPayload = nil
+
+-- Lắng nghe tất cả RemoteEvent để lấy Gift Payload
+for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+    if obj:IsA("RemoteEvent") then
+        obj.OnClientEvent:Connect(function(...)
+            for _, data in ipairs({...}) do
+                if typeof(data) == "table" and (data.From or data.Item or data.GiftId) then
+                    lastGiftPayload = data
+                end
+            end
+        end)
+    end
+end
+
+-- Tự động Accept
+task.spawn(function()
+    while task.wait(0.2) do
+        if lastGiftPayload then
+            pcall(function()
+                AcceptRemote:FireServer(lastGiftPayload)
+                print("✅ Accepted gift from:", lastGiftPayload.From)
+            end)
+            lastGiftPayload = nil
+            task.wait(0.5)
+        end
+    end
+end)
+
+print("🎉 Loaded: Pet Counter + Auto Accept Gift")
+
