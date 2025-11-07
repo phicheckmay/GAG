@@ -11,7 +11,7 @@ local CONFIG = {
     ENABLE_BUY_SEED   = true, -- Mua hạt
 
     SEED_SELLER = "George",   -- NPC bán hạt
-    SEED_LIST = { "Cactus Seed", "Pumpkin Seed", "Strawberry Seed" },
+    SEED_LIST = { "Shroombino", "Mango", "King Limone", "Starfruit" },
 
     AUTOSELL_CONFIG = {       -- true = xám = bán, false = màu = giữ
         Normal     = true,
