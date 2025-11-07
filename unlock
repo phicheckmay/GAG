@@ -1,124 +1,97 @@
 --====================================================
--- 📌 CONFIG – chỉnh tại đây
+-- ✅ 0) ĐỢI GAME LOAD
 --====================================================
-local CONFIG = {
-    SELLER_NAME = "George",
-    AUTO_SELL_REPEAT = 120,  -- 120s bán all 1 lần
-    AUTO_BUY_REPEAT = 10,    -- 10s mua hạt 1 lần
-
-    AutoBuySeeds = {
-        "Shroombino",
-        "Mango",
-        "King Limone",
-        "Starfruit",
-    },
-
-    AutoSellRarity = {
-        Normal=true, Rare=true, Epic=true, Legendary=true,
-        Mythic=true, Secret=true, Godly=true, Limited=true,
-        Diamond=true, Neon=true, CandyCorn=true, Rainbow=true,
-        Magma=true, Headless=true, Ruby=true
-    }
-}
-
 repeat task.wait() until game:IsLoaded()
-task.wait(3)  -- ✅ Chờ game load xong hẳn
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 local Backpack = LP:WaitForChild("Backpack")
 
-
 --====================================================
--- ✅ MODULE 1: Bỏ tim pet/tool
+-- ✅ 1) UNLOCK TOÀN BỘ TOOL/PET CÓ TIM ❤️
 --====================================================
 local function unlockAllFavorites()
     local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
-    local favEvent = ge and ge:FindFirstChild("Favorite_Item", true)
+    if not ge then return end
+
+    local favEvent = ge:FindFirstChild("Favorite_Item", true)
     if not favEvent then return end
 
     local count = 0
     for _, tool in ipairs(Backpack:GetChildren()) do
         if tool:IsA("Tool") and tool:GetAttribute("d") then
-            favEvent:FireServer(tool)
+            favEvent:FireServer(tool) -- Bỏ trái tim
             count += 1
             task.wait(0.05)
         end
     end
-    print("✅ [Unlock] Đã bỏ tim:", count)
+    print("✅ [Unlock] Đã bỏ tim:", count, "tool/pet")
 end
 
+unlockAllFavorites()
+task.wait(0.5)
 
 --====================================================
--- ✅ MODULE 2: Chỉ BẬT AutoSell
+-- ✅ 2) BẬT AUTOSELL + SELL ALL BRAINROTS
 --====================================================
-local SellStatus = {}
-local function setupAutoSell()
-    local AutoSellRemote = ReplicatedStorage.Remotes:FindFirstChild("AutoSell")
-    if not AutoSellRemote then return end
+local AutoSellRemote = ReplicatedStorage.Remotes:FindFirstChild("AutoSell")
+local SellAllRemote  = ReplicatedStorage.Remotes:WaitForChild("ItemSell")
 
-    for rarity, wantSell in pairs(CONFIG.AutoSellRarity) do
-        if SellStatus[rarity] ~= wantSell then
-            AutoSellRemote:FireServer(rarity, wantSell)
-            SellStatus[rarity] = wantSell
-            print("⚙ AutoSell:", rarity, "→", wantSell and "SELL" or "KEEP")
-        end
+local DesiredConfig = {
+    Normal=true, Rare=true, Epic=true, Legendary=true,
+    Mythic=true, Secret=true, Godly=true, Limited=true,
+    Diamond=true, Neon=true, CandyCorn=true, Rainbow=true,
+    Magma=true, Headless=true, Ruby=true
+}
+
+getgenv().SellStatus = getgenv().SellStatus or {}
+
+local function setAutoSellIfNeeded(rarity, wantSell)
+    if getgenv().SellStatus[rarity] == wantSell then return end
+    AutoSellRemote:FireServer(rarity, wantSell)
+    getgenv().SellStatus[rarity] = wantSell
+    print("⚙ AutoSell:", rarity, "→", wantSell and "SELL" or "KEEP")
+end
+
+task.spawn(function()
+    for rarity, wantSell in pairs(DesiredConfig) do
+        setAutoSellIfNeeded(rarity, wantSell)
         task.wait(0.15)
     end
-
-    print("✅ [AutoSell] Thiết lập xong!")
-end
-
+    -- Sell ALL lần đầu tiên
+    task.wait(1.5)
+    SellAllRemote:FireServer(nil, nil, true)
+    print("💰 Đã SELL ALL Brainrots lần đầu!")
+end)
 
 --====================================================
--- ✅ MODULE 3: Lặp SELL ALL mỗi 120s
+-- ✅ 3) AUTOBUY HẠT (BuyItem + RequestAsset)
 --====================================================
-local function loopSellAll()
-    local SellAllRemote = ReplicatedStorage.Remotes:FindFirstChild("ItemSell")
-    if not SellAllRemote then return end
+local BuyItem = ReplicatedStorage.Remotes.BuyItem
+local RequestAsset = ReplicatedStorage.Remotes.SelectiveAssetService.RequestAsset
 
-    task.spawn(function()
-        while task.wait(CONFIG.AUTO_SELL_REPEAT) do
-            SellAllRemote:FireServer(nil, nil, true)
-            print("💰 [SellAll] Đã bán toàn bộ pet!")
+-- Tên NPC bán hạt (bạn có thể đổi thành "Madung", "Tim Cheese", ...)
+local SellerName = "George"
+
+-- Danh sách hạt cần mua liên tục
+local SeedList = {
+    "",
+    "Shroombino",
+    "Mango",
+    "King Limone",
+    "Starfruit",
+}
+
+task.spawn(function()
+    while task.wait(0.25) do
+        for _, seed in ipairs(SeedList) do
+            BuyItem:FireServer(seed, true)
+            RequestAsset:FireServer("Brainrots", SellerName)
+            print("🌱 Đã mua:", seed)
+            task.wait(0.25)
         end
-    end)
-end
+    end
+end)
 
-
---====================================================
--- ✅ MODULE 4: Lặp Auto mua hạt mỗi 10s
---====================================================
-local function loopAutoBuy()
-    local BuyItem = ReplicatedStorage.Remotes.BuyItem
-    local RequestAsset = ReplicatedStorage.Remotes.SelectiveAssetService.RequestAsset
-
-    task.spawn(function()
-        while task.wait(CONFIG.AUTO_BUY_REPEAT) do
-            for _, seed in ipairs(CONFIG.AutoBuySeeds) do
-                BuyItem:FireServer(seed, true)
-                RequestAsset:FireServer("Brainrots", CONFIG.SELLER_NAME)
-                print("🌱 [Buy] Mua:", seed)
-                task.wait(0.2)
-            end
-        end
-    end)
-end
-
-
---====================================================
--- ✅ MAIN – Chạy lần lượt theo logic bạn yêu cầu
---====================================================
-print("🚀 Bắt đầu script...")
-
-unlockAllFavorites()  -- 1️⃣
-task.wait(0.5)
-
-setupAutoSell()       -- 2️⃣
-task.wait(0.5)
-
-loopSellAll()         -- 3️⃣ Mỗi 120s bán all
-loopAutoBuy()         -- 4️⃣ Mỗi 10s mua hạt
-
-print("✅ Hoàn tất! (Unlock + AutoSell + Loop Sell + Loop Buy)")
+print("✅ Script chạy thành công: unlock tim + autosell + autobuy seed")
