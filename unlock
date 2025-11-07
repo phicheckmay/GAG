@@ -1,97 +1,176 @@
 --====================================================
--- ✅ 0) ĐỢI GAME LOAD
+-- ⚙️ CONFIG — chỉ cần chỉnh trong phần này
+--====================================================
+local CONFIG = {
+    WAIT_BEFORE_START = 3,    -- đợi 3s cho game load xong
+    SELL_INTERVAL = 120,      -- 120s/lần bán toàn bộ
+    BUY_INTERVAL  = 10,       -- 10s/lần mua hạt
+    ENABLE_UNFAVORITE = true, -- Bỏ tim tất cả pet ❤️
+    ENABLE_AUTOSELL   = true, -- Set autosell
+    ENABLE_SELL_LOOP  = true, -- Lặp Sell All
+    ENABLE_BUY_SEED   = true, -- Mua hạt
+
+    SEED_SELLER = "George",   -- NPC bán hạt
+    SEED_LIST = { "Cactus Seed", "Pumpkin Seed", "Strawberry Seed" },
+
+    AUTOSELL_CONFIG = {       -- true = xám = bán, false = màu = giữ
+        Normal     = true,
+        Rare       = true,
+        Epic       = true,
+        Legendary  = true,
+        Mythic     = true,
+        Secret     = true,
+        Godly      = true,
+        Limited    = true,
+        Diamond    = true,
+        Neon       = true,
+        CandyCorn  = true,
+        Rainbow    = true,
+        Magma      = true,
+        Headless   = true,
+        Ruby       = true,
+    }
+}
+
+--====================================================
+-- 🚀 SYSTEM START
 --====================================================
 repeat task.wait() until game:IsLoaded()
+task.wait(CONFIG.WAIT_BEFORE_START)
 
+local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
-local Backpack = LP:WaitForChild("Backpack")
+local Remotes = RS:FindFirstChild("Remotes") or RS
+
+local FavoriteItem = Remotes:FindFirstChild("FavoriteItem", true)
+local AutoSellRemote = Remotes:FindFirstChild("AutoSell", true)
+local SellRemote = Remotes:WaitForChild("ItemSell")
+local RequestAsset = Remotes:FindFirstChild("SelectiveAssetService", true)
+	and Remotes.SelectiveAssetService:FindFirstChild("RequestAsset")
+local BuyItem = Remotes:FindFirstChild("BuyItem", true)
 
 --====================================================
--- ✅ 1) UNLOCK TOÀN BỘ TOOL/PET CÓ TIM ❤️
+-- 🩷 B1: BỎ TIM TOÀN BỘ PET
 --====================================================
-local function unlockAllFavorites()
-    local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
-    if not ge then return end
+local function UnfavoriteAll()
+	if not CONFIG.ENABLE_UNFAVORITE then return end
+	print("🔓 Đang bỏ tim tất cả pet...")
+	if not FavoriteItem then return warn("❌ Không có Remote FavoriteItem") end
 
-    local favEvent = ge:FindFirstChild("Favorite_Item", true)
-    if not favEvent then return end
+	local FavoritesTable
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "Favorites") then
+			FavoritesTable = rawget(v, "Favorites")
+			break
+		end
+	end
+	if not FavoritesTable then return warn("❌ Không tìm thấy bảng Favorites") end
 
-    local count = 0
-    for _, tool in ipairs(Backpack:GetChildren()) do
-        if tool:IsA("Tool") and tool:GetAttribute("d") then
-            favEvent:FireServer(tool) -- Bỏ trái tim
-            count += 1
-            task.wait(0.05)
-        end
-    end
-    print("✅ [Unlock] Đã bỏ tim:", count, "tool/pet")
+	local count = 0
+	for uuid in pairs(FavoritesTable) do
+		if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
+			FavoriteItem:FireServer(uuid)
+			count += 1
+			task.wait(0.05)
+		end
+	end
+	print(("✅ Đã bỏ tim %d pet có ❤️"):format(count))
 end
 
-unlockAllFavorites()
-task.wait(0.5)
-
 --====================================================
--- ✅ 2) BẬT AUTOSELL + SELL ALL BRAINROTS
+-- ⚙️ B2: SET AUTOSELL
 --====================================================
-local AutoSellRemote = ReplicatedStorage.Remotes:FindFirstChild("AutoSell")
-local SellAllRemote  = ReplicatedStorage.Remotes:WaitForChild("ItemSell")
-
-local DesiredConfig = {
-    Normal=true, Rare=true, Epic=true, Legendary=true,
-    Mythic=true, Secret=true, Godly=true, Limited=true,
-    Diamond=true, Neon=true, CandyCorn=true, Rainbow=true,
-    Magma=true, Headless=true, Ruby=true
-}
-
-getgenv().SellStatus = getgenv().SellStatus or {}
-
-local function setAutoSellIfNeeded(rarity, wantSell)
-    if getgenv().SellStatus[rarity] == wantSell then return end
-    AutoSellRemote:FireServer(rarity, wantSell)
-    getgenv().SellStatus[rarity] = wantSell
-    print("⚙ AutoSell:", rarity, "→", wantSell and "SELL" or "KEEP")
+local function LocateAutoSellTable()
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "AutoSell") then
+			return v.AutoSell
+		end
+	end
 end
 
-task.spawn(function()
-    for rarity, wantSell in pairs(DesiredConfig) do
-        setAutoSellIfNeeded(rarity, wantSell)
-        task.wait(0.15)
-    end
-    -- Sell ALL lần đầu tiên
-    task.wait(1.5)
-    SellAllRemote:FireServer(nil, nil, true)
-    print("💰 Đã SELL ALL Brainrots lần đầu!")
-end)
+local function isOn(tbl, rarity)
+	local v = tbl and tbl[rarity]
+	return v == 1 or v == true
+end
+
+local function toggleUntil(remote, tbl, rarity, targetOn, maxTries, delayStep)
+	maxTries = maxTries or 3
+	delayStep = delayStep or 0.15
+	for i = 1, maxTries do
+		if isOn(tbl, rarity) == targetOn then
+			return true, ("✅ %s đã đúng (%s)"):format(rarity, targetOn and "GRAY" or "COLOR")
+		end
+		if remote then remote:FireServer(rarity) end
+		local t0 = tick()
+		repeat
+			task.wait(delayStep)
+			if isOn(tbl, rarity) == targetOn then
+				return true, ("⚙️ %s → %s (sau %d lần)"):format(rarity, targetOn and "GRAY" or "COLOR", i)
+			end
+		until tick() - t0 > 2
+	end
+	return false, ("❌ %s không hội tụ về %s"):format(rarity, targetOn and "GRAY" or "COLOR")
+end
+
+local function ApplyAutoSellConfig()
+	if not CONFIG.ENABLE_AUTOSELL then return end
+	local tbl = LocateAutoSellTable()
+	if not (tbl and AutoSellRemote) then return warn("❌ Không tìm thấy AutoSell table/remote") end
+	print("⚙️ Cấu hình AutoSell...")
+	for rarity, wantGray in pairs(CONFIG.AUTOSELL_CONFIG) do
+		local ok, msg = toggleUntil(AutoSellRemote, tbl, rarity, wantGray, 3, 0.1)
+		print(msg)
+		task.wait(0.05)
+	end
+	print("🎯 AUTOSELL hoàn tất.")
+end
 
 --====================================================
--- ✅ 3) AUTOBUY HẠT (BuyItem + RequestAsset)
+-- 💰 B3: AUTO SELL ALL (chuẩn chữ ký)
 --====================================================
-local BuyItem = ReplicatedStorage.Remotes.BuyItem
-local RequestAsset = ReplicatedStorage.Remotes.SelectiveAssetService.RequestAsset
+local function SellAllLoop()
+	if not CONFIG.ENABLE_SELL_LOOP then return end
+	task.spawn(function()
+		while true do
+			SellRemote:FireServer(nil, nil, true) -- 🗑 bán tất cả Brainrots
+			print("✅ SELL ALL Brainrots DONE!")
+			task.wait(CONFIG.SELL_INTERVAL)
+		end
+	end)
+end
 
--- Tên NPC bán hạt (bạn có thể đổi thành "Madung", "Tim Cheese", ...)
-local SellerName = "George"
+--====================================================
+-- 🌾 B4: AUTO BUY SEED
+--====================================================
+local function AutoBuySeedLoop()
+	if not CONFIG.ENABLE_BUY_SEED then return end
+	if not (RequestAsset and BuyItem) then return warn("❌ Không có Remote mua hạt") end
+	local seller = CONFIG.SEED_SELLER
+	local list = CONFIG.SEED_LIST
 
--- Danh sách hạt cần mua liên tục
-local SeedList = {
-    "",
-    "Shroombino",
-    "Mango",
-    "King Limone",
-    "Starfruit",
-}
+	task.spawn(function()
+		while true do
+			RequestAsset:FireServer("Brainrots", seller)
+			task.wait(1)
+			for _, seed in ipairs(list) do
+				pcall(function()
+					BuyItem:FireServer(seed, true)
+					print("🌱 Đã mua:", seed)
+				end)
+				task.wait(0.3)
+			end
+			task.wait(CONFIG.BUY_INTERVAL)
+		end
+	end)
+end
 
-task.spawn(function()
-    while task.wait(0.25) do
-        for _, seed in ipairs(SeedList) do
-            BuyItem:FireServer(seed, true)
-            RequestAsset:FireServer("Brainrots", SellerName)
-            print("🌱 Đã mua:", seed)
-            task.wait(0.25)
-        end
-    end
-end)
-
-print("✅ Script chạy thành công: unlock tim + autosell + autobuy seed")
+--====================================================
+-- 🚀 RUN SEQUENCE
+--====================================================
+UnfavoriteAll()
+task.wait(1)
+ApplyAutoSellConfig()
+SellAllLoop()
+AutoBuySeedLoop()
+print("✅ Hệ thống tự động (Unlock + AutoSell + SellAll + BuySeed) đã khởi chạy!")
