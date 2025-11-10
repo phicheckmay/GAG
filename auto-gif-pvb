@@ -1,143 +1,320 @@
 --====================================================
--- ✅ Auto Đào → Unlock → Tele → Gift → hết thì Kick 267
+-- ✅ PHIÊN BẢN 3.3: FULL SCRIPT (UI LOG + AUTO GIFT + KICK 267)
 --====================================================
+repeat task.wait() until game:IsLoaded()
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local lp = Players.LocalPlayer
+local Players            = game:GetService("Players")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local lp                 = Players.LocalPlayer
+local HRP                = lp.Character and lp.Character:WaitForChild("HumanoidRootPart")
+local Remotes            = ReplicatedStorage:WaitForChild("Remotes")
 
--- ✅ Lấy config từ file bên ngoài
-local PLANT_NAME = getgenv().PLANT_NAME or "King Limone"
-local TARGET_PLAYER = getgenv().TARGET_PLAYER or "Phingoc223"
+-- 🌱 Config
+local PLANT_NAME    = (getgenv().PLANT_NAME    or "Mango")
+local TARGET_PLAYER = (getgenv().TARGET_PLAYER or "Phingoc223")
 
-local HRP = lp.Character and lp.Character:WaitForChild("HumanoidRootPart")
+task.wait(3)
 
-local function baseName(s)
-    s = tostring(s or "")
-    return s:gsub("%s*%[.-%]", ""):gsub("%s*%(.-%)", ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+--====================================================
+-- ✅ UI LOG (nền đen đặc, hiển thị tối đa 6 dòng)
+--====================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "StatusHUD"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local Panel = Instance.new("Frame")
+Panel.Parent = ScreenGui
+Panel.Size = UDim2.fromOffset(600, 400)
+Panel.Position = UDim2.new(0.5, -300, 0.5, -200)
+Panel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Panel.BackgroundTransparency = 0
+Panel.BorderSizePixel = 0
+
+local LogBox = Instance.new("TextLabel")
+LogBox.Parent = Panel
+LogBox.Size = UDim2.fromScale(1, 1)
+LogBox.BackgroundTransparency = 1
+LogBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogBox.TextStrokeTransparency = 0.5
+LogBox.TextScaled = false
+LogBox.Font = Enum.Font.GothamMedium
+LogBox.TextXAlignment = Enum.TextXAlignment.Left
+LogBox.TextYAlignment = Enum.TextYAlignment.Top
+LogBox.TextSize = 18
+LogBox.Text = "[UI] Khởi động log...\n"
+
+local logLines = {}
+local function uiStatus(msg)
+	table.insert(logLines, os.date("[%H:%M:%S] ") .. msg)
+	if #logLines > 6 then table.remove(logLines, 1) end
+	LogBox.Text = table.concat(logLines, "\n")
+	print(msg)
+end
+
+uiStatus("Khởi động UI log...")
+
+--====================================================
+-- ✅ PHẦN 2: HÀM TIỆN ÍCH
+--====================================================
+local function baseName(str)
+	str = tostring(str or "")
+	str = str:gsub("%b[]", ""):gsub("%b()", "")
+	str = str:gsub("%d+[%.,]?%d*%s*kg", "")
+	str = str:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	return str:lower()
 end
 
 local TARGET_BASE = baseName(PLANT_NAME)
 
-local function findExactPlant()
-    local bp = lp:FindFirstChild("Backpack")
-    if not bp then return nil end
-    for _, item in ipairs(bp:GetChildren()) do
-        if item:IsA("Tool") and baseName(item.Name) == TARGET_BASE and not item.Name:lower():find("seed") then
-            return item
-        end
-    end
+local function findPlantInBackpack()
+	local bp = lp:FindFirstChild("Backpack")
+	if not bp then return nil end
+	for _, item in ipairs(bp:GetChildren()) do
+		if item:IsA("Tool") and baseName(item.Name) == TARGET_BASE then
+			return item
+		end
+	end
+end
+
+local function findPlantOnHand()
+	local char = lp.Character
+	if not char then return nil end
+	for _, tool in ipairs(char:GetChildren()) do
+		if tool:IsA("Tool") and baseName(tool.Name) == TARGET_BASE then
+			return tool
+		end
+	end
 end
 
 local function stillHasPlant()
-    if findExactPlant() then return true end
-    local char = lp.Character
-    if char then
-        for _, it in ipairs(char:GetChildren()) do
-            if it:IsA("Tool") and baseName(it.Name) == TARGET_BASE then
-                return true
-            end
-        end
-    end
-    return false
+	return findPlantInBackpack() or findPlantOnHand()
 end
 
-local function isMyPlot(plot)
-    local ownerAttr = plot:GetAttribute("Owner")
-    if ownerAttr and string.lower(ownerAttr) == string.lower(lp.Name) then
-        return true
-    end
-    return false
+--====================================================
+-- ✅ PHẦN 3: UNLOCK TIM ❤️
+--====================================================
+local function unlockAllMatchingPlants()
+	local favRemote = Remotes:FindFirstChild("FavoriteItem")
+	if not favRemote then
+		uiStatus("❌ Không tìm thấy FavoriteItem remote!")
+		return
+	end
+
+	local FavoritesTable
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "Favorites") then
+			FavoritesTable = rawget(v, "Favorites")
+			break
+		end
+	end
+	if not FavoritesTable then
+		uiStatus("⚠️ Không tìm thấy bảng Favorites!")
+		return
+	end
+
+	local count = 0
+	for uuid in pairs(FavoritesTable) do
+		if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
+			favRemote:FireServer(uuid)
+			count += 1
+			task.wait(0.05)
+		end
+	end
+	uiStatus(("✅ Bỏ tim %d pet trong túi!"):format(count))
 end
 
--- ✅ 1. Đào cây
-local RemoveEvent = ReplicatedStorage.Remotes:WaitForChild("RemoveItem")
-local function digAllMyPlants(name)
-    print("⛏ Đang đào:", name)
-    local plots = workspace:FindFirstChild("Plots")
-    if not plots then return end
-    local myPlot
-    for _, p in ipairs(plots:GetChildren()) do
-        if isMyPlot(p) then
-            myPlot = p
-            break
-        end
-    end
-    if not myPlot then return end
+--====================================================
+-- ✅ PHẦN 4: AUTOSELL + SELL ALL
+--====================================================
+local AutoSellRemote = Remotes:FindFirstChild("AutoSell")
+local SellAllRemote  = Remotes:FindFirstChild("ItemSell")
 
-    local plantFolder = myPlot:FindFirstChild("Plants")
-    if not plantFolder then return end
+local function setupAutoSell()
+	if not AutoSellRemote then return uiStatus("❌ Thiếu Remote AutoSell!") end
 
-    for _, plant in ipairs(plantFolder:GetChildren()) do
-        if plant.Name == name then
-            local base = plant:FindFirstChildWhichIsA("BasePart")
-            local id = plant:GetAttribute("ID")
-            if base and id then
-                HRP.CFrame = base.CFrame + Vector3.new(0,3,0)
-                task.wait(0.2)
-                RemoveEvent:FireServer(id)
-                print("✅ Đã đào:", plant.Name)
-                task.wait(0.2)
-            end
-        end
-    end
+	local tbl
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "AutoSell") then
+			tbl = v.AutoSell
+			break
+		end
+	end
+	if not tbl then return uiStatus("⚠️ Không tìm thấy AutoSell table!") end
+
+	local cfg = {
+		Normal = true, Rare = true, Epic = true, Legendary = true,
+		Mythic = true, Secret = true, Godly = true,
+	}
+	for rarity, wantGray in pairs(cfg) do
+		for i = 1, 3 do
+			local v = tbl[rarity]
+			if (v == 1 or v == true) == wantGray then break end
+			AutoSellRemote:FireServer(rarity)
+			task.wait(0.1)
+		end
+	end
+	uiStatus("🎯 AUTOSELL: đã set tất cả sang GRAY")
 end
 
--- ✅ 2. Bỏ tim
-local function unlockAll()
-    local bp = lp:FindFirstChild("Backpack")
-    local ge = ReplicatedStorage:FindFirstChild("GameEvents", true)
-    local fav = ge and ge:FindFirstChild("Favorite_Item", true)
-    if not bp or not fav then return end
-    for _, item in ipairs(bp:GetChildren()) do
-        if item:IsA("Tool") and baseName(item.Name) == TARGET_BASE and item:GetAttribute("d") then
-            fav:FireServer(item)
-            task.wait(0.05)
-        end
-    end
-    print("💖 Đã bỏ tim xong")
+local function sellAllNow()
+	if SellAllRemote then
+		SellAllRemote:FireServer(nil, nil, true)
+		uiStatus("💰 Bán sạch Backpack.")
+	else
+		uiStatus("❌ Không có Remote ItemSell")
+	end
 end
 
--- ✅ 3. Tele
-local function teleportToPlayer(name)
-    local target = Players:FindFirstChild(name)
-    if target and target.Character then
-        HRP.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
-        print("🚀 Tele tới:", name)
-    end
+--====================================================
+-- ✅ PHẦN 5: ĐÀO CÂY
+--====================================================
+local RemoveEvent = Remotes:FindFirstChild("RemoveItem")
+
+local function gardenHasPlant()
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return false end
+	for _, plot in ipairs(plots:GetChildren()) do
+		local owner = plot:GetAttribute("Owner")
+		if owner and owner:lower() == lp.Name:lower() then
+			local plantFolder = plot:FindFirstChild("Plants")
+			if plantFolder then
+				for _, plant in ipairs(plantFolder:GetChildren()) do
+					if baseName(plant.Name) == TARGET_BASE then return true end
+				end
+			end
+		end
+	end
+	return false
 end
 
--- ✅ 4. Gift
-local GiftEvent = ReplicatedStorage.Remotes.GiftItem
-local function giftOne()
-    local tool = findExactPlant()
-    if not tool then return false end
-    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
-    if not hum then return false end
-    hum:EquipTool(tool)
-    task.wait(2)
-    GiftEvent:FireServer({ Item = tool, ToGift = TARGET_PLAYER })
-    print("🎁 Gift:", tool.Name)
-    task.wait(3)
-    return true
+local function digAllMyPlants_once()
+	if not RemoveEvent then return 0 end
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return 0 end
+	local dug = 0
+	for _, plot in ipairs(plots:GetChildren()) do
+		local owner = plot:GetAttribute("Owner")
+		if owner and owner:lower() == lp.Name:lower() then
+			local folder = plot:FindFirstChild("Plants")
+			if folder then
+				for _, plant in ipairs(folder:GetChildren()) do
+					if baseName(plant.Name) == TARGET_BASE then
+						local basePart = plant:FindFirstChildWhichIsA("BasePart")
+						local id = plant:GetAttribute("ID")
+						if basePart and id and HRP then
+							HRP.CFrame = basePart.CFrame + Vector3.new(0, 3, 0)
+							task.wait(0.12)
+							RemoveEvent:FireServer(id)
+							dug += 1
+							task.wait(0.8)
+						end
+					end
+				end
+			end
+		end
+	end
+	if dug > 0 then uiStatus(("⛏ Đào xong %d cây %s"):format(dug, PLANT_NAME)) end
+	return dug
 end
 
--- ✅ MAIN
+local function digAllMyPlants_untilEmpty()
+	local n = 0
+	while gardenHasPlant() do
+		n += digAllMyPlants_once()
+		task.wait(0.5)
+	end
+	if n == 0 then uiStatus("✅ Không còn cây trong vườn.") end
+end
+
+--====================================================
+-- ✅ PHẦN 6: GIFT
+--====================================================
+local GiftEvent = Remotes:FindFirstChild("GiftItem")
+
+local function waitTarget(timeout)
+	local t0 = tick()
+	repeat
+		local target = Players:FindFirstChild(TARGET_PLAYER)
+		if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+			return target
+		end
+		task.wait(1)
+	until tick() - t0 > timeout
+	return nil
+end
+
+local function giftAll_afterTeleportOnce()
+	local target = waitTarget(10)
+	if not target then
+		uiStatus("⚠️ Không tìm thấy người nhận, chờ...")
+		return
+	end
+	if HRP and target.Character then
+		HRP.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
+		uiStatus("🚀 Teleport tới " .. TARGET_PLAYER)
+		task.wait(1)
+	end
+
+	local giftCount = 0
+	while stillHasPlant() do
+		local tool = findPlantInBackpack() or findPlantOnHand()
+		if not tool then break end
+
+		local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum:EquipTool(tool) task.wait(0.4) end
+
+		giftCount += 1
+		uiStatus(("🎁 Gửi %s cho %s (lần %d)"):format(PLANT_NAME, TARGET_PLAYER, giftCount))
+		GiftEvent:FireServer({ Item = tool, ToGift = TARGET_PLAYER })
+
+		-- chờ tool biến mất (rời tay/túi)
+		local t0 = tick()
+		repeat
+			task.wait(0.3)
+			if not stillHasPlant() then break end
+		until tick() - t0 > 5
+		task.wait(3)
+	end
+	uiStatus(("✅ Gift xong %d cây %s"):format(giftCount, PLANT_NAME))
+end
+
+--====================================================
+-- ✅ PHẦN 7: MAIN (chuỗi thao tác)
+--====================================================
+local function main()
+	uiStatus("🚀 Bắt đầu: Unlock → AutoSell → SellAll → Đào → Gift → Kick")
+
+	unlockAllMatchingPlants()
+	setupAutoSell()
+	sellAllNow()
+
+	while true do
+		if gardenHasPlant() then
+			uiStatus("⛏ Đào cây: " .. PLANT_NAME)
+			digAllMyPlants_untilEmpty()
+			task.wait(0.5)
+		end
+
+		if stillHasPlant() then
+			giftAll_afterTeleportOnce()
+			task.wait(0.5)
+		end
+
+		if not stillHasPlant() and not gardenHasPlant() then
+			uiStatus("🎉 Hoàn tất → Kick 267")
+			lp:Kick("🎉 Đã đào & gift toàn bộ (267)")
+			break
+		end
+
+		task.wait(0.5)
+	end
+end
+
+--====================================================
+-- ✅ PHẦN 8: CHẠY
+--====================================================
 task.spawn(function()
-    digAllMyPlants(PLANT_NAME)
-    task.wait(1)
-    unlockAll()
-    task.wait(1)
-    teleportToPlayer(TARGET_PLAYER)
-    task.wait(1)
-
-    while true do
-        if stillHasPlant() then
-            giftOne()
-            task.wait(5)
-        else
-            lp:Kick("🎉 Gift done (267)")
-            break
-        end
-    end
+	task.wait(0.8)
+	main()
 end)
