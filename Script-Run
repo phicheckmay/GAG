@@ -4,8 +4,29 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 
---========= B1: UNLOCK TIM (một lần) =========--
+--====================================================
+-- 🛡️ ANTI AFK (Không bị kick)
+--====================================================
+task.spawn(function()
+    -- Reset Idle Timer để game không đếm AFK
+    pcall(function()
+        RS.Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+    task.wait(0.2)
 
+    local VIM = game:GetService("VirtualInputManager")
+    while task.wait() do
+        -- Nhấn Space nhẹ để tránh AFK
+        VIM:SendKeyEvent(true, "Space", false, game)
+        task.wait(0.2)
+        VIM:SendKeyEvent(false, "Space", false, game)
+        task.wait(300) -- 5 phút 1 lần
+    end
+end)
+
+--====================================================
+-- ❤️ B1: UNLOCK TIM (chạy 1 lần duy nhất)
+--====================================================
 task.spawn(function()
     local favRemote = RS:WaitForChild("Remotes"):WaitForChild("FavoriteItem")
 
@@ -23,7 +44,7 @@ task.spawn(function()
         return
     end
 
-    -- Bỏ tim từng pet
+    -- Bỏ tim tất cả pet
     local count = 0
     for uuid, _ in pairs(FavoritesTable) do
         if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
@@ -36,8 +57,9 @@ task.spawn(function()
     print("✅ Đã bỏ tim:", count, "pet ❤️")
 end)
 
---========= B2: SELL ALL BRAINROTS (30 giây 1 lần) =========--
-
+--====================================================
+-- 🗑️ B2: SELL ALL Brainrots (30 giây/lần)
+--====================================================
 local SellRemote = RS.Remotes:WaitForChild("ItemSell")
 getgenv().AutoSellAll = true
 
@@ -47,6 +69,6 @@ task.spawn(function()
             SellRemote:FireServer(nil, nil, true)
             print("🗑️ SELL ALL Brainrots DONE!")
         end)
-        task.wait(30) -- delay 30 giây
+        task.wait(30)
     end
 end)
