@@ -1,1 +1,52 @@
+repeat task.wait() until game:IsLoaded()
 
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local LP = Players.LocalPlayer
+
+--========= B1: UNLOCK TIM (một lần) =========--
+
+task.spawn(function()
+    local favRemote = RS:WaitForChild("Remotes"):WaitForChild("FavoriteItem")
+
+    -- Tìm bảng Favorites trong getgc
+    local FavoritesTable
+    for _, v in ipairs(getgc(true)) do
+        if typeof(v) == "table" and rawget(v, "Favorites") then
+            FavoritesTable = rawget(v, "Favorites")
+            break
+        end
+    end
+
+    if not FavoritesTable then
+        warn("❌ Không tìm thấy bảng Favorites.")
+        return
+    end
+
+    -- Bỏ tim từng pet
+    local count = 0
+    for uuid, _ in pairs(FavoritesTable) do
+        if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
+            favRemote:FireServer(uuid)
+            count += 1
+            task.wait(0.05)
+        end
+    end
+
+    print("✅ Đã bỏ tim:", count, "pet ❤️")
+end)
+
+--========= B2: SELL ALL BRAINROTS (30 giây 1 lần) =========--
+
+local SellRemote = RS.Remotes:WaitForChild("ItemSell")
+getgenv().AutoSellAll = true
+
+task.spawn(function()
+    while getgenv().AutoSellAll do
+        pcall(function()
+            SellRemote:FireServer(nil, nil, true)
+            print("🗑️ SELL ALL Brainrots DONE!")
+        end)
+        task.wait(30) -- delay 30 giây
+    end
+end)
