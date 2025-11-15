@@ -1,0 +1,45 @@
+--script buy all gear and all seed
+local VirtualUser = game:service "VirtualUser"
+game:service("Players").LocalPlayer.Idled:connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local BuyGear = ReplicatedStorage.Remotes.BuyGear -- RemoteEvent 
+
+
+
+-- Remote
+local BuyItem = ReplicatedStorage.Remotes.BuyItem -- RemoteEvent 
+
+spawn(function()
+while wait() do
+pcall(function()
+    for _, v in
+        pairs(game:GetService('ReplicatedStorage').Assets.Seeds:GetChildren())
+    do
+        print(v.Name)
+        BuyItem:FireServer(
+            v.Name
+        )
+        wait()
+    end
+end)
+end
+end)
+spawn(function()
+while wait() do
+pcall(function(AccessModifierType)
+    for _, v in
+        pairs(game:GetService('ReplicatedStorage').Assets.Gears:GetChildren())
+    do
+        print(v.Name)
+        BuyGear:FireServer(
+            v.Name
+        )
+        wait()
+    end
+end)
+end
+end)
