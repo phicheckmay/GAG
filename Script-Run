@@ -1,0 +1,82 @@
+-- Script 1
+script_key="bnjmfeqqvbjlaSqVGVDNZshhjuSonYhN";
+
+getgenv().pvbConfig = {  
+    AUTO_UPDATE_RESTART = true,
+    MAX_FPS = 3,
+    LOW_CPU = true,
+    MAX_REBIRTH = 99,
+    USE_XP_BOTTLE = false,
+    FROST_GRENADE_TARGET_MAX_HP = 100000,
+    CONSUME_POTION_EVENT = {"Frozen", "Golden", "Rainbow", "Galactic", "Underworld", "UpsideDown", "Volcano"},
+    PLANT_SECRET_LIMITED_SEED_EVENT = {"Frozen", "Golden", "Rainbow", "Galactic", "Underworld", "UpsideDown", "Volcano"},
+    OPEN_LUCKY_EGG = {"Godly Lucky Egg", "Secret Lucky Egg", "Meme Lucky Egg"},
+    OPEN_CARD_PACK = {"Base", "Shiny Base", "Halloween"},
+    MERGE_CARD_RARITY = {"Common", "Uncommon", "Rare", "Epic", "Legendary"},
+    USE_PLANT_EXTRACTOR_RARITY = {"Common", "Uncommon", "Rare", "Epic", "Legendary"},
+    FUSE_PLANT = {"Mr Carrot", "Watermelon", "Eggplant", "Dragon Fruit", "Sunflower", "Pumpkin"},
+    MERGE_MUTATION_NAME = {},
+    BUY_SEED_SHOP = {["Cactus"] = 5, ["Strawberry"] = 5, ["Pumpkin"] = 5, ["Sunflower"] = 5, ["Dragon Fruit"] = 5, ["Eggplant"] = 5, ["Watermelon"] = 5, "Cocotank", "Carnivorous Plant", "Mr Carrot", "Tomatrio", "Shroombino", "Mango", "King Limone", "Starfruit"},
+    BUY_GEAR_SHOP = {"Frost Grenade", "Frost Blower"},
+    KEEP_SEED = {},
+    KEEP_PLANT_RARITY = {"Secret", "Limited"},
+    KEEP_BRAINROT_MONEY_PER_SECOND = 1000000,
+    KEEP_BRAINROT_RARITY = {"Limited"},
+    SELL_BRAINROT_DELAY = 30,
+    SELL_PLANT_DELAY = 30,
+    BRAINROT_WEBHOOK_URL = "",
+    DISCORD_ID = "",
+    NOTIFY_RARITY = {},
+    NOTIFY_MONEY_PER_SECOND = 10000000,
+    WEBHOOK_NOTE = "",
+    SHOW_PUBLIC_DISCORD_ID = true,
+    SHOW_WEBHOOK_USERNAME = true,
+    SHOW_WEBHOOK_JOBID = true,
+    KICK_AFTER_GIFTED_ALL = false,
+    GIFT_USERNAME = {},
+    GIFT_BRAINROT = {},
+    GIFT_BRAINROT_MONEY_PER_SECOND = 10000000,
+    GIFT_PLANT = {},
+    GIFT_PLANT_DAMAGE = 1000000000,
+    GIFTING_COOLDOWN = 5,
+}
+
+loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/fb22292fbed43e6aeb163a93df81a968.lua"))()
+
+
+-- Script 2 (mua gear và seed)
+task.spawn(function()
+    local VirtualUser = game:service "VirtualUser"
+    game:service("Players").LocalPlayer.Idled:connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local BuyItem = ReplicatedStorage.Remotes.BuyItem
+    local BuyGear = ReplicatedStorage.Remotes.BuyGear
+
+    -- Mua seed liên tục
+    task.spawn(function()
+        while task.wait() do
+            pcall(function()
+                for _, v in pairs(ReplicatedStorage.Assets.Seeds:GetChildren()) do
+                    BuyItem:FireServer(v.Name)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end)
+
+    -- Mua gear liên tục
+    task.spawn(function()
+        while task.wait() do
+            pcall(function()
+                for _, v in pairs(ReplicatedStorage.Assets.Gears:GetChildren()) do
+                    BuyGear:FireServer(v.Name)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end)
+end)
