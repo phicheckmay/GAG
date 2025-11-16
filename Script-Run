@@ -9,13 +9,15 @@ getgenv().KEEP_LIST = {
     ["Mango"] = true,
     ["Starfruit"] = true,
     ["King Limone"] = true,
+	["Shroombino"] = true,
 }
 
 -- ✔ Danh sách Seed được phép trồng (ưu tiên từ trên xuống)
 getgenv().SEED_PLANT_LIST = {
     "Mango",
     "Starfruit",
-    "King Limone"
+    "King Limone",
+	"Shroombino"
 }
 
 -- ✔ Có tự Sell All không?
@@ -24,7 +26,15 @@ getgenv().ENABLE_AUTO_SELL_ALL = true
 -- ✔ Delay giữa các vòng auto
 getgenv().CYCLE_DELAY = 3
 
+----------------------------------------------------------
+-- 🔥 ĐỢI GAME LOAD & CHỜ 10 GIÂY ỔN ĐỊNH
+----------------------------------------------------------
 
+repeat task.wait() until game:IsLoaded()
+
+print("⏳ Đợi hệ thống load hoàn chỉnh... (10s)")
+task.wait(10)
+print("✅ Bắt đầu Auto Full Cycle!")
 
 ----------------------------------------------------------
 -- 🔌 SERVICE + MODULES
