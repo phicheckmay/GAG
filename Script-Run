@@ -1,74 +1,284 @@
 repeat task.wait() until game:IsLoaded()
 
+----------------------------------------------------------
+-- 🔧 CONFIG (quan trọng – bạn chỉnh ở đây)
+----------------------------------------------------------
+
+-- ✔ Danh sách cây giữ lại (không đào)
+getgenv().KEEP_LIST = {
+    ["Mango"] = true,
+    ["Starfruit"] = true,
+    ["King Limone"] = true,
+}
+
+-- ✔ Danh sách Seed được phép trồng (ưu tiên từ trên xuống)
+getgenv().SEED_PLANT_LIST = {
+    "Mango",
+    "Starfruit",
+    "King Limone"
+}
+
+-- ✔ Có tự Sell All không?
+getgenv().ENABLE_AUTO_SELL_ALL = true
+
+-- ✔ Delay giữa các vòng auto
+getgenv().CYCLE_DELAY = 3
+
+
+
+----------------------------------------------------------
+-- 🔌 SERVICE + MODULES
+----------------------------------------------------------
+
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
+local HRP = LP.Character and LP.Character:WaitForChild("HumanoidRootPart")
+local DataF = require(RS.PlayerData).GetData
 
---====================================================
--- 🛡️ ANTI AFK (Không bị kick)
---====================================================
+local plotId = LP:GetAttribute("Plot")
+local plot = workspace.Plots:WaitForChild(plotId)
+local GrassTable = plot.Rows
+
+local RemoveEvent = RS.Remotes.RemoveItem
+local PlaceItem  = RS.Remotes.PlaceItem
+local SellRemote = RS.Remotes.ItemSell
+
+
+
+----------------------------------------------------------
+-- 🟢 B1. ANTI AFK
+----------------------------------------------------------
+
 task.spawn(function()
-    -- Reset Idle Timer để game không đếm AFK
     pcall(function()
         RS.Network["Idle Tracking: Stop Timer"]:FireServer()
     end)
-    task.wait(0.2)
-
     local VIM = game:GetService("VirtualInputManager")
     while task.wait() do
-        -- Nhấn Space nhẹ để tránh AFK
-        VIM:SendKeyEvent(true, "Space", false, game)
-        task.wait(0.2)
-        VIM:SendKeyEvent(false, "Space", false, game)
-        task.wait(300) -- 5 phút 1 lần
+        VIM:SendKeyEvent(true,"Space",false,game)
+        task.wait(.15)
+        VIM:SendKeyEvent(false,"Space",false,game)
+        task.wait(300)
     end
 end)
 
---====================================================
--- ❤️ B1: UNLOCK TIM (chạy 1 lần duy nhất)
---====================================================
-task.spawn(function()
-    local favRemote = RS:WaitForChild("Remotes"):WaitForChild("FavoriteItem")
 
-    -- Tìm bảng Favorites trong getgc
+
+----------------------------------------------------------
+-- 🟡 B2. UNLOCK TIM
+----------------------------------------------------------
+
+task.spawn(function()
+    local favRemote = RS.Remotes.FavoriteItem
     local FavoritesTable
     for _, v in ipairs(getgc(true)) do
-        if typeof(v) == "table" and rawget(v, "Favorites") then
-            FavoritesTable = rawget(v, "Favorites")
+        if typeof(v) == "table" and rawget(v,"Favorites") then
+            FavoritesTable = rawget(v,"Favorites")
             break
         end
     end
-
-    if not FavoritesTable then
-        warn("❌ Không tìm thấy bảng Favorites.")
-        return
-    end
-
-    -- Bỏ tim tất cả pet
-    local count = 0
-    for uuid, _ in pairs(FavoritesTable) do
-        if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
+    if FavoritesTable then
+        for uuid,_ in pairs(FavoritesTable) do
             favRemote:FireServer(uuid)
-            count += 1
-            task.wait(0.05)
+            task.wait(.05)
+        end
+    end
+    print("💛 Unlock tim hoàn tất")
+end)
+
+
+
+----------------------------------------------------------
+-- 🔥 B3 + B4. AUTO SELL ALL
+----------------------------------------------------------
+
+task.spawn(function()
+    while getgenv().ENABLE_AUTO_SELL_ALL do
+        SellRemote:FireServer(nil,nil,true)
+        print("🗑️ SELL ALL DONE")
+        task.wait(30)
+    end
+end)
+
+
+
+----------------------------------------------------------
+-- 📌 HELPER FUNCTIONS (QUAN TRỌNG)
+----------------------------------------------------------
+
+-- ✔ Lấy PlayerData
+local function GetData()
+    local d = DataF()
+    return d and d.Data or nil
+end
+
+-- ✔ Phân biệt HẠT trong túi (Tool Seed)
+local function IsSeed(tool)
+    return tool:IsA("Tool")
+       and tool.Name:match("Seed$")
+       and tool:GetAttribute("ID") ~= nil
+end
+
+-- ✔ Phân biệt CÂY trong vườn
+local function IsPlant(model)
+    return model:IsA("Model")
+       and model.Parent
+       and model.Parent.Name == "Plants"
+       and model:GetAttribute("ID") ~= nil
+end
+
+local function baseName(str)
+    return tostring(str or "")
+        :gsub("%b[]","")
+        :gsub("%b()","")
+        :gsub("%s+"," ")
+        :gsub("^%s+","")
+        :gsub("%s+$","")
+end
+
+-- ✔ Lấy SeedID từ PlayerData
+local function GetSeedId(seedName)
+    local data = GetData()
+    if not data or not data.Plants then return nil end
+    for id, info in pairs(data.Plants) do
+        if info.Name == seedName then
+            return id
+        end
+    end
+    return nil
+end
+
+-- ✔ Tìm tile trống
+local function GetEmptyTile()
+    for _, row in ipairs(GrassTable:GetChildren()) do
+        if row:GetAttribute("Enabled") then
+            for _, grass in ipairs(row.Grass:GetChildren()) do
+                if not grass:GetAttribute("Occupied") then
+                    return grass
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ✔ Equip seed (chống lỗi tool đang cầm)
+local function EquipSeed(id)
+    local char = LP.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+
+    -- đang cầm đúng seed rồi → OK
+    for _, tool in ipairs(char:GetChildren()) do
+        if IsSeed(tool) and tool:GetAttribute("ID") == id then
+            return true
         end
     end
 
-    print("✅ Đã bỏ tim:", count, "pet ❤️")
-end)
+    -- tìm trong Backpack
+    for _, tool in ipairs(LP.Backpack:GetChildren()) do
+        if IsSeed(tool) and tool:GetAttribute("ID") == id then
+            hum:UnequipTools()
+            task.wait(.05)
+            hum:EquipTool(tool)
+            task.wait(.1)
+            return true
+        end
+    end
 
---====================================================
--- 🗑️ B2: SELL ALL Brainrots (30 giây/lần)
---====================================================
-local SellRemote = RS.Remotes:WaitForChild("ItemSell")
-getgenv().AutoSellAll = true
+    return false
+end
+
+
+
+----------------------------------------------------------
+-- ⛏️ B5. ĐÀO CÂY (trừ cây trong KEEP_LIST)
+----------------------------------------------------------
+
+local function DigAll_NotInKeepList()
+    local plantsFolder = plot:FindFirstChild("Plants")
+    if not plantsFolder then return 0 end
+
+    local dug = 0
+
+    for _, plant in ipairs(plantsFolder:GetChildren()) do
+        if IsPlant(plant) then
+            local cleanName = baseName(plant.Name)
+
+            if not getgenv().KEEP_LIST[cleanName] then
+                local id = plant:GetAttribute("ID")
+                local bp = plant:FindFirstChildWhichIsA("BasePart")
+
+                if id and bp then
+                    HRP.CFrame = bp.CFrame + Vector3.new(0,3,0)
+                    task.wait(.1)
+                    RemoveEvent:FireServer(id)
+                    dug += 1
+                    print("⛏ Đào:", cleanName)
+                    task.wait(.2)
+                end
+            else
+                print("🟢 Giữ lại:", cleanName)
+            end
+        end
+    end
+
+    return dug
+end
+
+
+
+----------------------------------------------------------
+-- 🌱 B6. TRỒNG SEED THEO LIST
+----------------------------------------------------------
+
+local function PlantOne(seedName)
+    local seedID = GetSeedId(seedName)
+    if not seedID then return false end
+
+    if not EquipSeed(seedID) then
+        print("⚠ Không equip được:", seedName)
+        return false
+    end
+
+    local tile = GetEmptyTile()
+    if not tile then
+        print("⚠ Hết ô trống")
+        return false
+    end
+
+    PlaceItem:FireServer({
+        ID = seedID,
+        CFrame = CFrame.new(tile.Position),
+        Item = seedName,
+        Floor = tile
+    })
+
+    print("🌱 Trồng:", seedName)
+    task.wait(.3)
+    return true
+end
+
+
+
+----------------------------------------------------------
+-- 🔁 B7. AUTO LOOP FULL CYCLE
+----------------------------------------------------------
 
 task.spawn(function()
-    while getgenv().AutoSellAll do
-        pcall(function()
-            SellRemote:FireServer(nil, nil, true)
-            print("🗑️ SELL ALL Brainrots DONE!")
-        end)
-        task.wait(30)
+    while task.wait(getgenv().CYCLE_DELAY) do
+        print("======== 🔁 BẮT ĐẦU CHU TRÌNH =========")
+
+        DigAll_NotInKeepList()
+
+        for _, seed in ipairs(getgenv().SEED_PLANT_LIST) do
+            while PlantOne(seed) do
+                task.wait(.2)
+            end
+        end
+
+        print("======== 🔁 KẾT THÚC CHU TRÌNH =========")
     end
 end)
