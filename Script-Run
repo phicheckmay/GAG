@@ -1,43 +1,40 @@
 repeat task.wait() until game:IsLoaded()
 
 ----------------------------------------------------------
--- 🔧 CONFIG (quan trọng – bạn chỉnh ở đây)
+-- 🔧 CONFIG
 ----------------------------------------------------------
 
--- ✔ Danh sách cây giữ lại (không đào)
 getgenv().KEEP_LIST = {
     ["Mango"] = true,
     ["Starfruit"] = true,
     ["King Limone"] = true,
-	["Shroombino"] = true,
 }
 
--- ✔ Danh sách Seed được phép trồng (ưu tiên từ trên xuống)
 getgenv().SEED_PLANT_LIST = {
     "Mango",
     "Starfruit",
     "King Limone",
-	"Shroombino"
+    "Shroombino"
 }
 
--- ✔ Có tự Sell All không?
+-- AutoSell ALL + SellAll PET
 getgenv().ENABLE_AUTO_SELL_ALL = true
+getgenv().ENABLE_SELL_ALL_PET   = true
 
--- ✔ Delay giữa các vòng auto
 getgenv().CYCLE_DELAY = 3
 
+
 ----------------------------------------------------------
--- 🔥 ĐỢI GAME LOAD & CHỜ 10 GIÂY ỔN ĐỊNH
+-- 🔥 WAIT FOR GAME
 ----------------------------------------------------------
 
 repeat task.wait() until game:IsLoaded()
-
-print("⏳ Đợi hệ thống load hoàn chỉnh... (10s)")
+print("⏳ Đợi 10s ổn định...")
 task.wait(10)
-print("✅ Bắt đầu Auto Full Cycle!")
+
 
 ----------------------------------------------------------
--- 🔌 SERVICE + MODULES
+-- 🔌 SERVICES
 ----------------------------------------------------------
 
 local Players = game:GetService("Players")
@@ -55,9 +52,8 @@ local PlaceItem  = RS.Remotes.PlaceItem
 local SellRemote = RS.Remotes.ItemSell
 
 
-
 ----------------------------------------------------------
--- 🟢 B1. ANTI AFK
+-- 🟢 B1 ANTI AFK
 ----------------------------------------------------------
 
 task.spawn(function()
@@ -74,63 +70,111 @@ task.spawn(function()
 end)
 
 
-
 ----------------------------------------------------------
--- 🟡 B2. UNLOCK TIM
+-- 🟡 B2 UNLOCK HEARTS
 ----------------------------------------------------------
 
 task.spawn(function()
     local favRemote = RS.Remotes.FavoriteItem
     local FavoritesTable
+    
     for _, v in ipairs(getgc(true)) do
-        if typeof(v) == "table" and rawget(v,"Favorites") then
-            FavoritesTable = rawget(v,"Favorites")
+        if typeof(v)=="table" and rawget(v,"Favorites") then
+            FavoritesTable = v.Favorites
             break
         end
     end
+    
     if FavoritesTable then
         for uuid,_ in pairs(FavoritesTable) do
             favRemote:FireServer(uuid)
             task.wait(.05)
         end
     end
-    print("💛 Unlock tim hoàn tất")
+
+    print("💛 Unlock tim xong")
 end)
 
 
-
 ----------------------------------------------------------
--- 🔥 B3 + B4. AUTO SELL ALL
+-- 🔥 B3 SET AUTO SELL ALL
 ----------------------------------------------------------
 
 task.spawn(function()
-    while getgenv().ENABLE_AUTO_SELL_ALL do
-        SellRemote:FireServer(nil,nil,true)
-        print("🗑️ SELL ALL DONE")
-        task.wait(30)
+    if not getgenv().ENABLE_AUTO_SELL_ALL then return end
+    
+    local AutoSellTable = nil
+    local AutoSellRemote = RS.Remotes.AutoSell
+
+    while not AutoSellTable do
+        for _,v in ipairs(getgc(true)) do
+            if typeof(v)=="table" and rawget(v,"AutoSell") then
+                AutoSellTable = v.AutoSell
+                break
+            end
+        end
+        task.wait(.1)
+    end
+    
+    print("✅ AutoSell Table Loaded")
+
+    local Desired = {
+        Normal=true, Gold=true, Diamond=true, Frozen=true,
+        Ruby=true, Neon=true, UpsideDown=true, Rainbow=true,
+        Dailies=true, Bosses=true, Rare=true, Epic=true,
+        Legendary=true, Mythic=true, Godly=true, Secret=true,
+    }
+
+    local function isOn(r)
+        local v = AutoSellTable[r]
+        return v == true or v == 1
+    end
+
+    local function toggle(r, want)
+        for _=1,5 do
+            if isOn(r)==want then return end
+            AutoSellRemote:FireServer(r)
+            task.wait(.1)
+        end
+    end
+
+    for rarity, want in pairs(Desired) do
+        toggle(rarity, want)
+        print("⚙️ AutoSell:", rarity, "=", want and "GRAY")
+        task.wait(.05)
+    end
+
+    print("🎯 AUTO SELL ALL DONE")
+end)
+
+
+----------------------------------------------------------
+-- 🔥 B4 SELL ALL PET (Brainrots)
+----------------------------------------------------------
+
+task.spawn(function()
+    if not getgenv().ENABLE_SELL_ALL_PET then return end
+
+    while task.wait(3) do
+        SellRemote:FireServer(nil, nil, true)
+        print("💥 SELL ALL PET DONE")
     end
 end)
 
 
-
 ----------------------------------------------------------
--- 📌 HELPER FUNCTIONS (QUAN TRỌNG)
+-- 📌 HELPERS
 ----------------------------------------------------------
 
--- ✔ Lấy PlayerData
 local function GetData()
     local d = DataF()
     return d and d.Data or nil
 end
 
--- ✔ Phân biệt HẠT trong túi (Tool Seed)
 local function IsSeed(tool)
-    return tool:IsA("Tool")
-       and tool.Name:match("Seed$")
-       and tool:GetAttribute("ID") ~= nil
+    return tool:IsA("Tool") and tool.Name:match("Seed")
 end
 
--- ✔ Phân biệt CÂY trong vườn
 local function IsPlant(model)
     return model:IsA("Model")
        and model.Parent
@@ -139,31 +183,29 @@ local function IsPlant(model)
 end
 
 local function baseName(str)
-    return tostring(str or "")
-        :gsub("%b[]","")
-        :gsub("%b()","")
-        :gsub("%s+"," ")
-        :gsub("^%s+","")
-        :gsub("%s+$","")
+    str = tostring(str)
+
+    -- bỏ phần trong [ ] và ( )
+    str = str:gsub("%b[]", "")
+    str = str:gsub("%b()", "")
+
+    -- bỏ số level (III, II, IV), hoặc số 1-9
+    str = str:gsub("%s+%u%u%u?$", "")  -- bỏ III, II, IV...
+    str = str:gsub("%s+%d+$", "")      -- bỏ số 1,2,3,...
+
+    -- xoá khoảng trắng thừa
+    str = str:gsub("%s+", " ")
+             :gsub("^%s+", "")
+             :gsub("%s+$", "")
+
+    return str
 end
 
--- ✔ Lấy SeedID từ PlayerData
-local function GetSeedId(seedName)
-    local data = GetData()
-    if not data or not data.Plants then return nil end
-    for id, info in pairs(data.Plants) do
-        if info.Name == seedName then
-            return id
-        end
-    end
-    return nil
-end
 
--- ✔ Tìm tile trống
 local function GetEmptyTile()
-    for _, row in ipairs(GrassTable:GetChildren()) do
+    for _,row in ipairs(GrassTable:GetChildren()) do
         if row:GetAttribute("Enabled") then
-            for _, grass in ipairs(row.Grass:GetChildren()) do
+            for _,grass in ipairs(row.Grass:GetChildren()) do
                 if not grass:GetAttribute("Occupied") then
                     return grass
                 end
@@ -173,85 +215,78 @@ local function GetEmptyTile()
     return nil
 end
 
--- ✔ Equip seed (chống lỗi tool đang cầm)
-local function EquipSeed(id)
-    local char = LP.Character
-    if not char then return false end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return false end
 
-    -- đang cầm đúng seed rồi → OK
-    for _, tool in ipairs(char:GetChildren()) do
-        if IsSeed(tool) and tool:GetAttribute("ID") == id then
-            return true
-        end
-    end
+----------------------------------------------------------
+-- 🌱 FIX FULL SEED EQUIP (CHECK BACKPACK + CHARACTER)
+----------------------------------------------------------
 
-    -- tìm trong Backpack
-    for _, tool in ipairs(LP.Backpack:GetChildren()) do
-        if IsSeed(tool) and tool:GetAttribute("ID") == id then
-            hum:UnequipTools()
-            task.wait(.05)
-            hum:EquipTool(tool)
-            task.wait(.1)
-            return true
-        end
-    end
+local BP = LP:WaitForChild("Backpack")
 
-    return false
+local function cleanSeedName(str)
+    return tostring(str)
+        :gsub("%b[]",""):gsub("%b()","")
+        :gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$","")
 end
 
+-- TÌM SEED TRONG CHARACTER + BACKPACK
+local function findSeed(seedName)
+    local expected = seedName .. " Seed"
+    local char = LP.Character
 
-
-----------------------------------------------------------
--- ⛏️ B5. ĐÀO CÂY (trừ cây trong KEEP_LIST)
-----------------------------------------------------------
-
-local function DigAll_NotInKeepList()
-    local plantsFolder = plot:FindFirstChild("Plants")
-    if not plantsFolder then return 0 end
-
-    local dug = 0
-
-    for _, plant in ipairs(plantsFolder:GetChildren()) do
-        if IsPlant(plant) then
-            local cleanName = baseName(plant.Name)
-
-            if not getgenv().KEEP_LIST[cleanName] then
-                local id = plant:GetAttribute("ID")
-                local bp = plant:FindFirstChildWhichIsA("BasePart")
-
-                if id and bp then
-                    HRP.CFrame = bp.CFrame + Vector3.new(0,3,0)
-                    task.wait(.1)
-                    RemoveEvent:FireServer(id)
-                    dug += 1
-                    print("⛏ Đào:", cleanName)
-                    task.wait(.2)
-                end
-            else
-                print("🟢 Giữ lại:", cleanName)
+    -- 1️⃣ Kiểm tra seed đang CẦM TRÊN TAY
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+                return tool
             end
         end
     end
 
-    return dug
+    -- 2️⃣ Kiểm tra trong Backpack
+    for _, tool in ipairs(BP:GetChildren()) do
+        if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+            return tool
+        end
+    end
+
+    return nil
+end
+
+-- EQUIP SEED CHUẨN 100%
+local function equipSeed(seedName)
+    local expected = seedName .. " Seed"
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    local hum = char:WaitForChild("Humanoid")
+
+    -- 1️⃣ Nếu đang cầm đúng seed → OK
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+            return true
+        end
+    end
+
+    -- 2️⃣ Tìm seed
+    local tool = findSeed(seedName)
+    if not tool then
+        warn("⚠️ Không tìm thấy:", expected)
+        return false
+    end
+
+    hum:UnequipTools()
+    task.wait(.05)
+    hum:EquipTool(tool)
+
+    print("🌱 Equipped:", expected)
+    return true
 end
 
 
-
 ----------------------------------------------------------
--- 🌱 B6. TRỒNG SEED THEO LIST
+-- 🌱 TRỒNG 1 HẠT (FIX LỖI SEED CUỐI KHÔNG TRỒNG)
 ----------------------------------------------------------
 
-local function PlantOne(seedName)
-    local seedID = GetSeedId(seedName)
-    if not seedID then return false end
-
-    if not EquipSeed(seedID) then
-        print("⚠ Không equip được:", seedName)
-        return false
-    end
+function PlantOne(seedName)
+    if not equipSeed(seedName) then return false end
 
     local tile = GetEmptyTile()
     if not tile then
@@ -260,9 +295,8 @@ local function PlantOne(seedName)
     end
 
     PlaceItem:FireServer({
-        ID = seedID,
-        CFrame = CFrame.new(tile.Position),
         Item = seedName,
+        CFrame = CFrame.new(tile.Position),
         Floor = tile
     })
 
@@ -272,23 +306,52 @@ local function PlantOne(seedName)
 end
 
 
+----------------------------------------------------------
+-- ⛏️ B5 DIG
+----------------------------------------------------------
+
+local function DigAll_NotInKeepList()
+    local plantsFolder = plot:FindFirstChild("Plants")
+    if not plantsFolder then return end
+
+    for _,plant in ipairs(plantsFolder:GetChildren()) do
+        if IsPlant(plant) then
+            local clean = baseName(plant.Name)
+
+            if not getgenv().KEEP_LIST[clean] then
+                local id = plant:GetAttribute("ID")
+                local bp = plant:FindFirstChildWhichIsA("BasePart")
+
+                if id and bp then
+                    HRP.CFrame = bp.CFrame + Vector3.new(0,3,0)
+                    task.wait(.1)
+                    RemoveEvent:FireServer(id)
+                    print("⛏ Đào:", clean)
+                    task.wait(.2)
+                end
+            else
+                print("🟢 Giữ lại:", clean)
+            end
+        end
+    end
+end
+
 
 ----------------------------------------------------------
--- 🔁 B7. AUTO LOOP FULL CYCLE
+-- 🔁 B7 LOOP
 ----------------------------------------------------------
 
 task.spawn(function()
     while task.wait(getgenv().CYCLE_DELAY) do
-        print("======== 🔁 BẮT ĐẦU CHU TRÌNH =========")
+
+        print("======== 🔁 BẮT ĐẦU =========")
 
         DigAll_NotInKeepList()
 
-        for _, seed in ipairs(getgenv().SEED_PLANT_LIST) do
-            while PlantOne(seed) do
-                task.wait(.2)
-            end
+        for _,seed in ipairs(getgenv().SEED_PLANT_LIST) do
+            while PlantOne(seed) do task.wait(.2) end
         end
 
-        print("======== 🔁 KẾT THÚC CHU TRÌNH =========")
+        print("======== 🔁 KẾT THÚC =========")
     end
 end)
