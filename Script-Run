@@ -31,95 +31,80 @@ repeat task.wait() until game:IsLoaded()
 task.wait(2)
 print("⏳ Đợi game ổn định...")
 
-
 ----------------------------------------------------------
--- 🖥️ FULL BLACK UI + LOG SYSTEM
+-- 🖥️ FULL BLACK UI + TEXT GIỮA + KHUNG NEON
 ----------------------------------------------------------
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 
--- Tạo ScreenGui
 local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "FullBlackUI"
+gui.Name = "VipFarmUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 
--- Nền đen full màn hình
+-- 🔳 Nền đen full màn
 local bg = Instance.new("Frame", gui)
 bg.BackgroundColor3 = Color3.new(0,0,0)
 bg.Size = UDim2.new(1,0,1,0)
 
--- Hiển thị tên player
-local nameLabel = Instance.new("TextLabel", bg)
-nameLabel.Size = UDim2.new(1,0,0,70)
-nameLabel.BackgroundTransparency = 1
-nameLabel.Font = Enum.Font.GothamBold
-nameLabel.TextScaled = true
-nameLabel.TextColor3 = Color3.fromRGB(0,255,100)
-nameLabel.Text = "👤 PLAYER: " .. LP.Name
+----------------------------------------------------------
+-- 🟦 HÀM TẠO DÒNG TEXT CÓ KHUNG NEON
+----------------------------------------------------------
+local function CreateLine(parent, text, yOffset)
+    local frame = Instance.new("Frame", parent)
+    frame.AnchorPoint = Vector2.new(0.5, 0)
+    frame.Position = UDim2.new(0.5,0,0,yOffset)
+    frame.Size = UDim2.new(0.5, 0, 0, 50)
+    frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    frame.BorderSizePixel = 0
 
--- Khung log
-local logFrame = Instance.new("ScrollingFrame", bg)
-logFrame.Size = UDim2.new(1, -40, 1, -100)
-logFrame.Position = UDim2.new(0, 20, 0, 80)
-logFrame.CanvasSize = UDim2.new(0,0,0,0)
-logFrame.ScrollBarThickness = 6
-logFrame.BackgroundTransparency = 1
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
 
-local UIList = Instance.new("UIListLayout", logFrame)
-UIList.SortOrder = Enum.SortOrder.LayoutOrder
-UIList.Padding = UDim.new(0,5)
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(0, 200, 255)
+    stroke.Thickness = 2
 
--- Hàm log
-local MAX_LOGS = 100  -- giữ 100 dòng gần nhất
-
-local function Log(msg)
-    -- Tạo dòng log mới
-    local lbl = Instance.new("TextLabel", logFrame)
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size = UDim2.new(1, -10, 1, -10)
+    lbl.Position = UDim2.new(0.5,0,0.5,0)
+    lbl.AnchorPoint = Vector2.new(0.5,0.5)
     lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.Code
-    lbl.TextSize = 20
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextScaled = true
     lbl.TextColor3 = Color3.fromRGB(255,255,255)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Size = UDim2.new(1, -10, 0, 22)
-    lbl.Text = "[" .. os.date("%H:%M:%S") .. "] " .. tostring(msg)
+    lbl.Text = text
 
-    task.wait()
-
-    -- ⭐ GIỚI HẠN 100 DÒNG LOG ⭐
-    if #logFrame:GetChildren() > MAX_LOGS + 1 then  -- +1 vì UIListLayout cũng là 1 child
-        for _, child in ipairs(logFrame:GetChildren()) do
-            if child:IsA("TextLabel") then
-                child:Destroy()
-                break
-            end
-        end
-    end
-
-    -- cập nhật ScrollFrame
-    logFrame.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 20)
-    logFrame.CanvasPosition = Vector2.new(
-        0,
-        math.max(0, UIList.AbsoluteContentSize.Y)
-    )
+    return lbl
 end
-
-
-
--- Hook print → tự log
-local oldPrint = print
-print = function(...)
-    oldPrint(...)
-    Log(table.concat({...}, " "))
-end
-
-print("🔵 UI Loaded – Full Black Mode")
-print("👤 Player:", LP.Name)
-print("📌 Load Config xong")
 
 ----------------------------------------------------------
--- 🎛️ TOGGLE UI BẰNG PHÍM H
+-- 🧾 CÁC DÒNG UI
+----------------------------------------------------------
+
+local title = CreateLine(bg, "⭐ FARM AUTO VIP ⭐", 80)
+local nameLabel = CreateLine(bg, "👤 PLAYER: " .. LP.Name, 150)
+local subTitle = CreateLine(bg, "⚙️ Hệ Thống Farm Auto Vip", 220)
+local timeLabel = CreateLine(bg, "⏱ ONLINE: 00:00:00", 290)
+
+----------------------------------------------------------
+-- ⏱ ĐẾM GIỜ ONLINE REALTIME
+----------------------------------------------------------
+
+local startTime = tick()
+
+task.spawn(function()
+    while task.wait(1) do
+        local t = math.floor(tick() - startTime)
+        local h = math.floor(t/3600)
+        local m = math.floor((t%3600)/60)
+        local s = t % 60
+        timeLabel.Text = string.format("⏱ ONLINE: %02d:%02d:%02d", h, m, s)
+    end
+end)
+
+----------------------------------------------------------
+-- 🎛️ ẨN/HIỆN UI BẰNG PHÍM H
 ----------------------------------------------------------
 
 local UIS = game:GetService("UserInputService")
@@ -130,12 +115,6 @@ UIS.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == Enum.KeyCode.H then
         uiVisible = not uiVisible
         bg.Visible = uiVisible
-
-        if uiVisible then
-            print("🟢 UI: ON (Hiện)")
-        else
-            print("🔴 UI: OFF (Ẩn)")
-        end
     end
 end)
 
