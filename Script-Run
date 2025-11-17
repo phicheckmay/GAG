@@ -72,7 +72,10 @@ UIList.SortOrder = Enum.SortOrder.LayoutOrder
 UIList.Padding = UDim.new(0,5)
 
 -- Hàm log
+local MAX_LOGS = 100  -- giữ 100 dòng gần nhất
+
 local function Log(msg)
+    -- Tạo dòng log mới
     local lbl = Instance.new("TextLabel", logFrame)
     lbl.BackgroundTransparency = 1
     lbl.Font = Enum.Font.Code
@@ -84,15 +87,24 @@ local function Log(msg)
 
     task.wait()
 
-    -- Cập nhật kích thước scroll
-    logFrame.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 20)
+    -- ⭐ GIỚI HẠN 100 DÒNG LOG ⭐
+    if #logFrame:GetChildren() > MAX_LOGS + 1 then  -- +1 vì UIListLayout cũng là 1 child
+        for _, child in ipairs(logFrame:GetChildren()) do
+            if child:IsA("TextLabel") then
+                child:Destroy()
+                break
+            end
+        end
+    end
 
-    -- ⭐ Auto-scroll xuống dòng mới nhất ⭐
+    -- cập nhật ScrollFrame
+    logFrame.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 20)
     logFrame.CanvasPosition = Vector2.new(
         0,
         math.max(0, UIList.AbsoluteContentSize.Y)
     )
 end
+
 
 
 -- Hook print → tự log
