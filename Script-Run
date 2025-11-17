@@ -138,19 +138,26 @@ local SellRemote = RS.Remotes.ItemSell
 -- 🟢 B1 ANTI AFK
 ----------------------------------------------------------
 
+----------------------------------------------------------
+-- 🛡️ ANTI AFK (FULL MODE – 100% KHÔNG BAO GIỜ AFK)
+----------------------------------------------------------
 task.spawn(function()
+    -- Tắt hệ thống Idle Tracking của Roblox
     pcall(function()
-        RS.Network["Idle Tracking: Stop Timer"]:FireServer()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
     end)
-    local VIM = game:GetService("VirtualInputManager")
-    while task.wait() do
-        VIM:SendKeyEvent(true,"Space",false,game)
-        task.wait(.15)
-        VIM:SendKeyEvent(false,"Space",false,game)
-        task.wait(300)
+    task.wait(0.2)
+
+    -- Giả lập nhấn phím cách (Space) định kỳ
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    while task.wait(300) do -- mỗi 5 phút
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
+            task.wait(0.2)
+            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
+        end)
     end
 end)
-
 
 ----------------------------------------------------------
 -- 🟡 B2 UNLOCK HEARTS
