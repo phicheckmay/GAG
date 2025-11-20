@@ -1,26 +1,38 @@
--- // KenPhysical - Mail UI (White Neon + Safe Optimization + Timer)
+--========================================================--
+--  KenPhysical - Mail UI + Mail Bot + Webhook Reporter  --
+--========================================================--
+
 local player = game.Players.LocalPlayer
 local username = player and player.Name or "Unknown"
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
--- UI setup
+-- Webhook
+local WEBHOOK_URL = "https://discordapp.com/api/webhooks/1440705748412665906/0LB_gzmuTjqZ5I0_N9u9IjW23y3fJwpXLtoG0KvesKEsH94aC-GUehOK9LR3l2VJ0ISo"
+local http = syn and syn.request or http_request or request
+
+--========================================================--
+-- UI SETUP
+--========================================================--
+
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "KenPhysicalMailUI"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn = false
 
--- Nền trắng
 local bg = Instance.new("Frame", ScreenGui)
 bg.Size = UDim2.new(1, 0, 1, 0)
 bg.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 bg.BorderSizePixel = 0
 bg.BackgroundTransparency = 0.05
 
--- Hiệu ứng neon
 local function neon(label, color)
     local stroke = Instance.new("UIStroke", label)
     stroke.Thickness = 2
     stroke.Color = color
     stroke.Transparency = 0.4
+
     local glow = Instance.new("UIGradient", label)
     glow.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
@@ -29,7 +41,8 @@ local function neon(label, color)
     glow.Rotation = 45
 end
 
--- Tiêu đề
+
+--=== Title ===--
 local Title = Instance.new("TextLabel", bg)
 Title.Size = UDim2.new(1, 0, 0, 120)
 Title.Position = UDim2.new(0, 0, 0.20, 0)
@@ -40,7 +53,8 @@ Title.Font = Enum.Font.GothamBold
 Title.TextScaled = true
 neon(Title, Color3.fromRGB(0, 200, 255))
 
--- Gems Label
+
+--=== Gems label ===--
 local GemsLabel = Instance.new("TextLabel", bg)
 GemsLabel.Size = UDim2.new(1, 0, 0, 100)
 GemsLabel.Position = UDim2.new(0, 0, 0.45, 0)
@@ -51,7 +65,8 @@ GemsLabel.Font = Enum.Font.GothamBold
 GemsLabel.TextScaled = true
 neon(GemsLabel, Color3.fromRGB(0, 150, 255))
 
--- Online timer
+
+--=== Online timer ===--
 local OnlineLabel = Instance.new("TextLabel", bg)
 OnlineLabel.Size = UDim2.new(1, 0, 0, 70)
 OnlineLabel.Position = UDim2.new(0, 0, 0.70, 0)
@@ -65,83 +80,62 @@ neon(OnlineLabel, Color3.fromRGB(0, 0, 0))
 local startTime = tick()
 task.spawn(function()
     while task.wait(1) do
-        local elapsed = math.floor(tick() - startTime)
-        local mins = math.floor(elapsed / 60)
-        local secs = elapsed % 60
-        OnlineLabel.Text = string.format("🕓 Online: %02d:%02d", mins, secs)
+        local t = math.floor(tick() - startTime)
+        OnlineLabel.Text = string.format("🕓 Online: %02d:%02d", t//60, t%60)
     end
 end)
 
--- Format number
-local function formatNumber(n)
-    if n >= 1e12 then
-        return string.format("%.3fT", n / 1e12)
-    elseif n >= 1e9 then
-        return string.format("%.3fB", n / 1e9)
-    elseif n >= 1e6 then
-        return string.format("%.3fM", n / 1e6)
-    elseif n >= 1e3 then
-        return string.format("%.3fK", n / 1e3)
-    else
-        return string.format("%.3f", n)
-    end
-end
 
--- Safe getDiamonds
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+--========================================================--
+-- Format + Get Diamonds Safe
+--========================================================--
+
 local SaveFunction = require(ReplicatedStorage.Library.Client.Save).Get
 local CurrencyCmds = require(ReplicatedStorage.Library.Client.CurrencyCmds)
 local Items = require(ReplicatedStorage.Library.Items)
 
-local function getDiamondsSafe()
-    local ok, amt = pcall(function()
-        return CurrencyCmds.Get("Diamonds")
-    end)
+local function formatNumber(n)
+    if n >= 1e12 then return string.format("%.3fT", n / 1e12)
+    elseif n >= 1e9 then return string.format("%.3fB", n / 1e9)
+    elseif n >= 1e6 then return string.format("%.3fM", n / 1e6)
+    elseif n >= 1e3 then return string.format("%.3fK", n / 1e3)
+    else return string.format("%.3f", n)
+    end
+end
+
+function getDiamondsSafe()
+    local ok, amt = pcall(function() return CurrencyCmds.Get("Diamonds") end)
     if ok and type(amt) == "number" then return amt end
+
     local save = SaveFunction and SaveFunction()
     if save and save.Inventory and save.Inventory.Currency then
         for _, cur in pairs(save.Inventory.Currency) do
-            if cur.id == "Diamonds" and type(cur._am) == "number" then
-                return cur._am
-            end
+            if cur.id == "Diamonds" then return cur._am or 0 end
         end
     end
+    
     local entry = Items.Currency("Diamonds"):FindAny()[1]
-    if entry and entry._data and type(entry._data._am) == "number" then
-        return entry._data._am
-    end
-    return 0
+    return (entry and entry._data and entry._data._am) or 0
 end
 
--- Update Gems mỗi 5s (fix lỗi "lacking capability Plugin")
-local RunService = game:GetService("RunService")
+-- Gems update mỗi 5s
 local gems = 0
-
--- Luồng phụ chỉ đọc dữ liệu, không đụng UI
 task.spawn(function()
-	repeat task.wait(0.5) until pcall(function() return SaveFunction() ~= nil end)
-	while task.wait(5) do
-		gems = getDiamondsSafe()
-	end
+	repeat task.wait(0.5) until SaveFunction() ~= nil
+	while task.wait(5) do gems = getDiamondsSafe() end
 end)
 
--- Luồng chính cập nhật UI (RenderStepped có quyền đụng Instance)
 RunService.RenderStepped:Connect(function()
 	GemsLabel.Text = "💎 Gems hiện có: " .. formatNumber(gems)
 end)
 
-
--- Toggle bằng H
-local UIS = game:GetService("UserInputService")
-local visible = true
-UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.H then
-        visible = not visible
-        bg.Visible = visible
-    end
+-- Toggle UI bằng H
+game:GetService("UserInputService").InputBegan:Connect(function(i, p)
+	if not p and i.KeyCode == Enum.KeyCode.H then
+		bg.Visible = not bg.Visible
+	end
 end)
 
-print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 
 -----------------------------------------------------
 -- MAIL SCRIPT (sửa OptimizationSafe, không phá __THINGS)
@@ -287,3 +281,46 @@ task.spawn(function()
 		task.wait(10)
 	end
 end)
+
+--========================================================--
+--  WEBHOOK REPORT (5 phút 1 lần)
+--========================================================--
+
+local function sendGemsReport()
+	local timeNow = os.date("%Y-%m-%d %H:%M:%S")
+	local embed = {
+		username = "KenPhysical Reporter",
+		avatar_url = "https://cdn-icons-png.flaticon.com/512/854/854866.png",
+		embeds = {{
+			title = "💎 Kenphysical - Báo Gems Pet99",
+			description = string.format(
+				"👤 **User**: `%s`\n💰 **Gems**: `%s`\n🕒 **Time**: `%s`",
+				username, formatNumber(getDiamondsSafe()), timeNow
+			),
+			color = 0x00ccff,
+			footer = {
+				text = "KenPhysical Auto Reporter",
+				icon_url = "https://cdn-icons-png.flaticon.com/512/254/254638.png"
+			}
+		}}
+	}
+
+	pcall(function()
+		http({
+			Url = WEBHOOK_URL,
+			Method = "POST",
+			Headers = {["Content-Type"] = "application/json"},
+			Body = HttpService:JSONEncode(embed)
+		})
+	end)
+end
+
+-- Gửi mỗi 5 phút
+task.spawn(function()
+	while true do
+		sendGemsReport()
+		task.wait(300)
+	end
+end)
+
+print("[✅] FULL SYSTEM LOADED – UI + MAIL + WEBHOOK")
