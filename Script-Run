@@ -1,14 +1,586 @@
-getgenv().CONFIG = {
-    WEBHOOK_URL = "https://discordapp.com/api/webhooks/1437461376653328428/c7FMkwD-LuG0IGKKUjw3OP0AiUXqZCVXjDu3XHrjYU1b03ORUYwycVXjGDS8zeib6UgH",
-    DISCORD_ID = "1180137647587463210",
-    INDEX_COUNT_TO_COLLECT = 2, --// Count to collect full index (need for craft)
-    INDEX_EXCLUDE_PETS = {
-        ["Vampire Agony"] = { [2] = true }, --// Exclude hard pets from indexing
-        ["Spectral Deer"] = { [2] = true },
-    },
-    HUGE_VALUE_FOR_CRAFT = 15000, --// Total Payout Ingridients < this value to craft Huge
-    PLAYERS_TO_SEND = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}, --// Support Inf Players
-    GEMS_TRESHOLD = 100000000,
+----------------------------------------------------------
+-- 🔧 CONFIG (ĐẶT TRÊN ĐẦU CHO DỄ CHỈNH)
+----------------------------------------------------------
+
+getgenv().KEEP_LIST = {
+    ["Mango"] = true,
+    ["Starfruit"] = true,
+    ["King Limone"] = true,
 }
 
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/4beab139eb1823b5f586cc9c47f761cc.lua"))()
+getgenv().SEED_PLANT_LIST = {
+    "Mango",
+    "Starfruit",
+    "King Limone",
+    "Shroombino"
+}
+
+-- Auto Sell
+getgenv().ENABLE_AUTO_SELL_ALL = true
+getgenv().ENABLE_SELL_ALL_PET  = true
+
+-- Delay vòng lặp
+getgenv().CYCLE_DELAY = 3
+
+----------------------------------------------------------
+-- ⚙️ CONFIG TỐI ƯU CLIENT (BẬT/TẮT ĐƯỢC)
+----------------------------------------------------------
+
+-- nếu bạn set = false thì sẽ tắt từng phần
+-- CONFIG TỐI ƯU (dễ nhìn, dễ chỉnh)
+getgenv().OPTIMIZE_GRAPHICS = true   -- true = bật tối ưu hình ảnh, false = tắt
+getgenv().MUTE_SOUNDS       = true   -- true = tắt âm thanh
+getgenv().DISABLE_EFFECTS   = true   -- true = tắt effect (particle, trail, smoke, fire...)
+
+
+----------------------------------------------------------
+-- 🔥 WAIT FOR GAME LOADED
+----------------------------------------------------------
+
+repeat task.wait() until game:IsLoaded()
+task.wait(2)
+print("⏳ Đợi game ổn định...")
+
+----------------------------------------------------------
+-- 🧊 TỐI ƯU HÌNH ẢNH + ÂM THANH (ÁP DỤNG CHO PVB)
+----------------------------------------------------------
+
+local Lighting   = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Terrain    = workspace:FindFirstChildOfClass("Terrain")
+
+-- Hàm dọn effect & giảm độ nặng của part/mesh
+local function SoftClean(inst)
+    if inst:IsA("ParticleEmitter")
+    or inst:IsA("Trail")
+    or inst:IsA("Smoke")
+    or inst:IsA("Fire")
+    or inst:IsA("Sparkles") then
+        inst.Enabled = false
+
+    elseif inst:IsA("Explosion") then
+        inst.Visible       = false
+        inst.BlastPressure = 1
+        inst.BlastRadius   = 1
+
+    elseif inst:IsA("MeshPart") then
+        inst.Material    = Enum.Material.Plastic
+        inst.Reflectance = 0
+        -- nếu muốn nhẹ tối đa thì mở 3 dòng dưới
+        -- inst.Transparency = 1
+        -- inst.TextureID    = ""
+        -- inst.MeshId       = ""
+
+    elseif inst:IsA("BasePart") and not inst:IsA("MeshPart") then
+        inst.Material    = Enum.Material.Plastic
+        inst.Reflectance = 0
+        -- inst.Transparency = 0.5 -- có thể bật nếu muốn mọi thứ mờ bớt
+
+    elseif inst:IsA("BillboardGui") or inst:IsA("SurfaceGui") then
+        inst.Enabled = false
+    end
+end
+
+local function OptimizeClient()
+    ------------------------------------------------------
+    -- 1) GIẢM CHẤT LƯỢNG HÌNH ẢNH
+    ------------------------------------------------------
+    if getgenv().OPTIMIZE_GRAPHICS then
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.ShadowSoftness = 0
+            Lighting.Brightness = 2
+            Lighting.FogEnd = 9e9
+        end)
+
+        if Terrain then
+            Terrain.WaterWaveSize      = 0
+            Terrain.WaterWaveSpeed     = 0
+            Terrain.WaterReflectance   = 0
+            Terrain.WaterTransparency  = 0
+        end
+    end
+
+    ------------------------------------------------------
+    -- 2) TẮT ÂM THANH
+    ------------------------------------------------------
+    if getgenv().MUTE_SOUNDS then
+        task.spawn(function()
+            while task.wait(3) do
+                for _, inst in ipairs(game:GetDescendants()) do
+                    if inst:IsA("Sound") then
+                        inst.Volume  = 0
+                        inst.Playing = false
+                    end
+                end
+            end
+        end)
+    end
+
+    ------------------------------------------------------
+    -- 3) TẮT EFFECT NẶNG
+    ------------------------------------------------------
+    if getgenv().DISABLE_EFFECTS then
+        -- quét 1 lần workspace
+        task.spawn(function()
+            local list = workspace:GetDescendants()
+            local nextPause = 500
+            for i, v in ipairs(list) do
+                SoftClean(v)
+                if i >= nextPause then
+                    task.wait(0.1)
+                    nextPause = nextPause + 500
+                end
+            end
+        end)
+
+        -- dọn tiếp những object tạo mới
+        workspace.DescendantAdded:Connect(SoftClean)
+    end
+end
+
+OptimizeClient()
+
+----------------------------------------------------------
+-- 🖥️ FULL BLACK UI + TEXT GIỮA + KHUNG NEON
+----------------------------------------------------------
+
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "VipFarmUI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+
+-- 🔳 Nền đen full màn
+local bg = Instance.new("Frame", gui)
+bg.BackgroundColor3 = Color3.new(0,0,0)
+bg.Size = UDim2.new(1,0,1,0)
+
+----------------------------------------------------------
+-- 🟦 HÀM TẠO DÒNG TEXT CÓ KHUNG NEON
+----------------------------------------------------------
+local function CreateLine(parent, text, yOffset)
+    local frame = Instance.new("Frame", parent)
+    frame.AnchorPoint = Vector2.new(0.5, 0)
+    frame.Position = UDim2.new(0.5,0,0,yOffset)
+    frame.Size = UDim2.new(0.5, 0, 0, 50)
+    frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    frame.BorderSizePixel = 0
+
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(0, 200, 255)
+    stroke.Thickness = 2
+
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size = UDim2.new(1, -10, 1, -10)
+    lbl.Position = UDim2.new(0.5,0,0.5,0)
+    lbl.AnchorPoint = Vector2.new(0.5,0.5)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextScaled = true
+    lbl.TextColor3 = Color3.fromRGB(255,255,255)
+    lbl.Text = text
+
+    return lbl
+end
+
+----------------------------------------------------------
+-- 🧾 CÁC DÒNG UI
+----------------------------------------------------------
+
+local title = CreateLine(bg, "⭐ FARM AUTO VIP ⭐", 80)
+local nameLabel = CreateLine(bg, "👤 PLAYER: " .. LP.Name, 150)
+local subTitle = CreateLine(bg, "⚙️ Hệ Thống Farm Auto Vip", 220)
+local timeLabel = CreateLine(bg, "⏱ ONLINE: 00:00:00", 290)
+
+----------------------------------------------------------
+-- ⏱ ĐẾM GIỜ ONLINE REALTIME
+----------------------------------------------------------
+
+local startTime = tick()
+
+task.spawn(function()
+    while task.wait(1) do
+        local t = math.floor(tick() - startTime)
+        local h = math.floor(t/3600)
+        local m = math.floor((t%3600)/60)
+        local s = t % 60
+        timeLabel.Text = string.format("⏱ ONLINE: %02d:%02d:%02d", h, m, s)
+    end
+end)
+
+----------------------------------------------------------
+-- 🎛️ ẨN/HIỆN UI BẰNG PHÍM H
+----------------------------------------------------------
+
+local UIS = game:GetService("UserInputService")
+local uiVisible = true
+
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.H then
+        uiVisible = not uiVisible
+        bg.Visible = uiVisible
+    end
+end)
+
+----------------------------------------------------------
+-- 🔌 SERVICES (ĐỂ SAU UI)
+----------------------------------------------------------
+
+local RS = game:GetService("ReplicatedStorage")
+local HRP = LP.Character and LP.Character:WaitForChild("HumanoidRootPart")
+local DataF = require(RS.PlayerData).GetData
+
+local plotId = LP:GetAttribute("Plot")
+local plot = workspace.Plots:WaitForChild(plotId)
+local GrassTable = plot.Rows
+
+local RemoveEvent = RS.Remotes.RemoveItem
+local PlaceItem  = RS.Remotes.PlaceItem
+local SellRemote = RS.Remotes.ItemSell
+
+----------------------------------------------------------
+-- 🟢 B1 ANTI AFK
+----------------------------------------------------------
+
+----------------------------------------------------------
+-- 🛡️ ANTI AFK (FULL MODE – 100% KHÔNG BAO GIỜ AFK)
+----------------------------------------------------------
+task.spawn(function()
+    -- Tắt hệ thống Idle Tracking của Roblox
+    pcall(function()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+    task.wait(0.2)
+
+    -- Giả lập nhấn phím cách (Space) định kỳ
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    while task.wait(300) do -- mỗi 5 phút
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
+            task.wait(0.2)
+            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
+        end)
+    end
+end)
+
+----------------------------------------------------------
+-- 🟡 B2 UNLOCK HEARTS
+----------------------------------------------------------
+
+task.spawn(function()
+    local favRemote = RS.Remotes.FavoriteItem
+    local FavoritesTable
+    
+    for _, v in ipairs(getgc(true)) do
+        if typeof(v)=="table" and rawget(v,"Favorites") then
+            FavoritesTable = v.Favorites
+            break
+        end
+    end
+    
+    if FavoritesTable then
+        for uuid,_ in pairs(FavoritesTable) do
+            favRemote:FireServer(uuid)
+            task.wait(.05)
+        end
+    end
+
+    print("💛 Unlock tim xong")
+end)
+
+----------------------------------------------------------
+-- 🔥 B3 SET AUTO SELL ALL
+----------------------------------------------------------
+
+task.spawn(function()
+    if not getgenv().ENABLE_AUTO_SELL_ALL then return end
+    
+    local AutoSellTable = nil
+    local AutoSellRemote = RS.Remotes.AutoSell
+
+    while not AutoSellTable do
+        for _,v in ipairs(getgc(true)) do
+            if typeof(v)=="table" and rawget(v,"AutoSell") then
+                AutoSellTable = v.AutoSell
+                break
+            end
+        end
+        task.wait(.1)
+    end
+    
+    print("✅ AutoSell Table Loaded")
+
+    local Desired = {
+        Normal=true, Gold=true, Diamond=true, Frozen=true,
+        Ruby=true, Neon=true, UpsideDown=true, Rainbow=true,
+        Dailies=true, Bosses=true, Rare=true, Epic=true,
+        Legendary=true, Mythic=true, Godly=true, Secret=true,
+    }
+
+    local function isOn(r)
+        local v = AutoSellTable[r]
+        return v == true or v == 1
+    end
+
+    local function toggle(r, want)
+        for _=1,5 do
+            if isOn(r)==want then return end
+            AutoSellRemote:FireServer(r)
+            task.wait(.1)
+        end
+    end
+
+    for rarity, want in pairs(Desired) do
+        toggle(rarity, want)
+        print("⚙️ AutoSell:", rarity, "=", want and "GRAY")
+        task.wait(.05)
+    end
+
+    print("🎯 AUTO SELL ALL DONE")
+end)
+
+----------------------------------------------------------
+-- 🔥 B4 SELL ALL PET (Brainrots)
+----------------------------------------------------------
+
+task.spawn(function()
+    if not getgenv().ENABLE_SELL_ALL_PET then return end
+
+    while task.wait(3) do
+        SellRemote:FireServer(nil, nil, true)
+        print("💥 SELL ALL PET DONE")
+    end
+end)
+
+----------------------------------------------------------
+-- 📌 HELPERS
+----------------------------------------------------------
+
+local function GetData()
+    local d = DataF()
+    return d and d.Data or nil
+end
+
+local function IsSeed(tool)
+    return tool:IsA("Tool") and tool.Name:match("Seed")
+end
+
+local function IsPlant(model)
+    return model:IsA("Model")
+       and model.Parent
+       and model.Parent.Name == "Plants"
+       and model:GetAttribute("ID") ~= nil
+end
+
+local function baseName(str)
+    str = tostring(str)
+
+    -- bỏ phần trong [ ] và ( )
+    str = str:gsub("%b[]", "")
+    str = str:gsub("%b()", "")
+
+    -- bỏ số level (III, II, IV), hoặc số 1-9
+    str = str:gsub("%s+%u%u%u?$", "")  -- bỏ III, II, IV...
+    str = str:gsub("%s+%d+$", "")      -- bỏ số 1,2,3,...
+
+    -- xoá khoảng trắng thừa
+    str = str:gsub("%s+", " ")
+             :gsub("^%s+", "")
+             :gsub("%s+$", "")
+
+    return str
+end
+
+local function GetEmptyTile()
+    for _,row in ipairs(GrassTable:GetChildren()) do
+        if row:GetAttribute("Enabled") then
+            for _,grass in ipairs(row.Grass:GetChildren()) do
+                if not grass:GetAttribute("Occupied") then
+                    return grass
+                end
+            end
+        end
+    end
+    return nil
+end
+
+----------------------------------------------------------
+-- 🌱 FIX FULL SEED EQUIP (CHECK BACKPACK + CHARACTER)
+----------------------------------------------------------
+
+local BP = LP:WaitForChild("Backpack")
+
+local function cleanSeedName(str)
+    return tostring(str)
+        :gsub("%b[]",""):gsub("%b()","")
+        :gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$","")
+end
+
+-- TÌM SEED TRONG CHARACTER + BACKPACK
+local function findSeed(seedName)
+    local expected = seedName .. " Seed"
+    local char = LP.Character
+
+    -- 1️⃣ Kiểm tra seed đang CẦM TRÊN TAY
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+                return tool
+            end
+        end
+    end
+
+    -- 2️⃣ Kiểm tra trong Backpack
+    for _, tool in ipairs(BP:GetChildren()) do
+        if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+            return tool
+        end
+    end
+
+    return nil
+end
+
+-- EQUIP SEED CHUẨN 100%
+local function equipSeed(seedName)
+    local expected = seedName .. " Seed"
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    local hum = char:WaitForChild("Humanoid")
+
+    -- 1️⃣ Nếu đang cầm đúng seed → OK
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and cleanSeedName(tool.Name) == expected then
+            return true
+        end
+    end
+
+    -- 2️⃣ Tìm seed
+    local tool = findSeed(seedName)
+    if not tool then
+        warn("⚠️ Không tìm thấy:", expected)
+        return false
+    end
+
+    hum:UnequipTools()
+    task.wait(.05)
+    hum:EquipTool(tool)
+
+    print("🌱 Equipped:", expected)
+    return true
+end
+
+----------------------------------------------------------
+-- 🌱 TRỒNG 1 HẠT (FIX LỖI SEED CUỐI KHÔNG TRỒNG)
+----------------------------------------------------------
+
+function PlantOne(seedName)
+    if not equipSeed(seedName) then return false end
+
+    local tile = GetEmptyTile()
+    if not tile then
+        print("⚠ Hết ô trống")
+        return false
+    end
+
+    PlaceItem:FireServer({
+        Item = seedName,
+        CFrame = CFrame.new(tile.Position),
+        Floor = tile
+    })
+
+    print("🌱 Trồng:", seedName)
+    task.wait(.3)
+    return true
+end
+
+----------------------------------------------------------
+-- ⛏️ B5 DIG
+----------------------------------------------------------
+
+local function DigAll_NotInKeepList()
+    local plantsFolder = plot:FindFirstChild("Plants")
+    if not plantsFolder then return end
+
+    for _,plant in ipairs(plantsFolder:GetChildren()) do
+        if IsPlant(plant) then
+            local clean = baseName(plant.Name)
+
+            if not getgenv().KEEP_LIST[clean] then
+                local id = plant:GetAttribute("ID")
+                local bp = plant:FindFirstChildWhichIsA("BasePart")
+
+                if id and bp then
+                    HRP.CFrame = bp.CFrame + Vector3.new(0,3,0)
+                    task.wait(.1)
+                    RemoveEvent:FireServer(id)
+                    print("⛏ Đào:", clean)
+                    task.wait(.2)
+                end
+            else
+                print("🟢 Giữ lại:", clean)
+            end
+        end
+    end
+end
+
+----------------------------------------------------------
+-- 🛒 B6 – BUY ALL SEED (KHÔNG BAO GIỜ BỎ SÓT, KHÔNG GEAR)
+----------------------------------------------------------
+
+local VirtualUser = game:service "VirtualUser"
+game:service("Players").LocalPlayer.Idled:connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local BuyItem = ReplicatedStorage.Remotes.BuyItem
+
+-- Hàm mua an toàn: thử tối đa 3 lần
+local function SafeBuy(item)
+    for i = 1, 3 do
+        local ok = pcall(function()
+            BuyItem:FireServer(item)
+        end)
+        if ok then return true end
+        task.wait(0.1)
+    end
+    return false
+end
+
+-- BUY SEED ONLY
+task.spawn(function()
+    while task.wait(1.2) do
+        for _, v in ipairs(ReplicatedStorage.Assets.Seeds:GetChildren()) do
+            SafeBuy(v.Name)
+            task.wait(0.18) -- delay an toàn để không miss
+        end
+    end
+end)
+
+----------------------------------------------------------
+-- 🔁 B7 LOOP
+----------------------------------------------------------
+
+task.spawn(function()
+    while task.wait(getgenv().CYCLE_DELAY) do
+        print("======== 🔁 BẮT ĐẦU =========")
+
+        DigAll_NotInKeepList()
+
+        for _,seed in ipairs(getgenv().SEED_PLANT_LIST) do
+            while PlantOne(seed) do task.wait(.2) end
+        end
+
+        print("======== 🔁 KẾT THÚC =========")
+    end
+end)
