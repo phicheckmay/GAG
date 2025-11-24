@@ -1,50 +1,75 @@
---// =============== ANTI-DUPLICATE =============== \\--
-if getgenv().SimplePlazaSellerRunning then
-    warn("[Simple Seller]: Script đã chạy rồi, không chạy lại trong cùng 1 game.")
-    return
-end
 getgenv().SimplePlazaSellerRunning = true
 
 --// ================== CONFIG ================== \\--
 
 local CONFIG = {
-    TARGET_NAME  = "Huge Blue Lucky Block", -- Tên pet đúng như trong túi
-    TARGET_CLASS = "Pet",                   -- Class: "Pet"
-    PRICE        = 15_000_000,              -- Giá bán: 15m diamonds
-    PER_LIST     = 1,                       -- Mỗi listing bán 1 con
-    MAX_SLOTS    = 25,                      -- Tối đa 25 slot
-    LOOP_DELAY   = 3,                       -- Mỗi vòng cách nhau 3 giây
+    LOOP_DELAY       = 3,        -- Delay giữa mỗi vòng list (giây)
+
+    AUTO_CLAIM_BOOTH = true,     -- true = dùng ClaimOptimalBooth auto claim 1 lần; false = bạn tự claim booth
+    MAX_BOOTH_ID     = 50,       -- (hiện không dùng nữa, giữ cho đẹp config)
+
+    -- Danh sách các pet cần treo:
+    PETS = {
+        {
+            Name    = "Huge Blue Lucky Block",
+            Class   = "Pet",
+            Price   = 15_000_000,  -- 15m
+            PerList = 1,           -- mỗi listing bán 1 con
+        },
+        {
+            Name    = "Golden Mossy Lamb",
+            Class   = "Pet",
+            Price   = 10_000_000,  -- 10m
+            PerList = 1,
+        },
+        -- thêm pet khác ở đây:
+        -- {
+        --     Name    = "Tên Pet 3",
+        --     Class   = "Pet",
+        --     Price   = 123_456_789,
+        --     PerList = 1,
+        -- },
+    }
 }
 
 --// ============= KHÔNG SỬA DƯỚI NẾU KHÔNG RÕ ============= \\--
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService   = game:GetService("TeleportService")
+
+local LocalPlayer       = Players.LocalPlayer
+
+-- ================== PLACE CHECK + TELEPORT ================== --
+
 local PS99 = {Pro = 15588442388, Normal = 15502339080}
-if not table.find({PS99.Normal, PS99.Pro}, game.PlaceId) then
-    warn("[Simple Seller]: Chỉ dùng trong Trading Plaza Pet Simulator 99.")
+
+local function IsInPlaza()
+    return game.PlaceId == PS99.Normal or game.PlaceId == PS99.Pro
+end
+
+if not IsInPlaza() then
+    warn("[Simple Seller]: Không ở Trading Plaza -> Teleport vào Plaza Normal...")
+    TeleportService:Teleport(PS99.Normal, LocalPlayer)
+    -- Khi sang Plaza Normal, autoexec sẽ chạy lại script này.
     return
 end
 
-local Players           = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer       = Players.LocalPlayer
-
+-- Đảm bảo client đã load xong mấy thứ của game
 repeat task.wait() until LocalPlayer and LocalPlayer.GetAttribute and LocalPlayer:GetAttribute("__LOADED")
 if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
-local HumanoidRootPart = LocalPlayer.Character:WaitForChild("HumanoidRootPart")
 
-local TARGET_NAME  = CONFIG.TARGET_NAME
-local TARGET_CLASS = CONFIG.TARGET_CLASS
-local PRICE        = CONFIG.PRICE
-local PER_LIST     = CONFIG.PER_LIST
-local MAX_SLOTS    = CONFIG.MAX_SLOTS
 local LOOP_DELAY   = CONFIG.LOOP_DELAY
+local AUTO_CLAIM   = CONFIG.AUTO_CLAIM_BOOTH
+local MAX_BOOTH_ID = CONFIG.MAX_BOOTH_ID
+local PETS_CONFIG  = CONFIG.PETS
 
 -- Lấy Library gốc
 local NLibrary = ReplicatedStorage:WaitForChild("Library")
 
--- Require module nhẹ
+-- Require module cần thiết (rất nhẹ)
 local okInv, InventoryCmds = pcall(require, NLibrary.Client.InventoryCmds)
 if not okInv then
     warn("[Simple Seller]: Không require được InventoryCmds:", InventoryCmds)
@@ -57,13 +82,34 @@ if not okNet then
     return
 end
 
--- ================= LẤY BOOTHS STATE TỪ BoothCmds ================= --
+-- ================== BIẾN DÙNG CHO BOOTH ================== --
 
 local Booths, ClaimedBooths, BoothsInteractive
+local HumanoidRootPart
+
+local function WaitForCharacter()
+    local char = LocalPlayer.Character
+    if not char then
+        char = LocalPlayer.CharacterAdded:Wait()
+    end
+    while not char:FindFirstChild("HumanoidRootPart") do
+        char.ChildAdded:Wait()
+    end
+    HumanoidRootPart = char.HumanoidRootPart
+    return char
+end
+
+WaitForCharacter()
+
+-- ================== INIT BOOTHS ================== --
 
 local function InitBooths()
+    -- lấy script BoothCmds hoặc Booths Frontend
     local boothScript = NLibrary.Client:FindFirstChild("BoothCmds")
-        or LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]["Booths Frontend"]
+        or (LocalPlayer.PlayerScripts.Scripts
+            and LocalPlayer.PlayerScripts.Scripts.Game
+            and LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]
+            and LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]["Booths Frontend"])
 
     if not boothScript then
         warn("[Simple Seller]: Không tìm thấy BoothCmds / Booths Frontend.")
@@ -71,6 +117,11 @@ local function InitBooths()
     end
 
     local env = getsenv(boothScript)
+    if not env then
+        warn("[Simple Seller]: getsenv(boothScript) trả nil.")
+        return false
+    end
+
     local getState = env.getState
     local updateAllInteracts = env.updateAllInteracts
 
@@ -91,6 +142,7 @@ local function InitBooths()
         return false
     end
 
+    warn("[Simple Seller]: InitBooths OK.")
     return true
 end
 
@@ -123,6 +175,7 @@ end
 
 local function ClaimOptimalBooth()
     if ClaimedBooths[LocalPlayer] then
+        warn("[Simple Seller]: Đã có booth sẵn rồi.")
         return true
     end
 
@@ -160,7 +213,7 @@ local function ClaimOptimalBooth()
             warn("[Simple Seller]: Claim booth thành công, ID:", Booth.BoothID)
 
             local Interact = Booth.Model:WaitForChild("Interact", 5)
-            if Interact then
+            if Interact and HumanoidRootPart then
                 pcall(function()
                     Network.Fire("Hoverboard_RequestUnequip")
                 end)
@@ -182,7 +235,7 @@ local function GetMyBoothListings()
     local slotCount = 0
     local uidOnBooth = {}
 
-    if not Booths or not ClaimedBooths[LocalPlayer] then
+    if not Booths or not ClaimedBooths or not ClaimedBooths[LocalPlayer] then
         return 0, uidOnBooth
     end
 
@@ -203,9 +256,16 @@ local function GetMyBoothListings()
     return slotCount, uidOnBooth
 end
 
--- ================= TÌM PET KHÔNG NẰM TRÊN BOOTH ================= --
+-- ================== TRACK UID ĐÃ LIST ================== --
+-- 1 UID list được 1 lần; nếu muốn list tiếp phải là UID khác (bản khác của pet)
 
-local function FindPetNotOnBooth(uidOnBooth)
+local ListedUIDs = {}   -- uid -> true
+
+-- Tìm pet phù hợp cho 1 cấu hình petCfg, bỏ qua UID đã list
+local function FindNextPet(petCfg)
+    local targetName  = petCfg.Name
+    local targetClass = petCfg.Class or "Pet"
+
     local ok, result = pcall(function()
         local state = InventoryCmds.State()
         if not state or not state.container or not state.container._store then
@@ -216,13 +276,13 @@ local function FindPetNotOnBooth(uidOnBooth)
         local byType = store._byType
         if not byType then return nil end
 
-        local classTable = byType[TARGET_CLASS]
+        local classTable = byType[targetClass]
         if not classTable or not classTable._byUID then
             return nil
         end
 
         for uid, item in pairs(classTable._byUID) do
-            if uidOnBooth[uid] then
+            if ListedUIDs[uid] then
                 continue
             end
 
@@ -231,7 +291,7 @@ local function FindPetNotOnBooth(uidOnBooth)
             local locked = data and data._lk
             local amount = data and (data._am or 1) or 1
 
-            if id == TARGET_NAME and not locked then
+            if id == targetName and not locked and amount > 0 then
                 return {uid = uid, amount = amount}
             end
         end
@@ -250,51 +310,66 @@ end
 -- ======================= MAIN LOOP ======================= --
 
 task.spawn(function()
-    warn("[Simple Seller]: BẮT ĐẦU. Script sẽ tự claim booth (nếu chưa) và auto list pet mỗi "
-        .. tostring(LOOP_DELAY) .. " giây.")
+    warn("[Simple Seller]: BẮT ĐẦU.")
 
-    if not InitBooths() then
-        warn("[Simple Seller]: InitBooths fail, dừng.")
-        return
+    -- Init info Booth từ client
+    local boothInitOk = InitBooths()
+
+    if boothInitOk and AUTO_CLAIM then
+        ClaimOptimalBooth()
+    elseif boothInitOk and not AUTO_CLAIM then
+        warn("[Simple Seller]: AUTO_CLAIM_BOOTH = false -> bạn tự claim booth, script chỉ list pet.")
     end
 
-    ClaimOptimalBooth()
+    -- Sau khi init booth, quét các UID đang nằm sẵn trên booth để khỏi list lại
+    if boothInitOk then
+        local slotCount, uidOnBooth = GetMyBoothListings()
+        for uid, _ in pairs(uidOnBooth) do
+            ListedUIDs[uid] = true
+        end
+        warn(string.format("[Simple Seller]: Đang có %d slot đã list sẵn trên booth.", slotCount))
+    end
 
     while true do
-        -- Đảm bảo booth vẫn còn
-        if not ClaimedBooths[LocalPlayer] then
-            ClaimOptimalBooth()
-        end
+        -- Mỗi vòng: thử list từng pet trong danh sách
+        for _, petCfg in ipairs(PETS_CONFIG) do
+            local info = FindNextPet(petCfg)
 
-        local usedSlots, uidOnBooth = GetMyBoothListings()
-        if usedSlots >= MAX_SLOTS then
-            warn(string.format("[Simple Seller]: Booth full %d/%d slot, đợi bán bớt...", usedSlots, MAX_SLOTS))
-        else
-            local info = FindPetNotOnBooth(uidOnBooth)
             if info and info.uid then
-                local toSell = math.min(PER_LIST, info.amount)
+                local toSell = math.min(petCfg.PerList or 1, info.amount)
+                local price  = petCfg.Price
 
                 warn(string.format(
-                    "[Simple Seller]: Thử list '%s' x%d @ %d | Slot: %d/%d",
-                    TARGET_NAME, toSell, PRICE, usedSlots, MAX_SLOTS
+                    "[Simple Seller]: Thử list '%s' x%d @ %d",
+                    petCfg.Name, toSell, price
                 ))
 
                 local ok, res = pcall(function()
-                    return Network.Invoke("Booths_CreateListing", info.uid, PRICE, toSell)
+                    return Network.Invoke("Booths_CreateListing", info.uid, price, toSell)
                 end)
 
                 if not ok then
                     warn("[Simple Seller]: Lỗi Booths_CreateListing:", res)
                 elseif not res then
-                    warn("[Simple Seller]: Booths_CreateListing trả về FALSE (limit / lỗi server).")
+                    -- thường là full slot / chưa mở booth / limit
+                    warn("[Simple Seller]: Booths_CreateListing trả về FALSE (có thể full slot / chưa claim booth / full slot / limit).")
                 else
-                    warn("[Simple Seller]: List thành công 1 listing.")
+                    ListedUIDs[info.uid] = true
+                    warn(string.format(
+                        "[Simple Seller]: List thành công UID %s (%s).",
+                        tostring(info.uid), petCfg.Name
+                    ))
                 end
             else
-                warn("[Simple Seller]: Không còn pet '"..TARGET_NAME.."' chưa treo trên booth.")
+                -- Không tìm được pet loại này, thôi kệ, sang loại khác
+                --warn("[Simple Seller]: Không còn pet '"..petCfg.Name.."' chưa list.")
             end
+
+            -- nghỉ tí giữa các pet cho đỡ spam
+            task.wait(0.1)
         end
 
+        -- Vòng xong 1 lượt tất cả pet -> chờ rồi làm lại
         task.wait(LOOP_DELAY)
     end
 end)
