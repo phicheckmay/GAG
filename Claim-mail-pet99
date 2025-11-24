@@ -1,5 +1,4 @@
--- Ngăn chạy trùng nhiều lần
-getgenv().SimplePlazaSellerRunning = getgenv().SimplePlazaSellerRunning or false
+-- Ngăn chạy trùng
 if getgenv().SimplePlazaSellerRunning then
     warn("[Simple Seller]: Script đã chạy rồi, không tạo thêm.")
     return
@@ -11,7 +10,7 @@ getgenv().SimplePlazaSellerRunning = true
 local CONFIG = {
     LOOP_DELAY       = 3,        -- Delay giữa mỗi vòng list (giây)
 
-    AUTO_CLAIM_BOOTH = true,     -- true = auto claim booth; false = bạn tự claim/mở booth
+    AUTO_CLAIM_BOOTH = true,     -- true = thử auto claim 1 lần; false = bạn tự claim + mở booth
     MAX_BOOTH_ID     = 50,       -- brute force Booths_ClaimBooth(id) từ 1..MAX_BOOTH_ID nếu cần
 
     -- Danh sách các pet cần treo:
@@ -42,28 +41,20 @@ local CONFIG = {
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
-local Players           = game:GetService("Players")
+local Players         = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService   = game:GetService("TeleportService")
+local TeleportService = game:GetService("TeleportService")
 
-local LocalPlayer       = Players.LocalPlayer
-if not LocalPlayer then
-    repeat task.wait() until Players.LocalPlayer
-    LocalPlayer = Players.LocalPlayer
-end
+local LocalPlayer     = Players.LocalPlayer or Players.PlayerAdded:Wait()
 
--- ================== PLACE CHECK + TELEPORT ================== --
+-- ================== PLACE CHECK + TELEPORT PLAZA ================== --
 
 local PS99 = {Pro = 15588442388, Normal = 15502339080}
 
-local function IsInPlaza()
-    return game.PlaceId == PS99.Normal or game.PlaceId == PS99.Pro
-end
-
-if not IsInPlaza() then
+if not table.find({PS99.Normal, PS99.Pro}, game.PlaceId) then
     warn("[Simple Seller]: Không ở Trading Plaza -> Teleport vào Plaza Normal...")
     TeleportService:Teleport(PS99.Normal, LocalPlayer)
-    -- Khi sang Plaza Normal, autoexec sẽ chạy lại script này.
+    -- Sang Plaza Normal, client load map mới, script autoexec sẽ chạy lại từ đầu.
     return
 end
 
@@ -79,7 +70,7 @@ local PETS_CONFIG  = CONFIG.PETS
 -- Lấy Library gốc
 local NLibrary = ReplicatedStorage:WaitForChild("Library")
 
--- Require module cần thiết (rất nhẹ)
+-- Require module cần thiết
 local okInv, InventoryCmds = pcall(require, NLibrary.Client.InventoryCmds)
 if not okInv then
     warn("[Simple Seller]: Không require được InventoryCmds:", InventoryCmds)
@@ -92,27 +83,9 @@ if not okNet then
     return
 end
 
--- ================== WAIT CHARACTER / HRP ================== --
+-- ================== AUTO CLAIM BOOTH (GIỮ NGUYÊN KIỂU CŨ) ================== --
 
-local HumanoidRootPart
-
-local function WaitForCharacter()
-    local char = LocalPlayer.Character
-    if not char then
-        char = LocalPlayer.CharacterAdded:Wait()
-    end
-    while not char:FindFirstChild("HumanoidRootPart") do
-        char.ChildAdded:Wait()
-    end
-    HumanoidRootPart = char.HumanoidRootPart
-    return char
-end
-
-WaitForCharacter()
-
--- ================== AUTO CLAIM BOOTH (KIỂU CŨ, AN TOÀN) ================== --
-
-local function AutoClaimBoothSimple()
+local function AutoClaimBoothOnce()
     if not AUTO_CLAIM then
         warn("[Simple Seller]: AUTO_CLAIM_BOOTH = false -> không tự claim booth.")
         return
@@ -123,7 +96,7 @@ local function AutoClaimBoothSimple()
     end
     getgenv().SimplePlazaSellerBoothTried = true
 
-    warn("[Simple Seller]: (Fallback) Thử auto claim booth kiểu đơn giản...")
+    warn("[Simple Seller]: Thử auto claim booth (1 lần duy nhất)...")
 
     -- Cách 1: không truyền ID
     local ok1, res1 = pcall(function()
@@ -131,7 +104,7 @@ local function AutoClaimBoothSimple()
     end)
 
     if ok1 and res1 then
-        warn("[Simple Seller]: Auto claim booth (simple) thành công (không cần ID).")
+        warn("[Simple Seller]: Auto claim booth thành công (không cần ID).")
         return
     end
 
@@ -142,175 +115,17 @@ local function AutoClaimBoothSimple()
         end)
 
         if ok2 and res2 then
-            warn(string.format("[Simple Seller]: Auto claim booth (simple) thành công với ID %d.", id))
+            warn(string.format("[Simple Seller]: Auto claim booth thành công với ID %d.", id))
             return
         end
 
         task.wait(0.05)
     end
 
-    warn("[Simple Seller]: Auto claim booth (simple) thất bại (có thể đã có booth sẵn / game đổi logic).")
-end
-
--- ================== BIẾN DÙNG CHO BOOTH (ADVANCED) ================== --
-
-local Booths, ClaimedBooths, BoothsInteractive
-
-local function FindBoothScriptInPlayerScripts()
-    local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-    if not ps then return nil end
-
-    local scriptsFolder = ps:FindFirstChild("Scripts")
-    if not scriptsFolder then return nil end
-
-    local gameFolder = scriptsFolder:FindFirstChild("Game")
-    if not gameFolder then return nil end
-
-    local plazaFolder = gameFolder:FindFirstChild("Trading Plaza")
-    if not plazaFolder then return nil end
-
-    return plazaFolder:FindFirstChild("Booths Frontend")
-        or plazaFolder:FindFirstChild("Booths")
-        or plazaFolder:FindFirstChild("BoothsFrontend")
-end
-
--- ================== INIT BOOTHS (ADVANCED, CÓ PCALL) ================== --
-
-local function InitBooths()
-    local boothScript = NLibrary.Client:FindFirstChild("BoothCmds")
-                     or FindBoothScriptInPlayerScripts()
-
-    if not boothScript then
-        warn("[Simple Seller]: Không tìm thấy BoothCmds / Booths Frontend (InitBooths fail).")
-        return false
-    end
-
-    local okEnv, env = pcall(getsenv, boothScript)
-    if not okEnv or type(env) ~= "table" then
-        warn("[Simple Seller]: getsenv(boothScript) fail, dùng fallback simple claim.")
-        return false
-    end
-
-    local getState           = env.getState
-    local updateAllInteracts = env.updateAllInteracts
-
-    if not getState or not updateAllInteracts then
-        warn("[Simple Seller]: Không lấy được getState / updateAllInteracts trong env.")
-        return false
-    end
-
-    local okUp1, boothsUp    = pcall(getupvalues, getState)
-    local okUp2, interactsUp = pcall(getupvalues, updateAllInteracts)
-
-    if not okUp1 or not okUp2 or type(boothsUp) ~= "table" or type(interactsUp) ~= "table" then
-        warn("[Simple Seller]: getupvalues(getState/updateAllInteracts) fail.")
-        return false
-    end
-
-    Booths            = boothsUp[1]         -- state booths
-    ClaimedBooths     = interactsUp[1]      -- map player -> booth info
-    BoothsInteractive = interactsUp[3]      -- BoothID -> model
-
-    if not Booths or not ClaimedBooths or not BoothsInteractive then
-        warn("[Simple Seller]: Upvalues Booths/ClaimedBooths/BoothsInteractive bị nil.")
-        return false
-    end
-
-    warn("[Simple Seller]: InitBooths OK (advanced).")
-    return true
-end
-
--- ================== BOOTH HELPERS (ADVANCED) ================== --
-
-local function IsBoothAvailable(BoothID)
-    if not ClaimedBooths then return false end
-    for _, boothData in pairs(ClaimedBooths) do
-        if boothData.BoothID == BoothID then
-            return false
-        end
-    end
-    return true
-end
-
-local function GetCenterX()
-    local minX, maxX = math.huge, -math.huge
-    for _, BoothModel in pairs(BoothsInteractive or {}) do
-        local x = BoothModel.Pets.Position.X
-        if x < minX then minX = x end
-        if x > maxX then maxX = x end
-    end
-    return (minX + maxX) / 2
-end
-
-local function GetBoothPriority(BoothModel, CenterX)
-    local yPriority = BoothModel.Pets.Position.Y
-    local xDistance = math.abs(BoothModel.Pets.Position.X - CenterX)
-    return yPriority, xDistance
-end
-
-local function ClaimOptimalBooth()
-    if not Booths or not ClaimedBooths or not BoothsInteractive then
-        return false
-    end
-
-    if ClaimedBooths[LocalPlayer] then
-        warn("[Simple Seller]: Đã có booth sẵn rồi (advanced).")
-        return true
-    end
-
-    local BoothCandidates = {}
-    local CenterX = GetCenterX()
-
-    for BoothID, BoothModel in next, BoothsInteractive do
-        if ClaimedBooths[LocalPlayer] then
-            return true
-        end
-        if IsBoothAvailable(BoothID) then
-            local yPriority, xDistance = GetBoothPriority(BoothModel, CenterX)
-            table.insert(BoothCandidates, {
-                BoothID   = BoothID,
-                Model     = BoothModel,
-                Y         = yPriority,
-                xDistance = xDistance,
-            })
-        end
-    end
-
-    table.sort(BoothCandidates, function(a, b)
-        if a.Y == b.Y then
-            return a.xDistance < b.xDistance
-        end
-        return a.Y < b.Y
-    end)
-
-    for _, Booth in ipairs(BoothCandidates) do
-        local ok, success = pcall(function()
-            return Network.Invoke("Booths_ClaimBooth", Booth.BoothID)
-        end)
-
-        if ok and success then
-            warn("[Simple Seller]: Claim booth (advanced) thành công, ID:", Booth.BoothID)
-
-            local Interact = Booth.Model:WaitForChild("Interact", 5)
-            if Interact and HumanoidRootPart then
-                pcall(function()
-                    Network.Fire("Hoverboard_RequestUnequip")
-                end)
-                task.wait(0.5)
-                HumanoidRootPart.CFrame =
-                    Interact.CFrame * CFrame.new(0,-2,-6) * CFrame.Angles(0, math.rad(180), 0)
-            end
-
-            return true
-        end
-    end
-
-    warn("[Simple Seller]: ClaimOptimalBooth không claim được booth nào.")
-    return false
+    warn("[Simple Seller]: Auto claim booth thất bại (có thể đã có booth sẵn / game đổi logic).")
 end
 
 -- ================== TRACK UID ĐÃ LIST ================== --
--- 1 UID list được 1 lần; nếu muốn list tiếp phải là UID khác (bản khác của pet)
 
 local ListedUIDs = {}   -- uid -> true
 
@@ -365,25 +180,10 @@ end
 task.spawn(function()
     warn("[Simple Seller]: BẮT ĐẦU.")
 
-    local boothInitOk = false
-    if AUTO_CLAIM then
-        boothInitOk = InitBooths()
-        if boothInitOk then
-            local ok = ClaimOptimalBooth()
-            if not ok then
-                -- nếu claim optimal fail thì fallback simple
-                AutoClaimBoothSimple()
-            end
-        else
-            -- nếu init booths fail (PC, executor chặn getsenv / getupvalues), dùng simple
-            AutoClaimBoothSimple()
-        end
-    else
-        warn("[Simple Seller]: AUTO_CLAIM_BOOTH = false -> bạn tự claim/mở booth, script chỉ list pet.")
+    AutoClaimBoothOnce()
+    if not AUTO_CLAIM then
+        warn("[Simple Seller]: Hãy tự claim + mở booth trước, script sẽ tự list pet.")
     end
-
-    -- (QUAN TRỌNG) KHÔNG lấy UID sẵn trên booth nữa để tránh bug không list trên LD
-    -- trước đây GetMyBoothListings có thể mark nhầm UID => script nghĩ pet đã list hết
 
     local firstLoop = true
 
@@ -433,9 +233,11 @@ task.spawn(function()
         firstLoop = false
 
         if not anyListedThisLoop then
-            warn("[Simple Seller]: Không còn pet nào phù hợp để list trong vòng này, chờ "..tostring(LOOP_DELAY).."s rồi thử lại.")
+            warn("[Simple Seller]: Không còn pet nào phù hợp để list trong vòng này, chờ "
+                ..tostring(LOOP_DELAY).."s rồi thử lại.")
         end
 
+        -- Vòng xong 1 lượt tất cả pet -> chờ rồi làm lại
         task.wait(LOOP_DELAY)
     end
 end)
