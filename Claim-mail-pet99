@@ -1,326 +1,253 @@
---========================================================--
---  KenPhysical - Mail UI + Mail Bot + Webhook Reporter  --
---========================================================--
+-- Ngăn chạy trùng nhiều lần
+getgenv().SimplePlazaSellerRunning = getgenv().SimplePlazaSellerRunning or false
+if getgenv().SimplePlazaSellerRunning then
+    warn("[Simple Seller]: Script đã chạy rồi, không tạo thêm.")
+    return
+end
+getgenv().SimplePlazaSellerRunning = true
 
-local player = game.Players.LocalPlayer
-local username = player and player.Name or "Unknown"
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+--// ================== CONFIG ================== \\--
 
--- Webhook
-local WEBHOOK_URL = "https://discordapp.com/api/webhooks/1440705748412665906/0LB_gzmuTjqZ5I0_N9u9IjW23y3fJwpXLtoG0KvesKEsH94aC-GUehOK9LR3l2VJ0ISo"
-local http = syn and syn.request or http_request or request
+local CONFIG = {
+    LOOP_DELAY       = 3,        -- Delay giữa mỗi vòng list (giây)
 
---========================================================--
--- UI SETUP
---========================================================--
+    AUTO_CLAIM_BOOTH = true,     -- true = tự claim booth 1 lần; false = bạn tự claim/mở booth
+    MAX_BOOTH_ID     = 50,       -- brute force Booths_ClaimBooth(id) từ 1..MAX_BOOTH_ID nếu cần
 
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "KenPhysicalMailUI"
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ResetOnSpawn = false
-
-local bg = Instance.new("Frame", ScreenGui)
-bg.Size = UDim2.new(1, 0, 1, 0)
-bg.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-bg.BorderSizePixel = 0
-bg.BackgroundTransparency = 0.05
-
-local function neon(label, color)
-    local stroke = Instance.new("UIStroke", label)
-    stroke.Thickness = 2
-    stroke.Color = color
-    stroke.Transparency = 0.4
-
-    local glow = Instance.new("UIGradient", label)
-    glow.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, color)
+    -- Danh sách các pet cần treo:
+    PETS = {
+        {
+            Name    = "Huge Blue Lucky Block",
+            Class   = "Pet",
+            Price   = 15_000_000,  -- 15m
+            PerList = 1,           -- mỗi listing bán 1 con
+        },
+        {
+            Name    = "Golden Mossy Lamb",
+            Class   = "Pet",
+            Price   = 10_000_000,  -- 10m
+            PerList = 1,
+        },
+        -- thêm pet khác ở đây:
+        -- {
+        --     Name    = "Tên Pet 3",
+        --     Class   = "Pet",
+        --     Price   = 123_456_789,
+        --     PerList = 1,
+        -- },
     }
-    glow.Rotation = 45
+}
+
+--// ============= KHÔNG SỬA DƯỚI NẾU KHÔNG RÕ ============= \\--
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService   = game:GetService("TeleportService")
+
+local LocalPlayer       = Players.LocalPlayer
+if not LocalPlayer then
+    repeat task.wait() until Players.LocalPlayer
+    LocalPlayer = Players.LocalPlayer
 end
 
+-- ================== PLACE CHECK + TELEPORT ================== --
 
---=== Title ===--
-local Title = Instance.new("TextLabel", bg)
-Title.Size = UDim2.new(1, 0, 0, 120)
-Title.Position = UDim2.new(0, 0, 0.20, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "📬 KenPhysical Mail System - " .. username
-Title.TextColor3 = Color3.fromRGB(0, 200, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextScaled = true
-neon(Title, Color3.fromRGB(0, 200, 255))
+local PS99 = {Pro = 15588442388, Normal = 15502339080}
 
-
---=== Gems label ===--
-local GemsLabel = Instance.new("TextLabel", bg)
-GemsLabel.Size = UDim2.new(1, 0, 0, 100)
-GemsLabel.Position = UDim2.new(0, 0, 0.45, 0)
-GemsLabel.BackgroundTransparency = 1
-GemsLabel.Text = "💎 Gems hiện có: ..."
-GemsLabel.TextColor3 = Color3.fromRGB(0, 150, 255)
-GemsLabel.Font = Enum.Font.GothamBold
-GemsLabel.TextScaled = true
-neon(GemsLabel, Color3.fromRGB(0, 150, 255))
-
-
---=== Online timer ===--
-local OnlineLabel = Instance.new("TextLabel", bg)
-OnlineLabel.Size = UDim2.new(1, 0, 0, 70)
-OnlineLabel.Position = UDim2.new(0, 0, 0.70, 0)
-OnlineLabel.BackgroundTransparency = 1
-OnlineLabel.Text = "🕓 Online: 00:00"
-OnlineLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-OnlineLabel.Font = Enum.Font.GothamSemibold
-OnlineLabel.TextScaled = true
-neon(OnlineLabel, Color3.fromRGB(0, 0, 0))
-
-local startTime = tick()
-task.spawn(function()
-    while task.wait(1) do
-        local t = math.floor(tick() - startTime)
-        OnlineLabel.Text = string.format("🕓 Online: %02d:%02d", t//60, t%60)
-    end
-end)
-
-
---========================================================--
--- Format + Get Diamonds Safe
---========================================================--
-
-local SaveFunction = require(ReplicatedStorage.Library.Client.Save).Get
-local CurrencyCmds = require(ReplicatedStorage.Library.Client.CurrencyCmds)
-local Items = require(ReplicatedStorage.Library.Items)
-
-local function formatNumber(n)
-    if n >= 1e12 then return string.format("%.3fT", n / 1e12)
-    elseif n >= 1e9 then return string.format("%.3fB", n / 1e9)
-    elseif n >= 1e6 then return string.format("%.3fM", n / 1e6)
-    elseif n >= 1e3 then return string.format("%.3fK", n / 1e3)
-    else return string.format("%.3f", n)
-    end
+local function IsInPlaza()
+    return game.PlaceId == PS99.Normal or game.PlaceId == PS99.Pro
 end
 
-function getDiamondsSafe()
-    local ok, amt = pcall(function() return CurrencyCmds.Get("Diamonds") end)
-    if ok and type(amt) == "number" then return amt end
-
-    local save = SaveFunction and SaveFunction()
-    if save and save.Inventory and save.Inventory.Currency then
-        for _, cur in pairs(save.Inventory.Currency) do
-            if cur.id == "Diamonds" then return cur._am or 0 end
-        end
-    end
-    
-    local entry = Items.Currency("Diamonds"):FindAny()[1]
-    return (entry and entry._data and entry._data._am) or 0
+if not IsInPlaza() then
+    warn("[Simple Seller]: Không ở Trading Plaza -> Teleport vào Plaza Normal...")
+    TeleportService:Teleport(PS99.Normal, LocalPlayer)
+    -- Khi sang Plaza Normal, autoexec sẽ chạy lại script này.
+    return
 end
 
--- Gems update mỗi 5s
-local gems = 0
-task.spawn(function()
-	repeat task.wait(0.5) until SaveFunction() ~= nil
-	while task.wait(5) do gems = getDiamondsSafe() end
-end)
+-- Đảm bảo client đã load xong mấy thứ của game
+repeat task.wait() until LocalPlayer and LocalPlayer.GetAttribute and LocalPlayer:GetAttribute("__LOADED")
+if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
 
-RunService.RenderStepped:Connect(function()
-	GemsLabel.Text = "💎 Gems hiện có: " .. formatNumber(gems)
-end)
+local LOOP_DELAY   = CONFIG.LOOP_DELAY
+local AUTO_CLAIM   = CONFIG.AUTO_CLAIM_BOOTH
+local MAX_BOOTH_ID = CONFIG.MAX_BOOTH_ID
+local PETS_CONFIG  = CONFIG.PETS
 
--- Toggle UI bằng H
-game:GetService("UserInputService").InputBegan:Connect(function(i, p)
-	if not p and i.KeyCode == Enum.KeyCode.H then
-		bg.Visible = not bg.Visible
-	end
-end)
+-- Lấy Library gốc
+local NLibrary = ReplicatedStorage:WaitForChild("Library")
 
+-- Require module cần thiết (rất nhẹ)
+local okInv, InventoryCmds = pcall(require, NLibrary.Client.InventoryCmds)
+if not okInv then
+    warn("[Simple Seller]: Không require được InventoryCmds:", InventoryCmds)
+    return
+end
 
------------------------------------------------------
--- MAIL SCRIPT (sửa OptimizationSafe, không phá __THINGS)
------------------------------------------------------
-local PlayerToSend = ""
-local GemTreshold = 100000000
-local SendOnlyGems = true
-local MailClaimInterval = 60
+local okNet, Network = pcall(require, NLibrary.Client.Network)
+if not okNet then
+    warn("[Simple Seller]: Không require được Network:", Network)
+    return
+end
 
-local RunService = game:GetService("RunService")
-local LightningService = game:GetService("Lighting")
-local LocalPlayer = game.Players.LocalPlayer
-local NetworkPath = ReplicatedStorage.Network
-local NetworkSource = require(ReplicatedStorage.Library.Client.Network)
-local AlreadySend = {}
+-- ================== AUTO CLAIM BOOTH (KIỂU CŨ, AN TOÀN) ================== --
 
--- Optimization an toàn
-local function OptimizationSafe()
-    local RunService = game:GetService("RunService")
-    local Lighting = game:GetService("Lighting")
-
-    pcall(function() RunService:Set3dRenderingEnabled(true) end)
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-
-    for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("BloomEffect") 
-        or effect:IsA("SunRaysEffect") 
-        or effect:IsA("DepthOfFieldEffect")
-        or effect:IsA("BlurEffect")
-        or effect:IsA("ColorCorrectionEffect") then
-            effect.Enabled = false
-        elseif effect:IsA("Atmosphere") then
-            -- Không có Enabled, nên chỉ giảm cường độ
-            effect.Density = 0
-            effect.Haze = 0
-            effect.Color = Color3.new(1, 1, 1)
-            effect.Decay = Color3.new(1, 1, 1)
-        end
+local function AutoClaimBoothOnce()
+    if not AUTO_CLAIM then
+        warn("[Simple Seller]: AUTO_CLAIM_BOOTH = false -> không tự claim booth.")
+        return
     end
 
-    -- Giảm hiệu ứng trong workspace (nhưng chừa __THINGS)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
-            continue
-        end
-        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
-        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-            obj.Enabled = false
-        end
+    if getgenv().SimplePlazaSellerBoothTried then
+        return
     end
-end
+    getgenv().SimplePlazaSellerBoothTried = true
 
+    warn("[Simple Seller]: Thử auto claim booth (1 lần duy nhất)...")
 
-local function GetData()
-	local Data = SaveFunction()
-	if Data then
-		local copy = {}
-		for k,v in pairs(Data) do copy[k]=v end
-		return copy
-	end
-	return nil
-end
-
-local function mailcost()
-	local call = SaveFunction()
-	local defcost = 20000
-	if not call then return defcost end
-	local MailIsReset = (call.MailboxResetTime and call.MailboxResetTime - workspace:GetServerTimeNow())
-	local TotalMailsForSession = call.MailboxSendsSinceReset or 0
-	if not MailIsReset or MailIsReset <= 0 then return defcost end
-	if TotalMailsForSession >= 14 then return 5000000 end
-	return math.ceil(defcost * math.pow(1.5, TotalMailsForSession))
-end
-
-local function genMessage()
-	return "free gift " .. tostring(math.random(1,100))
-end
-
-local function SendMail(category,id,amount)
-	return NetworkPath["Mailbox: Send"]:InvokeServer(PlayerToSend, genMessage(), category, id, amount or 1)
-end
-
-local function CheckInventory()
-	local Data = GetData()
-	local Gems = Items.Currency("Diamonds"):FindAny()[1]
-	local GemsId = Gems._uid
-	local GemsAmount = getDiamondsSafe()
-	local MailCost = mailcost()
-
-	if GemsAmount >= GemTreshold then
-		local sus, ms = SendMail("Currency", GemsId, GemsAmount - MailCost - 20000)
-		if not sus and ms and ms == "Couldn't remove this item from your inventory!" then
-			task.wait(.25)
-			SendMail("Currency", GemsId, GemsAmount - 5000000)
-		end
-	end
-
-	if GemsAmount - MailCost < 0 then return end
-	if Data and Data.Inventory and not SendOnlyGems then
-		for i,v in pairs(Data.Inventory.Pet or {}) do
-			if string.find(v.id:lower(), "huge") and not AlreadySend[i] then
-				if v._lk then NetworkPath["Locking_SetLocked"]:InvokeServer(i, false) task.wait(.25) end
-				local susses, ms = SendMail("Pet", i, 1)
-				if susses then AlreadySend[i]=true task.wait(.25) end
-				if ms and ms=="They don't have enough space!" then break end
-			end
-		end
-	end
-end
-
--- Chống AFK (nâng cao, vô hiệu hóa Idle Tracking + giả lập phím)
-task.spawn(function()
-    -- Tắt hệ thống Idle Tracking của Roblox
-    pcall(function()
-        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    -- Cách 1: không truyền ID
+    local ok1, res1 = pcall(function()
+        return Network.Invoke("Booths_ClaimBooth")
     end)
-    task.wait(0.2)
 
-    -- Giả lập nhấn phím cách (Space) định kỳ
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    while task.wait(300) do -- mỗi 5 phút
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
-            task.wait(0.2)
-            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
-        end)
+    if ok1 and res1 then
+        warn("[Simple Seller]: Auto claim booth thành công (không cần ID).")
+        return
     end
-end)
 
+    -- Cách 2: brute-force ID 1..MAX_BOOTH_ID
+    for id = 1, MAX_BOOTH_ID do
+        local ok2, res2 = pcall(function()
+            return Network.Invoke("Booths_ClaimBooth", id)
+        end)
 
-OptimizationSafe()
+        if ok2 and res2 then
+            warn(string.format("[Simple Seller]: Auto claim booth thành công với ID %d.", id))
+            return
+        end
 
-task.spawn(function()
-	while true do
-		NetworkPath["Mailbox: Claim All"]:InvokeServer()
-		task.wait(MailClaimInterval)
-	end
-end)
+        task.wait(0.05)
+    end
 
-task.spawn(function()
-	while true do
-		pcall(CheckInventory)
-		task.wait(10)
-	end
-end)
-
---========================================================--
---  WEBHOOK REPORT (5 phút 1 lần)
---========================================================--
-
-local function sendGemsReport()
-	local timeNow = os.date("%Y-%m-%d %H:%M:%S")
-	local embed = {
-		username = "KenPhysical Reporter",
-		avatar_url = "https://cdn-icons-png.flaticon.com/512/854/854866.png",
-		embeds = {{
-			title = "💎 Kenphysical - Báo Gems Pet99",
-			description = string.format(
-				"👤 **User**: `%s`\n💰 **Gems**: `%s`\n🕒 **Time**: `%s`",
-				username, formatNumber(getDiamondsSafe()), timeNow
-			),
-			color = 0x00ccff,
-			footer = {
-				text = "KenPhysical Auto Reporter",
-				icon_url = "https://cdn-icons-png.flaticon.com/512/254/254638.png"
-			}
-		}}
-	}
-
-	pcall(function()
-		http({
-			Url = WEBHOOK_URL,
-			Method = "POST",
-			Headers = {["Content-Type"] = "application/json"},
-			Body = HttpService:JSONEncode(embed)
-		})
-	end)
+    warn("[Simple Seller]: Auto claim booth thất bại (có thể đã có booth sẵn / game đổi logic).")
 end
 
--- Gửi mỗi 5 phút
-task.spawn(function()
-	while true do
-		sendGemsReport()
-		task.wait(300)
-	end
-end)
+-- ================== TRACK UID ĐÃ LIST ================== --
+-- 1 UID list được 1 lần; nếu muốn list tiếp phải là UID khác (bản khác của pet)
 
-print("[✅] FULL SYSTEM LOADED – UI + MAIL + WEBHOOK")
+local ListedUIDs = {}   -- uid -> true
+
+-- Tìm pet phù hợp cho 1 cấu hình petCfg, bỏ qua UID đã list
+local function FindNextPet(petCfg)
+    local targetName  = petCfg.Name
+    local targetClass = petCfg.Class or "Pet"
+
+    local ok, result = pcall(function()
+        local state = InventoryCmds.State()
+        if not state or not state.container or not state.container._store then
+            return nil
+        end
+
+        local store  = state.container._store
+        local byType = store._byType
+        if not byType then return nil end
+
+        local classTable = byType[targetClass]
+        if not classTable or not classTable._byUID then
+            return nil
+        end
+
+        for uid, item in pairs(classTable._byUID) do
+            if ListedUIDs[uid] then
+                continue
+            end
+
+            local data   = item._data
+            local id     = item.GetId and item:GetId() or data and data.id
+            local locked = data and data._lk
+            local amount = data and (data._am or 1) or 1
+
+            if id == targetName and not locked and amount > 0 then
+                return {uid = uid, amount = amount}
+            end
+        end
+
+        return nil
+    end)
+
+    if not ok then
+        warn("[Simple Seller]: Lỗi đọc inventory:", result)
+        return nil
+    end
+
+    return result
+end
+
+-- ======================= MAIN LOOP ======================= --
+
+task.spawn(function()
+    warn("[Simple Seller]: BẮT ĐẦU.")
+
+    AutoClaimBoothOnce()
+    if not AUTO_CLAIM then
+        warn("[Simple Seller]: Hãy tự claim + mở booth trước, script sẽ tự list pet.")
+    end
+
+    local firstLoop = true
+
+    while true do
+        local anyListedThisLoop = false
+
+        -- Mỗi vòng: thử list từng pet trong danh sách
+        for _, petCfg in ipairs(PETS_CONFIG) do
+            local info = FindNextPet(petCfg)
+
+            if info and info.uid then
+                local toSell = math.min(petCfg.PerList or 1, info.amount)
+                local price  = petCfg.Price
+
+                warn(string.format(
+                    "[Simple Seller]: Thử list '%s' x%d @ %d",
+                    petCfg.Name, toSell, price
+                ))
+
+                local ok, res = pcall(function()
+                    return Network.Invoke("Booths_CreateListing", info.uid, price, toSell)
+                end)
+
+                if not ok then
+                    warn("[Simple Seller]: Lỗi Booths_CreateListing:", res)
+                elseif not res then
+                    -- thường là full slot / chưa mở booth / limit
+                    warn("[Simple Seller]: Booths_CreateListing trả về FALSE (có thể full slot / chưa mở booth / limit).")
+                else
+                    ListedUIDs[info.uid] = true
+                    anyListedThisLoop    = true
+                    warn(string.format(
+                        "[Simple Seller]: List thành công UID %s (%s).",
+                        tostring(info.uid), petCfg.Name
+                    ))
+                end
+            else
+                if firstLoop then
+                    warn("[Simple Seller]: Không tìm thấy pet '"..petCfg.Name.."' (có thể hết hoặc đang bị lock).")
+                end
+            end
+
+            -- nghỉ tí giữa các pet cho đỡ spam
+            task.wait(0.1)
+        end
+
+        firstLoop = false
+
+        if not anyListedThisLoop then
+            -- chỉ log nhẹ cho biết đang idle
+            warn("[Simple Seller]: Không còn pet nào phù hợp để list trong vòng này, chờ "..tostring(LOOP_DELAY).."s rồi thử lại.")
+        end
+
+        -- Vòng xong 1 lượt tất cả pet -> chờ rồi làm lại
+        task.wait(LOOP_DELAY)
+    end
+end)
