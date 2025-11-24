@@ -1,28 +1,28 @@
---// PS99 – Plaza SELL PET only (no sniper, no PETS GO)
-
+-- PS99 SELL 1 PET – SIMPLE
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local PS99 = {Pro = 15588442388, Normal = 15502339080}
 if not table.find({PS99.Normal, PS99.Pro}, game.PlaceId) then
-    warn("[Plaza Seller]: Chỉ dùng trong Trading Plaza Pet Simulator 99.")
+    warn("[Simple Seller]: Chỉ dùng trong Trading Plaza Pet Simulator 99.")
     return
 end
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer       = Players.LocalPlayer
 
-local LocalPlayer = Players.LocalPlayer
 repeat task.wait() until LocalPlayer and LocalPlayer.GetAttribute and LocalPlayer:GetAttribute("__LOADED")
 if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
-local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+local HumanoidRootPart = LocalPlayer.Character:WaitForChild("HumanoidRootPart")
 
----------------------------------------------------------------------
---  LIBRARY / SAVE
----------------------------------------------------------------------
-local NLibrary   = ReplicatedStorage:WaitForChild("Library")
-local PlayerSave = require(NLibrary.Client.Save)
+-- Thông tin PET cần bán
+local TARGET_NAME  = "Huge Blue Lucky Block"  -- Tên pet đúng y như trong túi
+local TARGET_CLASS = "Pet"
+local PRICE        = 15_000_000               -- 15m
 
--- auto load Library modules vào getgenv().Library (như bản gốc)
+-- Lấy Library
+local NLibrary = ReplicatedStorage:WaitForChild("Library")
+
 local function LoadModules(Path, LoadTable)
     for _,v in next, Path:GetChildren() do
         if v:IsA("ModuleScript") and not v:GetAttribute("NOLOAD") then
@@ -37,566 +37,136 @@ end
 if not getgenv().Library then
     getgenv().Library = {}
     LoadModules(NLibrary.Client, getgenv().Library)
-    LoadModules(NLibrary,       getgenv().Library)
+    LoadModules(NLibrary, getgenv().Library)
 end
 
-local Library = getgenv().Library
+local Library    = getgenv().Library
+local PlayerSave = require(NLibrary.Client.Save)
 
----------------------------------------------------------------------
---  BOOTH STATE (Booths, ClaimedBooths, BoothsInteractive)
----------------------------------------------------------------------
-local Booths, ClaimedBooths, BoothsInteractive
-
-do
-    local boothScript = NLibrary.Client:FindFirstChild("BoothCmds")
+-- Lấy state booth (chỉ những gì cần thiết)
+local Booths, ClaimedBooths, BoothsInteractive do
+    local boothScript = NLibrary.Client:FindFirstChild("BoothCmds") 
         or LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]["Booths Frontend"]
 
-    repeat
-        task.wait()
+    repeat task.wait()
         local getState = getsenv(boothScript).getState
         if getState then
             Booths = getupvalues(getState)
         end
     until Booths
 
-    repeat
-        task.wait()
+    repeat task.wait()
         local updateAllInteracts = getsenv(boothScript).updateAllInteracts
         if updateAllInteracts then
             local ups = getupvalues(updateAllInteracts)
-            ClaimedBooths    = ups[1]
-            BoothsInteractive = ups[3]
+            ClaimedBooths      = ups[1]
+            BoothsInteractive  = ups[3]
         end
     until ClaimedBooths and BoothsInteractive
 end
 
----------------------------------------------------------------------
---  HÀM XỬ LÝ ITEM / DIRECTORY
----------------------------------------------------------------------
-local RomanNumerals = { I = 1, V = 5, X = 10, L = 50, C = 100, D = 500, M = 1000 }
-
-local function ConvertRoman(Number)
-    local result = ""
-    local sortedNumerals = {}
-    for k, v in pairs(RomanNumerals) do
-        table.insert(sortedNumerals, {v, k})
-    end
-    table.sort(sortedNumerals, function(a, b) return a[1] > b[1] end)
-    for _, value in ipairs(sortedNumerals) do
-        while Number >= value[1] do
-            result = result .. value[2]
-            Number = Number - value[1]
-        end
-    end
-    return result
-end
-
-local function ConvertNumerals(Roman)
-    local Total, OldValue = 0, 0
-    for i = #Roman, 1, -1 do
-        local CurrentValue = RomanNumerals[Roman:sub(i, i)]
-        if CurrentValue < OldValue then
-            Total = Total - CurrentValue
-        else
-            Total = Total + CurrentValue
-        end
-        OldValue = CurrentValue
-    end
-    return Total
-end
-
-local SuffixesLower = {"k","m","b","t"}
-local SuffixesUpper = {"K","M","B","T"}
-
-local function RemoveSuffix(Amount)
-    local Number, Suffix = Amount:gsub("%a", ""), Amount:match("%a")
-    local Type = table.find(SuffixesUpper, Suffix) or table.find(SuffixesLower, Suffix) or 0
-    return tonumber(Number) * math.pow(10, Type * 3)
-end
-
--- build ItemList từ Directory (giữ đúng như bản gốc, chỉ bỏ class không cần)
-local TempClasses = require(NLibrary.Items.Types).Types
-local Classes = {}
-for Name in next, TempClasses do
-    Classes[Name] = {}
-end
-Classes.Currency = nil
-Classes.Page     = nil
-
-local ItemList        = Classes
-local DirectoryClasses = {}
-for Name, _ in next, Classes do
-    local found = false
-    for _, Class in next, NLibrary.Directory:GetChildren() do
-        if tostring(Class):find(Name) then
-            found = true
-        end
-    end
-    if not found then
-        Classes[Name] = nil
-    else
-        if Name == "Misc" or Name == "Card" then
-            DirectoryClasses[Name] = Name.."Items"
-        elseif Name == "Lootbox" or Name == "Box" then
-            DirectoryClasses[Name] = Name.."es"
-        else
-            DirectoryClasses[Name] = Name.."s"
-        end
-    end
-end
-
-for Class, _ in next, Classes do
-    pcall(function()
-        for Item, Info in next, require(NLibrary.Directory[DirectoryClasses[Class]]) do
-            if Info.DisplayName and type(Info.DisplayName) == "function" then
-                for i = Info.BaseTier, Info.MaxTier do
-                    ItemList[Class][Info.DisplayName(i)] = {
-                        ID      = Item,
-                        Display = Info.DisplayName(i),
-                        Power   = Info.Power(i),
-                        Rarity  = Info.Rarity(i),
-                        Tier    = i,
-                        Icon    = type(Info.Icon) == "function" and Info.Icon(i) or Info.Icon
-                    }
-                end
-            else
-                if Info.Tiers then
-                    for i = 1, #Info.Tiers do
-                        local Display, Icon, Rarity, Power
-                        if Info.Tiers[i].Effect and Info.Tiers[i].Effect.Type.Tiers[i] then
-                            local t = Info.Tiers[i].Effect.Type.Tiers[i]
-                            Display = t.Name
-                            Icon    = t.Icon
-                            Rarity  = t.Rarity
-                            Power   = t.Power
-                        else
-                            Display = (Info.DisplayName and type(Info.Displayname) ~= "function" and Info.DisplayName)
-                                   or (Info.name       and type(Info.name)       ~= "function" and Info.name)
-                                   or (Info.Name       and type(Info.Name)       ~= "function" and Info.Name)
-                                   or (Info.DisplayName and type(Info.DisplayName) == "function" and Info.DisplayName(i))
-                        end
-                        if Display and (not Display:find("%d") or not Display:find("(%u+)$")) and #Info.Tiers > 1 then
-                            Display = Display.." "..ConvertRoman(i)
-                        end
-                        ItemList[Class][Display] = {
-                            ID      = Item,
-                            Display = Display,
-                            Tier    = i,
-                            Icon    = Info.Tiers[i].Icon or Icon,
-                            Power   = Info.Tiers[i].Power or Power,
-                            Rarity  = Info.Tiers[i].Rarity or Rarity,
-                        }
-                    end
-                else
-                    if Info.instant_purchase then continue end
-                    local Display = (Info.DisplayName and type(Info.Displayname) ~= "function" and Info.DisplayName)
-                                 or (Info.name       and type(Info.name)       ~= "function" and Info.name)
-                                 or (Info.Name       and type(Info.Name)       ~= "function" and Info.Name)
-                                 or (Info.DisplayName and type(Info.DisplayName) == "function" and Info.DisplayName(1))
-                    ItemList[Class][Display] = {
-                        ID      = Item,
-                        Display = Display,
-                        Tier    = Info.Tier,
-                        Icon    = Info.Icon or Info.thumbnail,
-                        Power   = Info.Power,
-                        Rarity  = Info.Rarity,
-                    }
-                end
-            end
-        end
-    end)
-end
-
----------------------------------------------------------------------
---  HÀM TÌM PET / BOOTH
----------------------------------------------------------------------
-local function FindItemsInBooth(Name, Class)
-    local ItemCount, BoothCount = 0, 0
-    for _, Users in next, Booths do
-        for Username, Booth in next, Users do
-            for BoothInfo, InfoValues in next, Booth do
-                if BoothInfo == "Listings" and tostring(Username):find(LocalPlayer.Name) then
-                    for _ in next, InfoValues do
-                        BoothCount += 1
-                    end
-                    if Name and Class then
-                        for _, PetInfo in next, InfoValues do
-                            local PetData = PetInfo.Item._data
-                            if PetData.id == Name and PetInfo.Item.Class.Name == Class then
-                                ItemCount += PetData._am or 1
-                            end
-                        end
-                    end
-                    return BoothCount, ItemCount
-                end
-            end
-        end
-    end
-    return 0, 0
-end
-
-local function GetInventoryByClass(class)
-    local state = Library.InventoryCmds.State()
-    return state.container._store._byType[class]
-end
-
-local LastUIDs       = {}
-local BlacklistedUIDs = {}
-
-local function ValidateItem(BoothItem, WantedItem)
-    if WantedItem.ID ~= BoothItem.ID then
-        return false
-    end
-    if WantedItem.Class and WantedItem.Class ~= BoothItem.Class then
-        return false
-    end
-
-    -- type check (golden/rainbow/shiny)
-    if not WantedItem.AllTypes then
-        if (WantedItem.Shiny   and not BoothItem.Shiny)   or (not WantedItem.Shiny   and BoothItem.Shiny)   then return false end
-        if (WantedItem.Rainbow and not BoothItem.Rainbow) or (not WantedItem.Rainbow and BoothItem.Rainbow) then return false end
-        if (WantedItem.Golden  and not BoothItem.Golden)  or (not WantedItem.Golden  and BoothItem.Golden)  then return false end
-    end
-
-    if not WantedItem.AllTiers and WantedItem.Tier and BoothItem.Tier then
-        if tonumber(WantedItem.Tier) ~= tonumber(BoothItem.Tier) then
+-- Claim booth đẹp
+local function IsBoothAvailable(BoothID)
+    for _, BoothTable in pairs(ClaimedBooths) do
+        if BoothTable.BoothID == BoothID then
             return false
         end
     end
     return true
 end
 
-local function GenerateFindInfo(Name, Data)
-    local FindInfo = {}
-    FindInfo.ID        = Name
-    FindInfo.AllTypes  = Data and Data.AllTypes  or nil
-    FindInfo.AllTiers  = Data and Data.AllTiers  or nil
-
-    if not Name:find("Board") and not Name:find("Gem") then
-        local RainbowPosition = Name:find("Rainbow")
-        local HugePosition    = Name:find("Huge")
-        FindInfo.Rainbow = (RainbowPosition and (not HugePosition or RainbowPosition < HugePosition)) or false
-        FindInfo.Golden  = Name:find("Golden") and true or false
-        FindInfo.Shiny   = Name:find("Shiny")  and true or false
-        Name = FindInfo.ID
-            :gsub(FindInfo.Rainbow and "Rainbow " or "", "")
-            :gsub(FindInfo.Golden  and "Golden "  or "", "")
-            :gsub(FindInfo.Shiny   and "Shiny "   or "", "")
+local function GetCenterX()
+    local minX, maxX = math.huge, -math.huge
+    for _, BoothModel in pairs(BoothsInteractive) do
+        local x = BoothModel.Pets.Position.X
+        if x < minX then minX = x end
+        if x > maxX then maxX = x end
     end
-
-    local Main, Tier = Name:match("(.+)%s+(%d+)%s*$")
-    if Tier then
-        FindInfo.Tier = tonumber(Tier)
-        Name = Main.." "..ConvertRoman(FindInfo.Tier)
-    elseif Name:find("(%u+)%s*$") then
-        FindInfo.Tier = tonumber(ConvertNumerals(Name:match("(%u+)%s*$")))
-    end
-
-    FindInfo.Display = Name
-    for Class, List in next, ItemList do
-        if List[Name] then
-            local Data2 = List[Name]
-            FindInfo.Class = Class
-            FindInfo.ID    = Data2.ID
-            FindInfo.Icon  = Data2.Icon
-            if Class ~= "Pet" and Class ~= "Hoverboard" and Class ~= "Card" and Class ~= "Fruit" then
-                FindInfo.Rainbow = nil
-                FindInfo.Golden  = nil
-                FindInfo.Shiny   = nil
-                if Data2.Tier and not FindInfo.Tier then
-                    FindInfo.Tier = Data2.Tier
-                end
-            end
-            break
-        end
-    end
-    return FindInfo
+    return (minX + maxX) / 2
 end
 
-local function FindItem(Data, ReturnAmount)
-    local Count = 0
-    local Inventories = {}
-
-    if Data.Class then
-        table.insert(Inventories, GetInventoryByClass(Data.Class))
-    else
-        for class in pairs(Library.InventoryCmds.State().container._store._byType) do
-            table.insert(Inventories, GetInventoryByClass(class))
-        end
-    end
-
-    for _, Inventory in pairs(Inventories) do
-        if not Inventory or not Inventory._byUID then
-            print("[Plaza Seller]: Cannot scan inventory class.")
-            return
-        end
-
-        for UID, ItemTable in pairs(Inventory._byUID) do
-            if not ReturnAmount then
-                if table.find(LastUIDs, UID) then
-                    local _, ItemCount = FindItemsInBooth(
-                        ItemTable.GetId and ItemTable:GetId(),
-                        ItemTable.GetClass and ItemTable:GetClass() or ItemTable.Class and ItemTable.Class.Name or Data.Class or "Pet"
-                    )
-                    if ItemCount >= 1 then
-                        continue
-                    else
-                        table.remove(LastUIDs, table.find(LastUIDs, UID))
-                    end
-                    task.wait(0.1)
-                end
-            end
-
-            local ItemInfo = {
-                UID        = UID,
-                ID         = ItemTable.GetId and ItemTable:GetId() or nil,
-                Class      = ItemTable.GetClass and ItemTable:GetClass() or ItemTable.Class and ItemTable.Class.Name or Data.Class or "Pet",
-                Rainbow    = ItemTable.IsRainbow and ItemTable:IsRainbow() or false,
-                Golden     = ItemTable.IsGolden and ItemTable:IsGolden() or false,
-                Shiny      = ItemTable.IsShiny and ItemTable:IsShiny() or false,
-                IsLocked   = ItemTable._data._lk,
-                Amount     = ItemTable._am or ItemTable._data._am or 1,
-                Tier       = ItemTable._data.tn,
-            }
-
-            if ItemInfo.IsLocked or BlacklistedUIDs[UID] or not UID then
-                continue
-            end
-
-            if ReturnAmount then
-                if ValidateItem(ItemInfo, Data) then
-                    Count += ItemInfo.Amount
-                end
-            else
-                if ValidateItem(ItemInfo, Data) then
-                    table.insert(LastUIDs, UID)
-                    return UID, ItemInfo
-                end
-            end
-        end
-    end
-    return ReturnAmount and Count or nil
+local function GetBoothPriority(BoothModel, CenterX)
+    local yPriority = BoothModel.Pets.Position.Y
+    local xDistance = math.abs(BoothModel.Pets.Position.X - CenterX)
+    return yPriority, xDistance
 end
 
----------------------------------------------------------------------
---  SELLER ONLY
----------------------------------------------------------------------
+local function ClaimOptimalBooth()
+    local BoothCandidates = {}
+    local CenterX = GetCenterX()
 
--- nếu bạn có Settings từ file UI cũ thì vẫn dùng được:
-local Settings = getgenv().Settings or {}
-Settings.Seller = Settings.Seller or { Active = true, Items = {} }
-
-local FileSettings = { Seller = true }
-
-local LastUIDDs = {}
-
-if Settings.Seller and Settings.Seller.Active and FileSettings.Seller then
-    -- chọn booth đẹp nhất (giữa map, hàng trước)
-    local function IsBoothAvailable(BoothID)
-        for _, BoothTable in pairs(ClaimedBooths) do
-            if BoothTable.BoothID == BoothID then
-                return false
-            end
-        end
-        return true
-    end
-
-    local function GetCenterX()
-        local minX, maxX = math.huge, -math.huge
-        for _, BoothModel in pairs(BoothsInteractive) do
-            local boothX = BoothModel.Pets.Position.X
-            if boothX < minX then minX = boothX end
-            if boothX > maxX then maxX = boothX end
-        end
-        return (minX + maxX) / 2
-    end
-
-    local function GetBoothPriority(BoothModel, CenterX)
-        local yPriority = BoothModel.Pets.Position.Y
-        local xDistance = math.abs(BoothModel.Pets.Position.X - CenterX)
-        return yPriority, xDistance
-    end
-
-    local function ClaimOptimalBooth()
-        local BoothCandidates = {}
-        local CenterX = GetCenterX()
-        for BoothID, BoothModel in next, BoothsInteractive do
-            if ClaimedBooths[LocalPlayer] then
-                return
-            end
-            if IsBoothAvailable(BoothID) then
-                local yPriority, xDistance = GetBoothPriority(BoothModel, CenterX)
-                table.insert(BoothCandidates, {
-                    BoothID   = BoothID,
-                    Model     = BoothModel,
-                    Y         = yPriority,
-                    xDistance = xDistance
-                })
-            end
-        end
-        table.sort(BoothCandidates, function(a, b)
-            if a.Y == b.Y then
-                return a.xDistance < b.xDistance
-            end
-            return a.Y < b.Y
-        end)
-        for _, Booth in next, BoothCandidates do
-            local Success = Library.Network.Invoke("Booths_ClaimBooth", Booth.BoothID)
-            if Success then
-                local Interact = Booth.Model:WaitForChild("Interact", 7)
-                if Interact then
-                    Library.Network.Fire("Hoverboard_RequestUnequip")
-                    task.wait(1)
-                    HumanoidRootPart.CFrame = Interact.CFrame * CFrame.new(0,-2,-6) * CFrame.Angles(0, math.rad(180), 0)
-                end
-                return true
-            end
+    for BoothID, BoothModel in next, BoothsInteractive do
+        if ClaimedBooths[LocalPlayer] then return end
+        if IsBoothAvailable(BoothID) then
+            local yPriority, xDistance = GetBoothPriority(BoothModel, CenterX)
+            table.insert(BoothCandidates, {
+                BoothID   = BoothID,
+                Model     = BoothModel,
+                Y         = yPriority,
+                xDistance = xDistance,
+            })
         end
     end
 
+    table.sort(BoothCandidates, function(a, b)
+        if a.Y == b.Y then
+            return a.xDistance < b.xDistance
+        end
+        return a.Y < b.Y
+    end)
+
+    for _, Booth in next, BoothCandidates do
+        local Success = Library.Network.Invoke("Booths_ClaimBooth", Booth.BoothID)
+        if Success then
+            local Interact = Booth.Model:WaitForChild("Interact", 7)
+            if Interact then
+                Library.Network.Fire("Hoverboard_RequestUnequip")
+                task.wait(1)
+                HumanoidRootPart.CFrame =
+                    Interact.CFrame * CFrame.new(0,-2,-6) * CFrame.Angles(0, math.rad(180), 0)
+            end
+            return true
+        end
+    end
+end
+
+local function FindTargetPet()
+    local invState = Library.InventoryCmds.State()
+    local pets = invState.container._store._byType[TARGET_CLASS]
+    if not pets or not pets._byUID then
+        warn("[Simple Seller]: Không đọc được inventory pet.")
+        return
+    end
+
+    for uid, item in pairs(pets._byUID) do
+        local id = item.GetId and item:GetId() or item._data and item._data.id
+        local locked = item._data and item._data._lk
+        local amount = item._data and (item._data._am or 1) or 1
+        if id == TARGET_NAME and not locked then
+            return uid, amount
+        end
+    end
+end
+
+-- Logic chính
+task.spawn(function()
     ClaimOptimalBooth()
     repeat task.wait() until ClaimedBooths[LocalPlayer]
-    warn("[Plaza Seller]: Booth đã claim, bắt đầu list pet...")
+    warn("[Simple Seller]: Booth đã claim, tìm pet...")
 
-    local function ProcessItem(Name, Data)
-        local FindInfo = GenerateFindInfo(Name, Data)
-        local UsedSlots = FindItemsInBooth()
-        local MaxSlots = PlayerSave.Get().BoothSlots
-
-        repeat
-            task.wait()
-            if UsedSlots >= MaxSlots then break end
-
-            local UID, ItemData = FindItem(FindInfo)
-            local Amount = ItemData and ItemData.Amount or 1
-            if not UID then break end
-
-            local PriceData = {
-                IsPercentage = type(Data.Price) == "string" and Data.Price:find("%%"),
-                AboveRAP     = type(Data.Price) == "string" and Data.Price:find("+"),
-                NegativePrice= (type(Data.Price) == "number" and Data.Price < 0)
-                             or (type(Data.Price) == "string" and Data.Price:find("^%-")),
-                MaxPrice     = Data.MaxPrice and ((type(Data.MaxPrice) == "number" and Data.MaxPrice)
-                                                  or (type(Data.MaxPrice) == "string" and RemoveSuffix(Data.MaxPrice))) or nil,
-                MinPrice     = Data.MinPrice and ((type(Data.MinPrice) == "number" and Data.MinPrice)
-                                                  or (type(Data.MinPrice) == "string" and RemoveSuffix(Data.MinPrice))) or nil,
-            }
-
-            PriceData.RealPrice = tonumber(
-                type(Data.Price) == "string"
-                    and (not PriceData.IsPercentage and RemoveSuffix(Data.Price) or Data.Price:gsub("%D",""))
-                    or Data.Price
-            )
-
-            -- nếu dùng dạng %, +%, -% theo RAP thì xử lý
-            if PriceData.IsPercentage or PriceData.AboveRAP or PriceData.NegativePrice then
-                local NewItem = Library.Items.Types[ItemData.Class](ItemData.ID)
-                if ItemData.Golden  then NewItem:SetGolden() end
-                if ItemData.Rainbow then NewItem:SetRainbow() end
-                if ItemData.Shiny   then NewItem:SetShiny(true) end
-                if ItemData.Color   then NewItem:SetColorVariant(ItemData.Color) end
-                if ItemData.Tier    then NewItem:SetTier(ItemData.Tier) end
-
-                local RAP = (NewItem.GetDevRAP and NewItem:GetDevRAP()) or (NewItem.GetRAP and NewItem:GetRAP())
-                if not RAP then
-                    table.insert(BlacklistedUIDs, UID)
-                    continue
-                end
-
-                if PriceData.NegativePrice then
-                    PriceData.RealPrice = RAP + PriceData.RealPrice
-                end
-                if PriceData.IsPercentage or PriceData.AboveRAP then
-                    if PriceData.AboveRAP then
-                        PriceData.RealPrice = RAP + (RAP * (PriceData.RealPrice / 100))
-                    else
-                        PriceData.RealPrice = RAP - (RAP * (PriceData.RealPrice / 100))
-                    end
-                end
-            end
-
-            if PriceData.MinPrice and PriceData.RealPrice < PriceData.MinPrice then
-                PriceData.RealPrice = PriceData.MinPrice
-            end
-            if PriceData.MaxPrice and PriceData.RealPrice > PriceData.MaxPrice then
-                PriceData.RealPrice = PriceData.MaxPrice
-            end
-
-            Amount = ((Data.Amount and Data.Amount > Amount) and Amount or Data.Amount) or Amount
-
-            local BoothSlots, ItemSlots = FindItemsInBooth(FindInfo.ID, FindInfo.Class)
-            if Data.Amount and ItemSlots and ItemSlots >= Data.Amount then
-                return
-            end
-            if PriceData.RealPrice <= 0 or not PriceData.RealPrice then
-                return print("[Plaza Seller]: ERROR LISTING ITEM: "..ItemData.ID.." ("..ItemData.Class..") price: "..tostring(PriceData.RealPrice))
-            end
-
-            local MaxAmountPerListing = 50000
-            print("[Plaza Seller]: Listing "..ItemData.ID.." x"..Amount.." @ "..PriceData.RealPrice)
-
-            task.wait(math.random(3,9))
-            local failCount = 0
-
-            if ItemSlots and ItemSlots >= 1 and Amount ~= 1 then
-                Amount = math.max(0, Amount - ItemSlots)
-                if Amount <= 0 then break end
-            end
-
-            while Amount > 0 and UsedSlots < MaxSlots do
-                local SellTimer = os.time()
-                local Success = Library.Network.Invoke("Booths_CreateListing", UID, math.floor(PriceData.RealPrice), math.min(Amount, MaxAmountPerListing))
-                repeat task.wait() until Success or (os.time() - SellTimer) >= 10
-                UsedSlots = FindItemsInBooth()
-                if Success then
-                    warn("[Plaza Seller]: Added item:", ItemData.ID, "x" .. math.min(Amount, MaxAmountPerListing))
-                    Amount = Amount - MaxAmountPerListing
-                else
-                    failCount += 1
-                    table.remove(LastUIDs, table.find(LastUIDs, UID))
-                    warn("[Plaza Seller]: FAILED to add item:", ItemData.ID, "x" .. math.min(Amount, MaxAmountPerListing))
-                end
-                if failCount >= 3 then
-                    break
-                end
-            end
-        until UsedSlots >= MaxSlots
+    local uid, amount = FindTargetPet()
+    if not uid then
+        warn("[Simple Seller]: Không tìm thấy pet: "..TARGET_NAME)
+        return
     end
 
-    -- ưu tiên item có Priority=true
-    task.spawn(function()
-        local Keys, PriorityKeys, NonPriorityKeys = {}, {}, {}
-        for name, data in pairs(Settings.Seller.Items) do
-            if data.Priority then
-                table.insert(PriorityKeys, name)
-            else
-                table.insert(NonPriorityKeys, name)
-            end
-        end
-        for _, k in ipairs(PriorityKeys)   do table.insert(Keys, k) end
-        for _, k in ipairs(NonPriorityKeys)do table.insert(Keys, k) end
+    local toSell = 1  -- chỉ bán 1 con đúng như yêu cầu
+    warn(string.format("[Simple Seller]: Đang list '%s' x%d @ %d", TARGET_NAME, toSell, PRICE))
 
-        while task.wait(1) and Settings.Seller.Active do
-            for _, name in ipairs(Keys) do
-                local data = Settings.Seller.Items[name]
-                ProcessItem(name, data)
-            end
-        end
-    end)
-end
-
----------------------------------------------------------------------
---  CONFIG MẪU
----------------------------------------------------------------------
--- Nếu bạn không dùng UI cũ, có thể set nhanh tại đây:
--- (bỏ comment và chỉnh theo ý bạn)
-
---[[
-Settings.Seller.Active = true
-Settings.Seller.Items = {
-    ["Huge Mossy Lamb"] = {
-        Price   = "5%",  -- 50% trên RAP
-        Amount  = 5
-    }
-}
-]]
+    local ok = Library.Network.Invoke("Booths_CreateListing", uid, PRICE, toSell)
+    if ok then
+        warn("[Simple Seller]: Đã list thành công.")
+    else
+        warn("[Simple Seller]: Lỗi khi list pet.")
+    end
+end)
