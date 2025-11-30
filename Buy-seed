@@ -1,1 +1,78 @@
+local Players     = game:GetService("Players")
+local RunService  = game:GetService("RunService")
+local StarterGui  = game:GetService("StarterGui")
+local CoreGui     = game:GetService("CoreGui")
+local VIM         = game:GetService("VirtualInputManager")  -- cần executor hỗ trợ
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Click nút ConfirmButton bằng cách giả lập click chuột
+local function clickSendRequestButton(timeout)
+    timeout = timeout or 3
+    local startTime = tick()
+
+    while tick() - startTime < timeout do
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if (obj.Name == "ConfirmButton") and (obj:IsA("ImageButton") or obj:IsA("TextButton")) then
+                local pos  = obj.AbsolutePosition
+                local size = obj.AbsoluteSize
+                local x = pos.X + size.X/2
+                local y = pos.Y + size.Y/2
+
+                print("[FriendLoop] Found button:", obj:GetFullName(), "-> click at", x, y)
+
+                -- giả lập bấm chuột trái
+                VIM:SendMouseButtonEvent(x, y, 0, true,  game, 0)
+                task.wait()
+                VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
+
+                return true
+            end
+        end
+
+        RunService.Heartbeat:Wait()
+    end
+
+    return false
+end
+
+-- Mở popup gửi friend cho 1 player rồi auto click
+local function promptAndAutoSend(targetPlayer)
+    if not targetPlayer or targetPlayer == LocalPlayer then return end
+
+    local ok, err = pcall(function()
+        StarterGui:SetCore("PromptSendFriendRequest", targetPlayer)
+    end)
+
+    if not ok then
+        warn("SetCore error:", err)
+        return
+    end
+
+    task.wait(0.3)
+    local clicked = clickSendRequestButton(2)
+    if not clicked then
+        warn("Không click được nút Send Request")
+    end
+end
+
+-- Vòng lặp: 5 giây quét 1 lần, gửi cho tất cả người trong server
+task.spawn(function()
+    while task.wait(5) do
+        print("[FriendLoop] Tick")
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local ok, isFriend = pcall(function()
+                    return LocalPlayer:IsFriendsWith(plr.UserId)
+                end)
+
+                if ok and not isFriend then
+                    print("[FriendLoop] Send to:", plr.Name)
+                    promptAndAutoSend(plr)
+                    task.wait(1)
+                end
+            end
+        end
+    end
+end)
 
