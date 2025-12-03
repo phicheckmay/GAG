@@ -1,0 +1,741 @@
+--// MAIN FULL UI + AUTO TRADE (reads getgenv().Config)
+pcall(function() if setfpscap then setfpscap(15) end end)
+
+repeat task.wait() until game:IsLoaded()
+task.wait(0.8)
+
+--========================
+-- CONFIG LOAD (expects user paste)
+--========================
+local DefaultConfig = {
+    ["Account Main"] = {"AlfredShopOfficial"},
+    ["PetName"] = {"Megalodon","Robot Kraken","Worm Fish","Ghost Shark"},
+    ["GiftDelay"] = 5,
+    ["TeleportDelay"] = 0.2,
+    ["UI_AutoRefresh"] = true,
+    ["UI_RefreshSeconds"] = 3,
+    ["Hotkey_ToggleUI"] = "H",
+}
+
+getgenv().Config = getgenv().Config or DefaultConfig
+local Config = getgenv().Config
+for k, v in pairs(DefaultConfig) do
+    if Config[k] == nil then Config[k] = v end
+end
+
+local mainAccounts = Config["Account Main"] or {}
+local targetPetNames = Config["PetName"] or {}
+
+local giftDelay = tonumber(Config["GiftDelay"]) or 5
+if giftDelay < 0 then giftDelay = 0 end
+local tpDelay = tonumber(Config["TeleportDelay"]) or 0
+if tpDelay < 0 then tpDelay = 0 end
+
+local autoOn = (Config["UI_AutoRefresh"] ~= false)
+local refreshInterval = tonumber(Config["UI_RefreshSeconds"]) or 3
+if refreshInterval < 1 then refreshInterval = 1 end
+if refreshInterval > 30 then refreshInterval = 30 end
+
+local function keycodeFromString(s)
+    if typeof(s) ~= "string" then return Enum.KeyCode.H end
+    local map = {
+        RightShift = Enum.KeyCode.RightShift,
+        LeftShift = Enum.KeyCode.LeftShift,
+        RightControl = Enum.KeyCode.RightControl,
+        LeftControl = Enum.KeyCode.LeftControl,
+        RightAlt = Enum.KeyCode.RightAlt,
+        LeftAlt = Enum.KeyCode.LeftAlt,
+    }
+    if map[s] then return map[s] end
+    return Enum.KeyCode[s] or Enum.KeyCode.H
+end
+local TOGGLE_KEY = keycodeFromString(Config["Hotkey_ToggleUI"])
+
+--========================
+-- Services
+--========================
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LP = Players.LocalPlayer
+
+--========================
+-- Anti-AFK
+--========================
+do
+    local VirtualUser = game:service("VirtualUser")
+    LP.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
+
+--========================
+-- Dependencies
+--========================
+local ItemUtil = require(RS.Shared.ItemUtility)
+local ReplionClient = require(RS.Packages.Replion).Client
+local Data = ReplionClient:WaitReplion("Data")
+
+local function rawItems()
+    return Data:Get({ "Inventory", "Items" }) or {}
+end
+
+--========================
+-- Inventory scan (UI)
+--========================
+local function scanCounts()
+    local counts, total = {}, 0
+    for _, v in pairs(rawItems()) do
+        local ok, base = pcall(function()
+            return ItemUtil:GetItemData(v.Id)
+        end)
+        local name = ok and base and base.Data and base.Data.Name
+        if name then
+            counts[name] = (counts[name] or 0) + 1
+            total += 1
+        end
+    end
+    return counts, total
+end
+
+local function sortedList(counts)
+    local list = {}
+    for name, count in pairs(counts) do
+        list[#list+1] = { name = name, count = count }
+    end
+    table.sort(list, function(a, b)
+        if a.count == b.count then
+            return a.name < b.name
+        end
+        return a.count > b.count
+    end)
+    return list
+end
+
+--========================
+-- Auto Trade logic
+--========================
+local function havepet()
+    for _, v in pairs(rawItems()) do
+        local ok, base = pcall(function()
+            return ItemUtil:GetItemData(v.Id)
+        end)
+        local n = ok and base and base.Data and base.Data.Name
+        if n and table.find(targetPetNames, n) then
+            return true
+        end
+    end
+    return false
+end
+
+local function get_secret_uuids()
+    local uuids = {}
+    for _, v in pairs(rawItems()) do
+        local ok, base = pcall(function()
+            return ItemUtil:GetItemData(v.Id)
+        end)
+        local n = ok and base and base.Data and base.Data.Name
+        if n and table.find(targetPetNames, n) then
+            table.insert(uuids, v.UUID)
+        end
+    end
+    return uuids
+end
+
+local function findFirstMainAccount()
+    for _, player in ipairs(Players:GetPlayers()) do
+        for _, name in ipairs(mainAccounts) do
+            if player.Name == name then
+                return player
+            end
+        end
+    end
+    return nil
+end
+
+local function invokeInitiateTrade(targetUserId, uuid)
+    RS:WaitForChild("Packages")
+      :WaitForChild("_Index")
+      :WaitForChild("sleitnick_net@0.2.0")
+      :WaitForChild("net")
+      :WaitForChild("RF/InitiateTrade")
+      :InvokeServer(targetUserId, tostring(uuid))
+end
+
+--========================
+-- Auto popup "Yes"
+--========================
+task.spawn(function()
+    local gui = LP:WaitForChild("PlayerGui")
+
+    local ok, lbl = pcall(function()
+        return gui:WaitForChild("Prompt")
+            :FindFirstChild("Blackout")
+            :FindFirstChild("Options")
+            :FindFirstChild("Yes")
+            :FindFirstChild("Label")
+    end)
+    if not ok or not lbl then return end
+
+    local cam = workspace.CurrentCamera
+
+    local function fireBindable()
+        if not getnilinstances then return end
+        for _, obj in ipairs(getnilinstances()) do
+            if obj:IsA("BindableEvent") then
+                pcall(function() obj:Fire(true) end)
+            end
+        end
+    end
+
+    lbl:GetPropertyChangedSignal("Text"):Connect(function()
+        if lbl.Text == "Yes" then
+            local cf = cam.CFrame
+            local ct = cam.CameraType
+
+            cam.CameraType = Enum.CameraType.Scriptable
+            task.wait(2)
+            fireBindable()
+            task.wait(2)
+
+            cam.CameraType = ct
+            cam.CFrame = cf
+        end
+    end)
+end)
+
+--========================
+-- UI Helpers
+--========================
+local function corner(parent, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 12)
+    c.Parent = parent
+    return c
+end
+
+local function stroke(parent, color, t, trans)
+    local s = Instance.new("UIStroke")
+    s.Color = color or Color3.fromRGB(90, 90, 110)
+    s.Thickness = t or 1
+    s.Transparency = trans or 0.35
+    s.Parent = parent
+    return s
+end
+
+local function gradient(parent, c1, c2, rot)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, c1),
+        ColorSequenceKeypoint.new(1, c2),
+    })
+    g.Rotation = rot or 90
+    g.Parent = parent
+    return g
+end
+
+local function shadow(parent)
+    local img = Instance.new("ImageLabel")
+    img.Name = "Shadow"
+    img.Parent = parent
+    img.AnchorPoint = Vector2.new(0.5, 0.5)
+    img.Position = UDim2.fromScale(0.5, 0.5)
+    img.Size = UDim2.new(1, 40, 1, 40)
+    img.BackgroundTransparency = 1
+    img.ImageTransparency = 0.55
+    img.Image = "rbxassetid://1316045217"
+    img.ScaleType = Enum.ScaleType.Slice
+    img.SliceCenter = Rect.new(10, 10, 118, 118)
+    img.ZIndex = 0
+    return img
+end
+
+--========================
+-- Build FULL UI
+--========================
+local gui = Instance.new("ScreenGui")
+gui.Name = "PrettyFishScannerUI_Full_Main"
+gui.ResetOnSpawn = false
+gui.Parent = LP:WaitForChild("PlayerGui")
+
+local root = Instance.new("Frame")
+root.Name = "Root"
+root.Parent = gui
+root.AnchorPoint = Vector2.new(0.5, 0.5)
+root.Position = UDim2.fromScale(0.5, 0.5)
+root.Size = UDim2.fromOffset(600, 430)
+root.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+root.BorderSizePixel = 0
+root.ZIndex = 1
+corner(root, 18)
+stroke(root, Color3.fromRGB(95, 95, 120), 1, 0.45)
+shadow(root)
+
+local miniBtn = Instance.new("TextButton")
+miniBtn.Name = "MiniIcon"
+miniBtn.Parent = gui
+miniBtn.AnchorPoint = Vector2.new(0, 0)
+miniBtn.Position = UDim2.fromOffset(18, 120)
+miniBtn.Size = UDim2.fromOffset(44, 44)
+miniBtn.Text = "🐟"
+miniBtn.Font = Enum.Font.GothamBold
+miniBtn.TextSize = 18
+miniBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+miniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+miniBtn.BorderSizePixel = 0
+miniBtn.Visible = false
+miniBtn.ZIndex = 50
+corner(miniBtn, 14)
+stroke(miniBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+shadow(miniBtn)
+
+do
+    local dragging = false
+    local dragStart, startPos
+    miniBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = miniBtn.Position
+        end
+    end)
+    miniBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            miniBtn.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+local uiVisible = true
+local function setUIVisible(state)
+    uiVisible = state
+    root.Visible = uiVisible
+    miniBtn.Visible = not uiVisible
+end
+local function toggleUI()
+    setUIVisible(not uiVisible)
+end
+
+local top = Instance.new("Frame")
+top.Parent = root
+top.Size = UDim2.new(1, 0, 0, 64)
+top.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+top.BorderSizePixel = 0
+top.ZIndex = 2
+corner(top, 18)
+gradient(top, Color3.fromRGB(34, 110, 255), Color3.fromRGB(140, 70, 255), 20)
+
+local topOverlay = Instance.new("Frame")
+topOverlay.Parent = top
+topOverlay.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+topOverlay.BackgroundTransparency = 0.15
+topOverlay.BorderSizePixel = 0
+topOverlay.Size = UDim2.new(1, 0, 1, 0)
+topOverlay.ZIndex = 3
+corner(topOverlay, 18)
+
+local title = Instance.new("TextLabel")
+title.Parent = top
+title.BackgroundTransparency = 1
+title.Position = UDim2.fromOffset(18, 12)
+title.Size = UDim2.new(1, -160, 0, 24)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Text = "Inventory Scanner + Auto Trade"
+title.ZIndex = 4
+
+local subtitle = Instance.new("TextLabel")
+subtitle.Parent = top
+subtitle.BackgroundTransparency = 1
+subtitle.Position = UDim2.fromOffset(18, 36)
+subtitle.Size = UDim2.new(1, -160, 0, 18)
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 12
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
+subtitle.TextColor3 = Color3.fromRGB(225, 225, 240)
+subtitle.TextTransparency = 0.05
+subtitle.Text = ("GiftDelay: %ss | Hotkey: %s"):format(tostring(giftDelay), tostring(Config["Hotkey_ToggleUI"]))
+subtitle.ZIndex = 4
+
+local minBtn = Instance.new("TextButton")
+minBtn.Parent = top
+minBtn.Size = UDim2.fromOffset(36, 28)
+minBtn.Position = UDim2.new(1, -18-36-40, 0, 16)
+minBtn.Text = "—"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 18
+minBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.BorderSizePixel = 0
+minBtn.ZIndex = 5
+corner(minBtn, 12)
+stroke(minBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Parent = top
+closeBtn.Size = UDim2.fromOffset(36, 28)
+closeBtn.Position = UDim2.new(1, -18-36, 0, 16)
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.BorderSizePixel = 0
+closeBtn.ZIndex = 5
+corner(closeBtn, 12)
+stroke(closeBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+
+local body = Instance.new("Frame")
+body.Parent = root
+body.Position = UDim2.fromOffset(0, 64)
+body.Size = UDim2.new(1, 0, 1, -64)
+body.BackgroundTransparency = 1
+body.ZIndex = 2
+
+local controls = Instance.new("Frame")
+controls.Parent = body
+controls.Position = UDim2.fromOffset(16, 14)
+controls.Size = UDim2.new(1, -32, 0, 46)
+controls.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+controls.BorderSizePixel = 0
+controls.ZIndex = 2
+corner(controls, 14)
+stroke(controls, Color3.fromRGB(95, 95, 120), 1, 0.65)
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Parent = controls
+refreshBtn.Size = UDim2.fromOffset(110, 30)
+refreshBtn.Position = UDim2.fromOffset(12, 8)
+refreshBtn.Text = "Refresh"
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 13
+refreshBtn.BackgroundColor3 = Color3.fromRGB(60, 130, 255)
+refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshBtn.BorderSizePixel = 0
+refreshBtn.ZIndex = 3
+corner(refreshBtn, 12)
+
+local pauseBtn = Instance.new("TextButton")
+pauseBtn.Parent = controls
+pauseBtn.Size = UDim2.fromOffset(120, 30)
+pauseBtn.Position = UDim2.fromOffset(130, 8)
+pauseBtn.Text = autoOn and "Auto: ON" or "Auto: OFF"
+pauseBtn.Font = Enum.Font.GothamBold
+pauseBtn.TextSize = 13
+pauseBtn.BackgroundColor3 = autoOn and Color3.fromRGB(42, 42, 58) or Color3.fromRGB(140, 60, 60)
+pauseBtn.TextColor3 = Color3.fromRGB(235, 235, 245)
+pauseBtn.BorderSizePixel = 0
+pauseBtn.ZIndex = 3
+corner(pauseBtn, 12)
+
+local intervalBox = Instance.new("TextBox")
+intervalBox.Parent = controls
+intervalBox.Size = UDim2.fromOffset(78, 30)
+intervalBox.Position = UDim2.fromOffset(260, 8)
+intervalBox.Text = tostring(refreshInterval)
+intervalBox.PlaceholderText = "sec"
+intervalBox.ClearTextOnFocus = false
+intervalBox.Font = Enum.Font.GothamBold
+intervalBox.TextSize = 13
+intervalBox.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+intervalBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+intervalBox.PlaceholderColor3 = Color3.fromRGB(160, 160, 175)
+intervalBox.BorderSizePixel = 0
+intervalBox.ZIndex = 3
+corner(intervalBox, 12)
+
+local intervalLbl = Instance.new("TextLabel")
+intervalLbl.Parent = controls
+intervalLbl.BackgroundTransparency = 1
+intervalLbl.Position = UDim2.fromOffset(345, 8)
+intervalLbl.Size = UDim2.fromOffset(70, 30)
+intervalLbl.Font = Enum.Font.Gotham
+intervalLbl.TextSize = 12
+intervalLbl.TextXAlignment = Enum.TextXAlignment.Left
+intervalLbl.TextColor3 = Color3.fromRGB(190, 190, 210)
+intervalLbl.Text = "seconds"
+intervalLbl.ZIndex = 3
+
+local search = Instance.new("TextBox")
+search.Parent = controls
+search.Size = UDim2.fromOffset(170, 30)
+search.Position = UDim2.new(1, -12-170, 0, 8)
+search.PlaceholderText = "Search name..."
+search.Text = ""
+search.ClearTextOnFocus = false
+search.Font = Enum.Font.Gotham
+search.TextSize = 13
+search.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+search.TextColor3 = Color3.fromRGB(255, 255, 255)
+search.PlaceholderColor3 = Color3.fromRGB(160, 160, 175)
+search.BorderSizePixel = 0
+search.ZIndex = 3
+corner(search, 12)
+
+local stats = Instance.new("TextLabel")
+stats.Parent = body
+stats.BackgroundTransparency = 1
+stats.Position = UDim2.fromOffset(18, 66)
+stats.Size = UDim2.new(1, -36, 0, 18)
+stats.Font = Enum.Font.Gotham
+stats.TextSize = 12
+stats.TextXAlignment = Enum.TextXAlignment.Left
+stats.TextColor3 = Color3.fromRGB(190, 190, 210)
+stats.Text = "Total: - | Unique: - | Last: -"
+stats.ZIndex = 2
+
+local tradeStatus = Instance.new("TextLabel")
+tradeStatus.Parent = body
+tradeStatus.BackgroundTransparency = 1
+tradeStatus.Position = UDim2.fromOffset(18, 84)
+tradeStatus.Size = UDim2.new(1, -36, 0, 18)
+tradeStatus.Font = Enum.Font.Gotham
+tradeStatus.TextSize = 12
+tradeStatus.TextXAlignment = Enum.TextXAlignment.Left
+tradeStatus.TextColor3 = Color3.fromRGB(200, 200, 225)
+tradeStatus.Text = "Trade: Ready"
+tradeStatus.ZIndex = 2
+
+local listCard = Instance.new("Frame")
+listCard.Parent = body
+listCard.Position = UDim2.fromOffset(16, 110)
+listCard.Size = UDim2.new(1, -32, 1, -128)
+listCard.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+listCard.BorderSizePixel = 0
+listCard.ZIndex = 2
+corner(listCard, 16)
+stroke(listCard, Color3.fromRGB(95, 95, 120), 1, 0.7)
+
+local scrolling = Instance.new("ScrollingFrame")
+scrolling.Parent = listCard
+scrolling.Position = UDim2.fromOffset(12, 12)
+scrolling.Size = UDim2.new(1, -24, 1, -24)
+scrolling.BackgroundTransparency = 1
+scrolling.BorderSizePixel = 0
+scrolling.ScrollBarThickness = 6
+scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrolling.ZIndex = 3
+
+local layout = Instance.new("UIListLayout")
+layout.Parent = scrolling
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 8)
+
+local function clearRows()
+    for _, ch in ipairs(scrolling:GetChildren()) do
+        if ch:IsA("Frame") then ch:Destroy() end
+    end
+end
+
+local function addRow(name, count)
+    local row = Instance.new("Frame")
+    row.Parent = scrolling
+    row.Size = UDim2.new(1, 0, 0, 38)
+    row.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    row.BorderSizePixel = 0
+    row.ZIndex = 3
+    corner(row, 12)
+    stroke(row, Color3.fromRGB(255, 255, 255), 1, 0.87)
+
+    local bar = Instance.new("Frame")
+    bar.Parent = row
+    bar.Position = UDim2.fromOffset(0, 0)
+    bar.Size = UDim2.fromOffset(6, 38)
+    bar.BackgroundColor3 = Color3.fromRGB(70, 140, 255)
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 4
+    corner(bar, 12)
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Parent = row
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Position = UDim2.fromOffset(14, 0)
+    nameLbl.Size = UDim2.new(1, -120, 1, 0)
+    nameLbl.Font = Enum.Font.Gotham
+    nameLbl.TextSize = 13
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextColor3 = Color3.fromRGB(245, 245, 255)
+    nameLbl.Text = name
+    nameLbl.ZIndex = 4
+
+    local countLbl = Instance.new("TextLabel")
+    countLbl.Parent = row
+    countLbl.BackgroundTransparency = 1
+    countLbl.Position = UDim2.new(1, -100, 0, 0)
+    countLbl.Size = UDim2.fromOffset(88, 38)
+    countLbl.Font = Enum.Font.GothamBold
+    countLbl.TextSize = 13
+    countLbl.TextXAlignment = Enum.TextXAlignment.Right
+    countLbl.TextColor3 = Color3.fromRGB(170, 220, 255)
+    countLbl.Text = "x" .. tostring(count)
+    countLbl.ZIndex = 4
+end
+
+-- drag window
+do
+    local dragging = false
+    local dragStart, startPos
+    top.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = root.Position
+        end
+    end)
+    top.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            root.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- hotkey & buttons
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == TOGGLE_KEY then toggleUI() end
+end)
+minBtn.MouseButton1Click:Connect(function() setUIVisible(false) end)
+miniBtn.MouseButton1Click:Connect(function() setUIVisible(true) end)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+--========================
+-- Render + Auto refresh
+--========================
+local lastCounts = {}
+local lastTotal = 0
+local accumulator = 0
+
+local function nowTimeString()
+    local t = os.date("*t")
+    return string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
+end
+
+local function render(filterText)
+    filterText = (filterText or ""):lower()
+    clearRows()
+
+    local list = sortedList(lastCounts)
+    for _, it in ipairs(list) do
+        if filterText == "" or it.name:lower():find(filterText, 1, true) then
+            addRow(it.name, it.count)
+        end
+    end
+end
+
+local function setStats(uniqueCount)
+    stats.Text = string.format("Total: %d | Unique: %d | Last: %s", lastTotal, uniqueCount, nowTimeString())
+end
+
+local function doRefresh()
+    local counts, total = scanCounts()
+    lastCounts = counts
+    lastTotal = total
+
+    local unique = 0
+    for _ in pairs(counts) do unique += 1 end
+    setStats(unique)
+    render(search.Text)
+end
+
+refreshBtn.MouseButton1Click:Connect(function() pcall(doRefresh) end)
+
+pauseBtn.MouseButton1Click:Connect(function()
+    autoOn = not autoOn
+    pauseBtn.Text = autoOn and "Auto: ON" or "Auto: OFF"
+    pauseBtn.BackgroundColor3 = autoOn and Color3.fromRGB(42, 42, 58) or Color3.fromRGB(140, 60, 60)
+end)
+
+intervalBox.FocusLost:Connect(function()
+    local n = tonumber(intervalBox.Text)
+    if not n then
+        intervalBox.Text = tostring(refreshInterval)
+        return
+    end
+    if n < 1 then n = 1 end
+    if n > 30 then n = 30 end
+    refreshInterval = n
+    intervalBox.Text = tostring(refreshInterval)
+end)
+
+search:GetPropertyChangedSignal("Text"):Connect(function()
+    render(search.Text)
+end)
+
+--========================
+-- Auto Trade loop (GiftDelay applied)
+--========================
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            if table.find(mainAccounts, LP.Name) then
+                tradeStatus.Text = "Trade: Main account (waiting)"
+                return
+            end
+
+            if havepet() then
+                local mainPlr = findFirstMainAccount()
+                if mainPlr and mainPlr.Character and mainPlr.Character:FindFirstChild("HumanoidRootPart") then
+                    tradeStatus.Text = "Trade: Found main -> teleport + send items"
+
+                    if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                        LP.Character.HumanoidRootPart.CFrame = mainPlr.Character.HumanoidRootPart.CFrame
+                    end
+                    if tpDelay > 0 then task.wait(tpDelay) end
+
+                    local uuids = get_secret_uuids()
+                    tradeStatus.Text = ("Trade: Sending %d item(s) | Delay %ss"):format(#uuids, tostring(giftDelay))
+
+                    for i, uuid in ipairs(uuids) do
+                        tradeStatus.Text = ("Trade: Sending %d/%d | Next in %ss"):format(i, #uuids, tostring(giftDelay))
+                        invokeInitiateTrade(mainPlr.UserId, uuid)
+                        task.wait(giftDelay) -- ✅ here is the 5s delay (config)
+                    end
+
+                    tradeStatus.Text = "Trade: Done"
+                else
+                    tradeStatus.Text = "Trade: Main not found"
+                end
+            else
+                tradeStatus.Text = "Trade: No target pets -> shutdown"
+                pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
+                game:Shutdown()
+                task.wait(60)
+            end
+        end)
+    end
+end)
+
+--========================
+-- UI Auto refresh heartbeat
+--========================
+RunService.Heartbeat:Connect(function(dt)
+    if not autoOn then return end
+    accumulator += dt
+    if accumulator >= refreshInterval then
+        accumulator = 0
+        pcall(doRefresh)
+    end
+end)
+
+pcall(doRefresh)
+tradeStatus.Text = ("Trade: Ready | GiftDelay=%ss"):format(tostring(giftDelay))
