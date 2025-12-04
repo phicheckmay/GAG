@@ -978,7 +978,7 @@ if not IS_MAIN then
 					LOG("WARN", "Không có pet target trong túi -> KICK (267)")
 					pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
 					task.wait(0.2)
-					LP:Kick("gif done (267)")
+					lp:Kick("gif done: 267")
 					return
 				end
 
