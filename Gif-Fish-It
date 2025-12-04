@@ -92,15 +92,38 @@ end
 local function scanCounts()
     local counts, total = {}, 0
     for _, v in pairs(rawItems()) do
-        local ok, base = pcall(function()
+        -- ✅ Thử nhiều cách lấy tên cá
+        local name = nil
+        
+        -- Cách 1: ItemUtil (cách cũ)
+        local ok1, base = pcall(function()
             return ItemUtil:GetItemData(v.Id)
         end)
-        local name = ok and base and base.Data and base.Data.Name
+        if ok1 and base and base.Data and base.Data.Name then
+            name = base.Data.Name
+        end
+        
+        -- Cách 2: Lấy trực tiếp từ item (nếu có)
+        if not name and v.Name then
+            name = v.Name
+        end
+        
+        -- Cách 3: Lấy từ Id (fallback)
+        if not name and v.Id then
+            name = tostring(v.Id)
+        end
+        
+        -- Debug
         if name then
+            print("[SCAN] Found fish:", name)
             counts[name] = (counts[name] or 0) + 1
             total += 1
+        else
+            print("[SCAN] Unknown item:", v.Id or "no-id", "UUID:", v.UUID or "no-uuid")
         end
     end
+    
+    print("[SCAN] Total counted:", total, "Unique:", (function() local c=0 for _ in pairs(counts) do c+=1 end return c end)())
     return counts, total
 end
 
