@@ -977,9 +977,11 @@ if not IS_MAIN then
                 if not havepet() then
 					LOG("WARN", "Không có pet target trong túi -> KICK (267)")
 					pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
-					LP:Kick("gif done: 267")
+					task.wait(0.2)
+					LP:Kick("gif done (267)")
 					return
-				end                
+				end
+
 
                 LOG("INFO", ("Đang tele đến nv MAIN (%s)..."):format(mainPlr.Name))
                 LP.Character.HumanoidRootPart.CFrame = mainPlr.Character.HumanoidRootPart.CFrame
