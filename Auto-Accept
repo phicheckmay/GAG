@@ -16,17 +16,22 @@ for k, v in pairs(DefaultConfig) do
     if Config[k] == nil then Config[k] = v end
 end
 
+--========================
+-- Services
+--========================
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local LP = Players.LocalPlayer
 
-local uiAutoOn = (Config["UI_AutoRefresh"] ~= false)
 local uiRefreshInterval = tonumber(Config["UI_RefreshSeconds"]) or 3
 if uiRefreshInterval < 1 then uiRefreshInterval = 1 end
 if uiRefreshInterval > 30 then uiRefreshInterval = 30 end
+
+local autoOn = (Config["UI_AutoRefresh"] ~= false)
 
 --========================
 -- Anti-AFK
@@ -134,15 +139,20 @@ end
 local TOGGLE_KEY = keycodeFromString(Config["Hotkey_ToggleUI"])
 
 --========================
--- MAIN UI (WHITE, BIG, PREMIUM) - FULL FIX
+-- MAIN UI (FIXED ALL)
 --========================
 local function buildMainUI()
-    -- kill old UI if re-run
     local pg = LP:WaitForChild("PlayerGui")
-    local old = pg:FindFirstChild("MAIN_PRETTY_UI")
-    if old then old:Destroy() end
-    local old2 = pg:FindFirstChild("MAIN_PRETTY_UI_MINI")
-    if old2 then old2:Destroy() end
+
+    -- cleanup old UI + old heartbeat connection
+    if getgenv().__MAIN_UI_CONN then
+        pcall(function() getgenv().__MAIN_UI_CONN:Disconnect() end)
+        getgenv().__MAIN_UI_CONN = nil
+    end
+    do
+        local old = pg:FindFirstChild("MAIN_PRETTY_UI"); if old then old:Destroy() end
+        local old2 = pg:FindFirstChild("MAIN_PRETTY_UI_MINI"); if old2 then old2:Destroy() end
+    end
 
     local function corner(parent, r)
         local c = Instance.new("UICorner")
@@ -176,13 +186,20 @@ local function buildMainUI()
         return img
     end
 
-    local function setTextStroke(lbl, thick, trans)
-        local s = Instance.new("UIStroke")
-        s.Thickness = thick or 2
-        s.Transparency = trans or 0.92
-        s.Color = Color3.fromRGB(0, 0, 0)
-        s.Parent = lbl
-        return s
+    local function mkGradient(btn, c1, c2)
+        local g = btn:FindFirstChild("G") or Instance.new("UIGradient")
+        g.Name = "G"
+        g.Rotation = 0
+        g.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, c1),
+            ColorSequenceKeypoint.new(1, c2),
+        })
+        g.Parent = btn
+        return g
+    end
+
+    local function tween(obj, props, t)
+        TweenService:Create(obj, TweenInfo.new(t or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
     end
 
     local function mkBtn(parent, text, w, h)
@@ -197,74 +214,60 @@ local function buildMainUI()
         b.TextColor3 = Color3.fromRGB(20, 30, 45)
         b.AutoButtonColor = false
         corner(b, 14)
-        stroke(b, 2, 0.92)
+        local st = stroke(b, 2, 0.92)
 
-        -- hover + press
-        local base = b.BackgroundColor3
+        -- hover/press effect without breaking gradient:
         b.MouseEnter:Connect(function()
-            b.BackgroundColor3 = Color3.fromRGB(235, 242, 255)
+            tween(st, {Transparency = 0.86}, 0.10)
+            tween(b, {BackgroundTransparency = 0.00}, 0.10)
         end)
         b.MouseLeave:Connect(function()
-            b.BackgroundColor3 = base
+            tween(st, {Transparency = 0.92}, 0.10)
+            tween(b, {BackgroundTransparency = 0.00}, 0.10)
         end)
         b.MouseButton1Down:Connect(function()
-            b.BackgroundColor3 = Color3.fromRGB(225, 235, 255)
+            tween(b, {Size = UDim2.fromOffset((w or 150) - 2, (h or 38) - 2)}, 0.06)
         end)
         b.MouseButton1Up:Connect(function()
-            b.BackgroundColor3 = Color3.fromRGB(235, 242, 255)
+            tween(b, {Size = UDim2.fromOffset(w or 150, h or 38)}, 0.08)
         end)
+
         return b
     end
 
     local function paintBtn(b, mode)
-        -- mode: "BLUE" "GREEN" "RED" "GRAY"
+        -- remove old gradient if needed
+        local oldG = b:FindFirstChild("G")
+        if oldG then oldG:Destroy() end
+
         if mode == "BLUE" then
-            b.BackgroundColor3 = Color3.fromRGB(90,160,255)
             b.TextColor3 = Color3.fromRGB(255,255,255)
-            local g = b:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient", b)
-            g.Rotation = 0
-            g.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(90,160,255)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(200,120,255)),
-            })
-            local s = b:FindFirstChildOfClass("UIStroke") or stroke(b,2,0.85)
-            s.Transparency = 0.88
+            b.BackgroundColor3 = Color3.fromRGB(90,160,255)
+            mkGradient(b, Color3.fromRGB(90,160,255), Color3.fromRGB(200,120,255))
+            local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 0.90 end
             return
         end
 
         if mode == "GREEN" then
-            b.BackgroundColor3 = Color3.fromRGB(56, 190, 120)
             b.TextColor3 = Color3.fromRGB(255,255,255)
-            local g = b:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient", b)
-            g.Rotation = 0
-            g.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 200, 120)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 220, 170)),
-            })
-            local s = b:FindFirstChildOfClass("UIStroke") or stroke(b,2,0.85)
-            s.Transparency = 0.9
+            b.BackgroundColor3 = Color3.fromRGB(40, 200, 120)
+            mkGradient(b, Color3.fromRGB(40,200,120), Color3.fromRGB(120,220,170))
+            local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 0.92 end
             return
         end
 
         if mode == "RED" then
-            b.BackgroundColor3 = Color3.fromRGB(220, 70, 70)
             b.TextColor3 = Color3.fromRGB(255,255,255)
-            local g = b:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient", b)
-            g.Rotation = 0
-            g.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(230, 80, 80)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 140)),
-            })
-            local s = b:FindFirstChildOfClass("UIStroke") or stroke(b,2,0.85)
-            s.Transparency = 0.9
+            b.BackgroundColor3 = Color3.fromRGB(230, 80, 80)
+            mkGradient(b, Color3.fromRGB(230,80,80), Color3.fromRGB(255,140,140))
+            local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 0.92 end
             return
         end
 
-        -- GRAY default
-        b.BackgroundColor3 = Color3.fromRGB(245, 248, 255)
+        -- GRAY
         b.TextColor3 = Color3.fromRGB(20,30,45)
-        local g = b:FindFirstChildOfClass("UIGradient")
-        if g then g:Destroy() end
+        b.BackgroundColor3 = Color3.fromRGB(245,248,255)
+        local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 0.92 end
     end
 
     -- MAIN GUI
@@ -287,13 +290,13 @@ local function buildMainUI()
     stroke(root, 2, 0.82)
     shadow(root, 9)
 
-    local grad = Instance.new("UIGradient")
-    grad.Rotation = 90
-    grad.Color = ColorSequence.new({
+    local bgGrad = Instance.new("UIGradient")
+    bgGrad.Rotation = 90
+    bgGrad.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(245, 248, 255)),
     })
-    grad.Parent = root
+    bgGrad.Parent = root
 
     local pad = Instance.new("UIPadding")
     pad.Parent = root
@@ -340,7 +343,6 @@ local function buildMainUI()
     title.TextColor3 = Color3.fromRGB(18, 18, 28)
     title.Text = ("INVENTORY SCANNER • %s"):format(LP.Name)
     title.ZIndex = 13
-    setTextStroke(title, 2, 0.96)
 
     local subtitle = Instance.new("TextLabel")
     subtitle.Parent = headerWrap
@@ -371,10 +373,11 @@ local function buildMainUI()
 
     local minBtn = mkBtn(btnWrap, "MIN", 84, 38)
     paintBtn(minBtn, "GRAY")
+
     local closeBtn = mkBtn(btnWrap, "CLOSE", 120, 38)
     paintBtn(closeBtn, "RED")
 
-    -- MINI ICON GUI
+    -- MINI GUI
     local miniGui = Instance.new("ScreenGui")
     miniGui.Name = "MAIN_PRETTY_UI_MINI"
     miniGui.ResetOnSpawn = false
@@ -383,7 +386,6 @@ local function buildMainUI()
 
     local miniBtn = Instance.new("TextButton")
     miniBtn.Parent = miniGui
-    miniBtn.AnchorPoint = Vector2.new(0, 0)
     miniBtn.Position = UDim2.fromOffset(18, 140)
     miniBtn.Size = UDim2.fromOffset(56, 56)
     miniBtn.Text = "🐟"
@@ -414,10 +416,7 @@ local function buildMainUI()
         UIS.InputChanged:Connect(function(input)
             if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
                 local delta = input.Position - dragStart
-                miniBtn.Position = UDim2.new(
-                    startPos.X.Scale, startPos.X.Offset + delta.X,
-                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
-                )
+                miniBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             end
         end)
     end
@@ -455,18 +454,13 @@ local function buildMainUI()
 
     local refreshBtn = mkBtn(controls, "REFRESH", 150, 40)
     paintBtn(refreshBtn, "BLUE")
-    refreshBtn.Position = UDim2.fromOffset(0, 0)
 
-    local pauseBtn = mkBtn(controls, uiAutoOn and "AUTO: ON" or "AUTO: OFF", 170, 40)
+    local pauseBtn = mkBtn(controls, "AUTO: ?", 170, 40)
     pauseBtn.Position = UDim2.fromOffset(160, 0)
 
     local function paintAuto()
-        if uiAutoOn then
-            paintBtn(pauseBtn, "GREEN")
-        else
-            paintBtn(pauseBtn, "RED")
-        end
-        pauseBtn.Text = uiAutoOn and "AUTO: ON" or "AUTO: OFF"
+        if autoOn then paintBtn(pauseBtn, "GREEN") else paintBtn(pauseBtn, "RED") end
+        pauseBtn.Text = autoOn and "AUTO: ON" or "AUTO: OFF"
     end
     paintAuto()
 
@@ -584,14 +578,12 @@ local function buildMainUI()
         bar.BorderSizePixel = 0
         bar.ZIndex = 13
         corner(bar, 16)
-
-        local barGrad = Instance.new("UIGradient")
+        local barGrad = Instance.new("UIGradient", bar)
         barGrad.Rotation = 90
         barGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 160, 255)),
             ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 120, 255)),
         })
-        barGrad.Parent = bar
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Parent = row
@@ -622,8 +614,6 @@ local function buildMainUI()
 
     local lastCounts = {}
     local accumulator = 0
-    local autoOn = uiAutoOn
-    local refreshInterval = uiRefreshInterval
 
     local function nowTimeString()
         local t = os.date("*t")
@@ -653,16 +643,14 @@ local function buildMainUI()
 
     pauseBtn.MouseButton1Click:Connect(function()
         autoOn = not autoOn
-        uiAutoOn = autoOn
         paintAuto()
     end)
 
     intervalBox.FocusLost:Connect(function()
         local n = tonumber(intervalBox.Text)
-        if not n then intervalBox.Text = tostring(refreshInterval); return end
+        if not n then intervalBox.Text = tostring(uiRefreshInterval); return end
         if n < 1 then n = 1 end
         if n > 30 then n = 30 end
-        refreshInterval = n
         uiRefreshInterval = n
         intervalBox.Text = tostring(n)
         subtitle.Text = ("AutoRefresh: %ss | Hotkey: %s"):format(tostring(uiRefreshInterval), tostring(Config["Hotkey_ToggleUI"]))
@@ -677,6 +665,10 @@ local function buildMainUI()
     closeBtn.MouseButton1Click:Connect(function()
         gui:Destroy()
         miniGui:Destroy()
+        if getgenv().__MAIN_UI_CONN then
+            pcall(function() getgenv().__MAIN_UI_CONN:Disconnect() end)
+            getgenv().__MAIN_UI_CONN = nil
+        end
     end)
 
     -- drag by header
@@ -696,15 +688,12 @@ local function buildMainUI()
         UIS.InputChanged:Connect(function(input)
             if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
                 local delta = input.Position - dragStart
-                root.Position = UDim2.new(
-                    startPos.X.Scale, startPos.X.Offset + delta.X,
-                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
-                )
+                root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             end
         end)
     end
 
-    -- hotkey toggle (✅ fixed state)
+    -- hotkey toggle (state-safe)
     UIS.InputBegan:Connect(function(input, gp)
         if gp then return end
         if input.KeyCode == TOGGLE_KEY then
@@ -712,10 +701,11 @@ local function buildMainUI()
         end
     end)
 
-    RunService.Heartbeat:Connect(function(dt)
+    -- heartbeat (store to disconnect later)
+    getgenv().__MAIN_UI_CONN = RunService.Heartbeat:Connect(function(dt)
         if not autoOn then return end
         accumulator += dt
-        if accumulator >= refreshInterval then
+        if accumulator >= uiRefreshInterval then
             accumulator = 0
             pcall(doRefresh)
         end
