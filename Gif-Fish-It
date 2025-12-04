@@ -547,31 +547,31 @@ local function buildMainUI_MODERN()
     icon.TextColor3 = Color3.fromRGB(255, 255, 255)
     icon.ZIndex = 3
 
-    -- Title
+    -- Title với tên nhân vật
     local title = Instance.new("TextLabel")
     title.Parent = header
     title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(84, 22)
-    title.Size = UDim2.new(1, -250, 0, 28)
+    title.Position = UDim2.fromOffset(84, 18)
+    title.Size = UDim2.new(1, -250, 0, 26)
     title.Font = Enum.Font.GothamBlack
-    title.TextSize = 22
+    title.TextSize = 21
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Text = "Fish Inventory Scanner"
+    title.Text = "Fish Inventory • " .. LP.Name
     title.ZIndex = 3
 
     -- Subtitle
     local subtitle = Instance.new("TextLabel")
     subtitle.Parent = header
     subtitle.BackgroundTransparency = 1
-    subtitle.Position = UDim2.fromOffset(84, 52)
-    subtitle.Size = UDim2.new(1, -250, 0, 20)
+    subtitle.Position = UDim2.fromOffset(84, 46)
+    subtitle.Size = UDim2.new(1, -250, 0, 18)
     subtitle.Font = Enum.Font.Gotham
-    subtitle.TextSize = 14
+    subtitle.TextSize = 13
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
     subtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     subtitle.TextTransparency = 0.25
-    subtitle.Text = ("Hotkey: %s | Refresh: %ds"):format(Config["Hotkey_ToggleUI"], uiRefreshInterval)
+    subtitle.Text = ("⌨ %s | 🔄 %ds"):format(Config["Hotkey_ToggleUI"], uiRefreshInterval)
     subtitle.ZIndex = 3
 
     -- Buttons header
@@ -774,7 +774,7 @@ local function buildMainUI_MODERN()
     corner(search, 12)
     stroke(search, Color3.fromRGB(200, 210, 230), 2, 0.7)
 
-    -- List card
+    -- List card - KHÔNG CÓ SCROLLING, CHỈ HIỂN THỊ TOP 5-6
     local listCard = Instance.new("Frame")
     listCard.Parent = body
     listCard.Position = UDim2.fromOffset(0, 152)
@@ -785,25 +785,21 @@ local function buildMainUI_MODERN()
     corner(listCard, 18)
     stroke(listCard, Color3.fromRGB(220, 230, 245), 2, 0.6)
 
-    local scrolling = Instance.new("ScrollingFrame")
-    scrolling.Parent = listCard
-    scrolling.Position = UDim2.fromOffset(16, 16)
-    scrolling.Size = UDim2.new(1, -32, 1, -32)
-    scrolling.BackgroundTransparency = 1
-    scrolling.BorderSizePixel = 0
-    scrolling.ScrollBarThickness = 8
-    scrolling.ScrollBarImageColor3 = Color3.fromRGB(70, 130, 255)
-    scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scrolling.ZIndex = 3
+    -- Container cho items (KHÔNG SCROLL)
+    local itemsContainer = Instance.new("Frame")
+    itemsContainer.Parent = listCard
+    itemsContainer.Position = UDim2.fromOffset(16, 16)
+    itemsContainer.Size = UDim2.new(1, -32, 1, -32)
+    itemsContainer.BackgroundTransparency = 1
+    itemsContainer.ZIndex = 3
 
     local layout = Instance.new("UIListLayout")
-    layout.Parent = scrolling
+    layout.Parent = itemsContainer
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 10)
 
     local function clearRows()
-        for _, ch in ipairs(scrolling:GetChildren()) do
+        for _, ch in ipairs(itemsContainer:GetChildren()) do
             if ch:IsA("Frame") then ch:Destroy() end
         end
     end
@@ -819,7 +815,7 @@ local function buildMainUI_MODERN()
 
     local function addRow(name, count, index)
         local row = Instance.new("Frame")
-        row.Parent = scrolling
+        row.Parent = itemsContainer
         row.Size = UDim2.new(1, 0, 0, 48)
         row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         row.BorderSizePixel = 0
@@ -890,11 +886,33 @@ local function buildMainUI_MODERN()
         filterText = (filterText or ""):lower()
         clearRows()
         local idx = 0
-        for _, it in ipairs(sortedList(lastCounts)) do
+        local sortedItems = sortedList(lastCounts)
+        
+        -- CHỈ HIỂN THỊ TOP 5-6 (hoặc ít hơn nếu filter)
+        local maxDisplay = 6
+        local displayed = 0
+        
+        for _, it in ipairs(sortedItems) do
+            if displayed >= maxDisplay then break end
+            
             if filterText == "" or it.name:lower():find(filterText, 1, true) then
                 idx = idx + 1
+                displayed = displayed + 1
                 addRow(it.name, it.count, idx)
             end
+        end
+        
+        -- Nếu không có gì để hiển thị
+        if displayed == 0 then
+            local emptyLbl = Instance.new("TextLabel")
+            emptyLbl.Parent = itemsContainer
+            emptyLbl.Size = UDim2.new(1, 0, 1, 0)
+            emptyLbl.BackgroundTransparency = 1
+            emptyLbl.Font = Enum.Font.GothamBold
+            emptyLbl.TextSize = 16
+            emptyLbl.TextColor3 = Color3.fromRGB(150, 160, 180)
+            emptyLbl.Text = filterText ~= "" and "🔍 No results found" or "📭 No fish in inventory"
+            emptyLbl.ZIndex = 4
         end
     end
 
