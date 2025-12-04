@@ -1,68 +1,10 @@
-
 pcall(function() if setfpscap then setfpscap(15) end end)
 repeat task.wait() until game:IsLoaded()
-task.wait(0.8)
 
---========================
--- CONFIG
---========================
-local DefaultConfig = {
-    ["Account Main"] = {""},
-    ["PetName"] = {""},
-    ["GiftDelay"] = 5,
-    ["TeleportDelay"] = 0.2,
-    ["UI_AutoRefresh"] = true,
-    ["UI_RefreshSeconds"] = 3,
-    ["Hotkey_ToggleUI"] = "H",
-    ["CloneLog_Show"] = true,
-    ["CloneLog_Center"] = true,
-}
-
-getgenv().Config = getgenv().Config or DefaultConfig
-local Config = getgenv().Config
-for k, v in pairs(DefaultConfig) do
-    if Config[k] == nil then Config[k] = v end
-end
-
-local mainAccounts = Config["Account Main"] or {}
-local targetPetNames = Config["PetName"] or {}
-
-local giftDelay = tonumber(Config["GiftDelay"]) or 5
-if giftDelay < 0 then giftDelay = 0 end
-local tpDelay = tonumber(Config["TeleportDelay"]) or 0
-if tpDelay < 0 then tpDelay = 0 end
-
-local uiAutoOn = (Config["UI_AutoRefresh"] ~= false)
-local uiRefreshInterval = tonumber(Config["UI_RefreshSeconds"]) or 3
-if uiRefreshInterval < 1 then uiRefreshInterval = 1 end
-if uiRefreshInterval > 30 then uiRefreshInterval = 30 end
-
---========================
--- Services
---========================
-local Players = game:GetService("Players")
-local RS = game:GetService("ReplicatedStorage")
-local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-
-local LP = Players.LocalPlayer
-local IS_MAIN = table.find(mainAccounts, LP.Name) ~= nil
-
---========================
--- Anti-AFK
---========================
-do
-    local VirtualUser = game:service("VirtualUser")
-    LP.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-end
-
-pcall(function() if setfpscap then setfpscap(15) end end)
-repeat task.wait() until game:IsLoaded()
-task.wait(0.8)
+-- ✅ THÊM DELAY 5s CHỜ GAME LOAD ỔN
+print("[FISH SCRIPT] Game loaded, chờ 5s để game ổn định...")
+task.wait(5)
+print("[FISH SCRIPT] Bắt đầu chạy script!")
 
 --========================
 -- CONFIG
@@ -262,7 +204,7 @@ task.spawn(function()
 end)
 
 --=========================================================
--- CLONE LOG UI (CENTER WHITE, 6 LINES, TOP->BOTTOM, taller)
+-- CLONE LOG UI (CENTER WHITE)
 --=========================================================
 local CloneLog = nil
 
@@ -277,7 +219,7 @@ local function createCloneLogCenter()
     root.Parent = gui
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = UDim2.fromOffset(850, 340) -- ✅ taller
+    root.Size = UDim2.fromOffset(850, 340)
     root.BorderSizePixel = 0
     root.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     root.BackgroundTransparency = 0.02
@@ -352,12 +294,11 @@ local function createCloneLogCenter()
     line.BackgroundTransparency = 0.88
     line.ZIndex = 1000
 
-    -- container for 6 lines
     local box = Instance.new("Frame")
     box.Parent = root
     box.BackgroundTransparency = 1
     box.Position = UDim2.fromOffset(0, 78)
-    box.Size = UDim2.new(1, 0, 1, -88) -- ✅ a bit more room
+    box.Size = UDim2.new(1, 0, 1, -88)
     box.ZIndex = 1000
 
     local layout = Instance.new("UIListLayout")
@@ -365,28 +306,6 @@ local function createCloneLogCenter()
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 10)
 
-    -- accent bottom bar (hidden because bạn bảo khó nhìn)
-    local accent = Instance.new("Frame")
-    accent.Parent = root
-    accent.AnchorPoint = Vector2.new(0, 1)
-    accent.Position = UDim2.new(0, 0, 1, 0)
-    accent.Size = UDim2.new(1, 0, 0, 10)
-    accent.BorderSizePixel = 0
-    accent.BackgroundColor3 = Color3.fromRGB(120, 150, 255)
-    accent.ZIndex = 1001
-    local acr = Instance.new("UICorner")
-    acr.CornerRadius = UDim.new(0, 30)
-    acr.Parent = accent
-    local ag = Instance.new("UIGradient")
-    ag.Rotation = 0
-    ag.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 160, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 120, 255)),
-    })
-    ag.Parent = accent
-    accent.Visible = false -- ✅ tắt hẳn thanh xanh
-
-    -- create 6 line labels (TOP->BOTTOM)
     local lines = {}
     for i = 1, 6 do
         local lbl = Instance.new("TextLabel")
@@ -411,7 +330,6 @@ local function createCloneLogCenter()
         lines[i] = lbl
     end
 
-    -- buffer store (we append; newest at end)
     local buffer = {}
 
     local colorMap = {
@@ -423,8 +341,6 @@ local function createCloneLogCenter()
 
     local function render(kind)
         local c = colorMap[kind] or colorMap.INFO
-
-        -- show last 6 lines in natural order (oldest->newest)
         local startIndex = math.max(1, #buffer - 6 + 1)
 
         for i = 1, 6 do
@@ -436,16 +352,13 @@ local function createCloneLogCenter()
 
     local function push(kind, msg)
         local text = ("[%s] %s"):format(nowTS(), msg)
-
-        buffer[#buffer + 1] = text -- ✅ append cuối (đúng thứ tự)
+        buffer[#buffer + 1] = text
         if #buffer > 200 then
             table.remove(buffer, 1)
         end
-
         render(kind)
     end
 
-    -- intro animation
     root.Size = UDim2.fromOffset(800, 320)
     root.BackgroundTransparency = 0.08
     TweenService:Create(root, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -474,7 +387,7 @@ if (not IS_MAIN) and (Config["CloneLog_Show"] ~= false) then
 end
 
 --=========================================================
--- MAIN UI FULL (ONLY MAIN)
+-- ✅ MAIN UI MỚI - DESIGN HIỆN ĐẠI, NỀN TRẮNG, CHỮ MÀU
 --=========================================================
 local function keycodeFromString(s)
     if typeof(s) ~= "string" then return Enum.KeyCode.H end
@@ -491,41 +404,33 @@ local function keycodeFromString(s)
 end
 local TOGGLE_KEY = keycodeFromString(Config["Hotkey_ToggleUI"])
 
-local function buildMainUI_FULL()
-    -- UI Helpers
+local function buildMainUI_MODERN()
+    -- Helper functions
     local function corner(parent, r)
         local c = Instance.new("UICorner")
         c.CornerRadius = UDim.new(0, r or 12)
         c.Parent = parent
         return c
     end
+    
     local function stroke(parent, color, t, trans)
         local s = Instance.new("UIStroke")
-        s.Color = color or Color3.fromRGB(90, 90, 110)
-        s.Thickness = t or 1
-        s.Transparency = trans or 0.35
+        s.Color = color or Color3.fromRGB(200, 200, 210)
+        s.Thickness = t or 2
+        s.Transparency = trans or 0.7
         s.Parent = parent
         return s
     end
-    local function gradient(parent, c1, c2, rot)
-        local g = Instance.new("UIGradient")
-        g.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, c1),
-            ColorSequenceKeypoint.new(1, c2),
-        })
-        g.Rotation = rot or 90
-        g.Parent = parent
-        return g
-    end
+    
     local function shadow(parent)
         local img = Instance.new("ImageLabel")
         img.Name = "Shadow"
         img.Parent = parent
         img.AnchorPoint = Vector2.new(0.5, 0.5)
         img.Position = UDim2.fromScale(0.5, 0.5)
-        img.Size = UDim2.new(1, 40, 1, 40)
+        img.Size = UDim2.new(1, 50, 1, 50)
         img.BackgroundTransparency = 1
-        img.ImageTransparency = 0.55
+        img.ImageTransparency = 0.75
         img.Image = "rbxassetid://1316045217"
         img.ScaleType = Enum.ScaleType.Slice
         img.SliceCenter = Rect.new(10, 10, 118, 118)
@@ -534,41 +439,52 @@ local function buildMainUI_FULL()
     end
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "PrettyFishScannerUI_MAIN"
+    gui.Name = "ModernFishUI"
     gui.ResetOnSpawn = false
     gui.Parent = LP:WaitForChild("PlayerGui")
 
+    -- Main container - NỀN TRẮNG
     local root = Instance.new("Frame")
     root.Name = "Root"
     root.Parent = gui
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = UDim2.fromOffset(600, 430)
-    root.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    root.Size = UDim2.fromOffset(700, 520)
+    root.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     root.BorderSizePixel = 0
     root.ZIndex = 1
-    corner(root, 18)
-    stroke(root, Color3.fromRGB(95, 95, 120), 1, 0.45)
+    corner(root, 24)
+    stroke(root, Color3.fromRGB(220, 220, 230), 2, 0.5)
     shadow(root)
 
+    -- Gradient overlay nhẹ
+    local bgGrad = Instance.new("UIGradient")
+    bgGrad.Rotation = 135
+    bgGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(245, 248, 255)),
+    })
+    bgGrad.Parent = root
+
+    -- Mini button
     local miniBtn = Instance.new("TextButton")
     miniBtn.Name = "MiniIcon"
     miniBtn.Parent = gui
-    miniBtn.AnchorPoint = Vector2.new(0, 0)
-    miniBtn.Position = UDim2.fromOffset(18, 120)
-    miniBtn.Size = UDim2.fromOffset(44, 44)
+    miniBtn.Position = UDim2.fromOffset(20, 120)
+    miniBtn.Size = UDim2.fromOffset(56, 56)
     miniBtn.Text = "🐟"
     miniBtn.Font = Enum.Font.GothamBold
-    miniBtn.TextSize = 18
-    miniBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    miniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    miniBtn.TextSize = 24
+    miniBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    miniBtn.TextColor3 = Color3.fromRGB(70, 130, 255)
     miniBtn.BorderSizePixel = 0
     miniBtn.Visible = false
     miniBtn.ZIndex = 50
-    corner(miniBtn, 14)
-    stroke(miniBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+    corner(miniBtn, 18)
+    stroke(miniBtn, Color3.fromRGB(70, 130, 255), 2, 0.5)
     shadow(miniBtn)
 
+    -- Drag mini button
     do
         local dragging = false
         local dragStart, startPos
@@ -601,190 +517,282 @@ local function buildMainUI_FULL()
     end
     local function toggleUI() setUIVisible(not uiVisible) end
 
-    local top = Instance.new("Frame")
-    top.Parent = root
-    top.Size = UDim2.new(1, 0, 0, 64)
-    top.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
-    top.BorderSizePixel = 0
-    top.ZIndex = 2
-    corner(top, 18)
-    gradient(top, Color3.fromRGB(34, 110, 255), Color3.fromRGB(140, 70, 255), 20)
+    -- Header với gradient màu
+    local header = Instance.new("Frame")
+    header.Parent = root
+    header.Size = UDim2.new(1, 0, 0, 90)
+    header.BackgroundColor3 = Color3.fromRGB(70, 130, 255)
+    header.BorderSizePixel = 0
+    header.ZIndex = 2
+    corner(header, 24)
 
-    local topOverlay = Instance.new("Frame")
-    topOverlay.Parent = top
-    topOverlay.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    topOverlay.BackgroundTransparency = 0.15
-    topOverlay.BorderSizePixel = 0
-    topOverlay.Size = UDim2.new(1, 0, 1, 0)
-    topOverlay.ZIndex = 3
-    corner(topOverlay, 18)
+    local headerGrad = Instance.new("UIGradient")
+    headerGrad.Rotation = 45
+    headerGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 130, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(100, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 100, 255)),
+    })
+    headerGrad.Parent = header
 
+    -- Icon lớn
+    local icon = Instance.new("TextLabel")
+    icon.Parent = header
+    icon.BackgroundTransparency = 1
+    icon.Position = UDim2.fromOffset(24, 20)
+    icon.Size = UDim2.fromOffset(50, 50)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 36
+    icon.Text = "🎣"
+    icon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    icon.ZIndex = 3
+
+    -- Title
     local title = Instance.new("TextLabel")
-    title.Parent = top
+    title.Parent = header
     title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(18, 12)
-    title.Size = UDim2.new(1, -160, 0, 24)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 18
+    title.Position = UDim2.fromOffset(84, 22)
+    title.Size = UDim2.new(1, -250, 0, 28)
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 22
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Text = "MAIN Inventory Scanner"
-    title.ZIndex = 4
+    title.Text = "Fish Inventory Scanner"
+    title.ZIndex = 3
 
+    -- Subtitle
     local subtitle = Instance.new("TextLabel")
-    subtitle.Parent = top
+    subtitle.Parent = header
     subtitle.BackgroundTransparency = 1
-    subtitle.Position = UDim2.fromOffset(18, 36)
-    subtitle.Size = UDim2.new(1, -160, 0, 18)
+    subtitle.Position = UDim2.fromOffset(84, 52)
+    subtitle.Size = UDim2.new(1, -250, 0, 20)
     subtitle.Font = Enum.Font.Gotham
-    subtitle.TextSize = 12
+    subtitle.TextSize = 14
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    subtitle.TextColor3 = Color3.fromRGB(225, 225, 240)
-    subtitle.TextTransparency = 0.05
-    subtitle.Text = ("Hotkey: %s | AutoRefresh: %ss"):format(tostring(Config["Hotkey_ToggleUI"]), tostring(uiRefreshInterval))
-    subtitle.ZIndex = 4
+    subtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    subtitle.TextTransparency = 0.25
+    subtitle.Text = ("Hotkey: %s | Refresh: %ds"):format(Config["Hotkey_ToggleUI"], uiRefreshInterval)
+    subtitle.ZIndex = 3
 
+    -- Buttons header
     local minBtn = Instance.new("TextButton")
-    minBtn.Parent = top
-    minBtn.Size = UDim2.fromOffset(36, 28)
-    minBtn.Position = UDim2.new(1, -18-36-40, 0, 16)
+    minBtn.Parent = header
+    minBtn.Size = UDim2.fromOffset(40, 32)
+    minBtn.Position = UDim2.new(1, -24-40-48, 0, 29)
     minBtn.Text = "—"
     minBtn.Font = Enum.Font.GothamBold
-    minBtn.TextSize = 18
-    minBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    minBtn.TextSize = 20
+    minBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    minBtn.BackgroundTransparency = 0.15
     minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     minBtn.BorderSizePixel = 0
-    minBtn.ZIndex = 5
-    corner(minBtn, 12)
-    stroke(minBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+    minBtn.ZIndex = 3
+    corner(minBtn, 10)
 
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Parent = top
-    closeBtn.Size = UDim2.fromOffset(36, 28)
-    closeBtn.Position = UDim2.new(1, -18-36, 0, 16)
+    closeBtn.Parent = header
+    closeBtn.Size = UDim2.fromOffset(40, 32)
+    closeBtn.Position = UDim2.new(1, -24-40, 0, 29)
     closeBtn.Text = "✕"
     closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 14
-    closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    closeBtn.TextSize = 16
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.BackgroundTransparency = 0.15
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.BorderSizePixel = 0
-    closeBtn.ZIndex = 5
-    corner(closeBtn, 12)
-    stroke(closeBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
+    closeBtn.ZIndex = 3
+    corner(closeBtn, 10)
 
+    -- Body
     local body = Instance.new("Frame")
     body.Parent = root
-    body.Position = UDim2.fromOffset(0, 64)
-    body.Size = UDim2.new(1, 0, 1, -64)
+    body.Position = UDim2.fromOffset(0, 90)
+    body.Size = UDim2.new(1, 0, 1, -90)
     body.BackgroundTransparency = 1
     body.ZIndex = 2
 
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 24)
+    padding.PaddingRight = UDim.new(0, 24)
+    padding.PaddingTop = UDim.new(0, 20)
+    padding.PaddingBottom = UDim.new(0, 24)
+    padding.Parent = body
+
+    -- Stats card với màu sắc
+    local statsCard = Instance.new("Frame")
+    statsCard.Parent = body
+    statsCard.Size = UDim2.new(1, 0, 0, 70)
+    statsCard.BackgroundColor3 = Color3.fromRGB(250, 252, 255)
+    statsCard.BorderSizePixel = 0
+    statsCard.ZIndex = 2
+    corner(statsCard, 16)
+    stroke(statsCard, Color3.fromRGB(70, 130, 255), 2, 0.85)
+
+    local statsLayout = Instance.new("UIListLayout")
+    statsLayout.Parent = statsCard
+    statsLayout.FillDirection = Enum.FillDirection.Horizontal
+    statsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    statsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    statsLayout.Padding = UDim.new(0, 40)
+
+    local function createStatItem(emoji, label, value)
+        local container = Instance.new("Frame")
+        container.Parent = statsCard
+        container.Size = UDim2.fromOffset(150, 50)
+        container.BackgroundTransparency = 1
+        container.ZIndex = 3
+
+        local emojiLbl = Instance.new("TextLabel")
+        emojiLbl.Parent = container
+        emojiLbl.BackgroundTransparency = 1
+        emojiLbl.Size = UDim2.fromOffset(40, 40)
+        emojiLbl.Position = UDim2.fromOffset(0, 5)
+        emojiLbl.Font = Enum.Font.GothamBold
+        emojiLbl.TextSize = 28
+        emojiLbl.Text = emoji
+        emojiLbl.ZIndex = 4
+
+        local labelTxt = Instance.new("TextLabel")
+        labelTxt.Parent = container
+        labelTxt.BackgroundTransparency = 1
+        labelTxt.Position = UDim2.fromOffset(48, 8)
+        labelTxt.Size = UDim2.fromOffset(100, 16)
+        labelTxt.Font = Enum.Font.Gotham
+        labelTxt.TextSize = 12
+        labelTxt.TextXAlignment = Enum.TextXAlignment.Left
+        labelTxt.TextColor3 = Color3.fromRGB(100, 120, 150)
+        labelTxt.Text = label
+        labelTxt.ZIndex = 4
+
+        local valueTxt = Instance.new("TextLabel")
+        valueTxt.Parent = container
+        valueTxt.BackgroundTransparency = 1
+        valueTxt.Position = UDim2.fromOffset(48, 26)
+        valueTxt.Size = UDim2.fromOffset(100, 20)
+        valueTxt.Font = Enum.Font.GothamBold
+        valueTxt.TextSize = 18
+        valueTxt.TextXAlignment = Enum.TextXAlignment.Left
+        valueTxt.TextColor3 = Color3.fromRGB(30, 40, 60)
+        valueTxt.Text = value
+        valueTxt.ZIndex = 4
+
+        return valueTxt
+    end
+
+    local totalStat = createStatItem("📦", "Total Fish", "0")
+    local uniqueStat = createStatItem("🐠", "Unique Types", "0")
+    local timeStat = createStatItem("⏰", "Last Update", "--:--:--")
+
+    -- Controls
     local controls = Instance.new("Frame")
     controls.Parent = body
-    controls.Position = UDim2.fromOffset(16, 14)
-    controls.Size = UDim2.new(1, -32, 0, 46)
-    controls.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-    controls.BorderSizePixel = 0
+    controls.Position = UDim2.fromOffset(0, 85)
+    controls.Size = UDim2.new(1, 0, 0, 52)
+    controls.BackgroundTransparency = 1
     controls.ZIndex = 2
-    corner(controls, 14)
-    stroke(controls, Color3.fromRGB(95, 95, 120), 1, 0.65)
 
-    local refreshBtn = Instance.new("TextButton")
-    refreshBtn.Parent = controls
-    refreshBtn.Size = UDim2.fromOffset(110, 30)
-    refreshBtn.Position = UDim2.fromOffset(12, 8)
-    refreshBtn.Text = "Refresh"
-    refreshBtn.Font = Enum.Font.GothamBold
-    refreshBtn.TextSize = 13
-    refreshBtn.BackgroundColor3 = Color3.fromRGB(60, 130, 255)
-    refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    refreshBtn.BorderSizePixel = 0
-    refreshBtn.ZIndex = 3
-    corner(refreshBtn, 12)
+    local controlsLayout = Instance.new("UIListLayout")
+    controlsLayout.Parent = controls
+    controlsLayout.FillDirection = Enum.FillDirection.Horizontal
+    controlsLayout.Padding = UDim.new(0, 12)
 
+    local function createButton(text, color1, color2)
+        local btn = Instance.new("TextButton")
+        btn.Parent = controls
+        btn.Size = UDim2.fromOffset(140, 42)
+        btn.Text = text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        btn.BackgroundColor3 = color1
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.BorderSizePixel = 0
+        btn.ZIndex = 3
+        corner(btn, 12)
+        
+        local btnGrad = Instance.new("UIGradient")
+        btnGrad.Rotation = 90
+        btnGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, color1),
+            ColorSequenceKeypoint.new(1, color2),
+        })
+        btnGrad.Parent = btn
+        
+        return btn
+    end
+
+    local refreshBtn = createButton("🔄 Refresh", Color3.fromRGB(70, 150, 255), Color3.fromRGB(50, 120, 230))
+    
     local pauseBtn = Instance.new("TextButton")
     pauseBtn.Parent = controls
-    pauseBtn.Size = UDim2.fromOffset(120, 30)
-    pauseBtn.Position = UDim2.fromOffset(130, 8)
-    pauseBtn.Text = uiAutoOn and "Auto: ON" or "Auto: OFF"
+    pauseBtn.Size = UDim2.fromOffset(140, 42)
+    pauseBtn.Text = uiAutoOn and "✓ Auto: ON" or "✕ Auto: OFF"
     pauseBtn.Font = Enum.Font.GothamBold
-    pauseBtn.TextSize = 13
-    pauseBtn.BackgroundColor3 = uiAutoOn and Color3.fromRGB(42, 42, 58) or Color3.fromRGB(140, 60, 60)
-    pauseBtn.TextColor3 = Color3.fromRGB(235, 235, 245)
+    pauseBtn.TextSize = 14
+    pauseBtn.BackgroundColor3 = uiAutoOn and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(200, 80, 80)
+    pauseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     pauseBtn.BorderSizePixel = 0
     pauseBtn.ZIndex = 3
     corner(pauseBtn, 12)
 
     local intervalBox = Instance.new("TextBox")
     intervalBox.Parent = controls
-    intervalBox.Size = UDim2.fromOffset(78, 30)
-    intervalBox.Position = UDim2.fromOffset(260, 8)
+    intervalBox.Size = UDim2.fromOffset(80, 42)
     intervalBox.Text = tostring(uiRefreshInterval)
     intervalBox.ClearTextOnFocus = false
     intervalBox.Font = Enum.Font.GothamBold
-    intervalBox.TextSize = 13
-    intervalBox.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-    intervalBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    intervalBox.TextSize = 16
+    intervalBox.BackgroundColor3 = Color3.fromRGB(245, 247, 252)
+    intervalBox.TextColor3 = Color3.fromRGB(40, 60, 90)
     intervalBox.BorderSizePixel = 0
     intervalBox.ZIndex = 3
     corner(intervalBox, 12)
+    stroke(intervalBox, Color3.fromRGB(200, 210, 230), 2, 0.7)
 
     local intervalLbl = Instance.new("TextLabel")
     intervalLbl.Parent = controls
     intervalLbl.BackgroundTransparency = 1
-    intervalLbl.Position = UDim2.fromOffset(345, 8)
-    intervalLbl.Size = UDim2.fromOffset(70, 30)
+    intervalLbl.Size = UDim2.fromOffset(80, 42)
     intervalLbl.Font = Enum.Font.Gotham
-    intervalLbl.TextSize = 12
+    intervalLbl.TextSize = 13
     intervalLbl.TextXAlignment = Enum.TextXAlignment.Left
-    intervalLbl.TextColor3 = Color3.fromRGB(190, 190, 210)
+    intervalLbl.TextColor3 = Color3.fromRGB(100, 120, 150)
     intervalLbl.Text = "seconds"
     intervalLbl.ZIndex = 3
 
     local search = Instance.new("TextBox")
     search.Parent = controls
-    search.Size = UDim2.fromOffset(170, 30)
-    search.Position = UDim2.new(1, -12-170, 0, 8)
-    search.PlaceholderText = "Search name..."
+    search.Size = UDim2.fromOffset(180, 42)
+    search.PlaceholderText = "🔍 Search..."
     search.Text = ""
     search.ClearTextOnFocus = false
     search.Font = Enum.Font.Gotham
-    search.TextSize = 13
-    search.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-    search.TextColor3 = Color3.fromRGB(255, 255, 255)
+    search.TextSize = 14
+    search.BackgroundColor3 = Color3.fromRGB(245, 247, 252)
+    search.TextColor3 = Color3.fromRGB(40, 60, 90)
     search.BorderSizePixel = 0
     search.ZIndex = 3
     corner(search, 12)
+    stroke(search, Color3.fromRGB(200, 210, 230), 2, 0.7)
 
-    local stats = Instance.new("TextLabel")
-    stats.Parent = body
-    stats.BackgroundTransparency = 1
-    stats.Position = UDim2.fromOffset(18, 66)
-    stats.Size = UDim2.new(1, -36, 0, 18)
-    stats.Font = Enum.Font.Gotham
-    stats.TextSize = 12
-    stats.TextXAlignment = Enum.TextXAlignment.Left
-    stats.TextColor3 = Color3.fromRGB(190, 190, 210)
-    stats.Text = "Total: - | Unique: - | Last: -"
-    stats.ZIndex = 2
-
+    -- List card
     local listCard = Instance.new("Frame")
     listCard.Parent = body
-    listCard.Position = UDim2.fromOffset(16, 90)
-    listCard.Size = UDim2.new(1, -32, 1, -108)
-    listCard.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    listCard.Position = UDim2.fromOffset(0, 152)
+    listCard.Size = UDim2.new(1, 0, 1, -152)
+    listCard.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
     listCard.BorderSizePixel = 0
     listCard.ZIndex = 2
-    corner(listCard, 16)
-    stroke(listCard, Color3.fromRGB(95, 95, 120), 1, 0.7)
+    corner(listCard, 18)
+    stroke(listCard, Color3.fromRGB(220, 230, 245), 2, 0.6)
 
     local scrolling = Instance.new("ScrollingFrame")
     scrolling.Parent = listCard
-    scrolling.Position = UDim2.fromOffset(12, 12)
-    scrolling.Size = UDim2.new(1, -24, 1, -24)
+    scrolling.Position = UDim2.fromOffset(16, 16)
+    scrolling.Size = UDim2.new(1, -32, 1, -32)
     scrolling.BackgroundTransparency = 1
     scrolling.BorderSizePixel = 0
-    scrolling.ScrollBarThickness = 6
+    scrolling.ScrollBarThickness = 8
+    scrolling.ScrollBarImageColor3 = Color3.fromRGB(70, 130, 255)
     scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
     scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
     scrolling.ZIndex = 3
@@ -792,7 +800,7 @@ local function buildMainUI_FULL()
     local layout = Instance.new("UIListLayout")
     layout.Parent = scrolling
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 8)
+    layout.Padding = UDim.new(0, 10)
 
     local function clearRows()
         for _, ch in ipairs(scrolling:GetChildren()) do
@@ -800,48 +808,71 @@ local function buildMainUI_FULL()
         end
     end
 
-    local function addRow(name, count)
+    -- Color palette cho các row
+    local colors = {
+        Color3.fromRGB(100, 150, 255),
+        Color3.fromRGB(255, 120, 150),
+        Color3.fromRGB(150, 200, 100),
+        Color3.fromRGB(255, 180, 80),
+        Color3.fromRGB(180, 130, 255),
+    }
+
+    local function addRow(name, count, index)
         local row = Instance.new("Frame")
         row.Parent = scrolling
-        row.Size = UDim2.new(1, 0, 0, 38)
-        row.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+        row.Size = UDim2.new(1, 0, 0, 48)
+        row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         row.BorderSizePixel = 0
         row.ZIndex = 3
-        corner(row, 12)
-        stroke(row, Color3.fromRGB(255, 255, 255), 1, 0.87)
+        corner(row, 14)
+        stroke(row, Color3.fromRGB(230, 235, 245), 2, 0.5)
 
-        local bar = Instance.new("Frame")
-        bar.Parent = row
-        bar.Position = UDim2.fromOffset(0, 0)
-        bar.Size = UDim2.fromOffset(6, 38)
-        bar.BackgroundColor3 = Color3.fromRGB(70, 140, 255)
-        bar.BorderSizePixel = 0
-        bar.ZIndex = 4
-        corner(bar, 12)
+        local colorBar = Instance.new("Frame")
+        colorBar.Parent = row
+        colorBar.Size = UDim2.fromOffset(8, 48)
+        colorBar.BackgroundColor3 = colors[(index % #colors) + 1]
+        colorBar.BorderSizePixel = 0
+        colorBar.ZIndex = 4
+        corner(colorBar, 14)
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Parent = row
         nameLbl.BackgroundTransparency = 1
-        nameLbl.Position = UDim2.fromOffset(14, 0)
-        nameLbl.Size = UDim2.new(1, -120, 1, 0)
-        nameLbl.Font = Enum.Font.Gotham
-        nameLbl.TextSize = 13
+        nameLbl.Position = UDim2.fromOffset(24, 0)
+        nameLbl.Size = UDim2.new(1, -140, 1, 0)
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextSize = 15
         nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-        nameLbl.TextColor3 = Color3.fromRGB(245, 245, 255)
-        nameLbl.Text = name
+        nameLbl.TextColor3 = Color3.fromRGB(30, 40, 60)
+        nameLbl.Text = "🐟 " .. name
         nameLbl.ZIndex = 4
 
+        local countBadge = Instance.new("Frame")
+        countBadge.Parent = row
+        countBadge.Position = UDim2.new(1, -110, 0.5, -16)
+        countBadge.Size = UDim2.fromOffset(95, 32)
+        countBadge.BackgroundColor3 = Color3.fromRGB(70, 130, 255)
+        countBadge.BorderSizePixel = 0
+        countBadge.ZIndex = 4
+        corner(countBadge, 10)
+
+        local badgeGrad = Instance.new("UIGradient")
+        badgeGrad.Rotation = 90
+        badgeGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 130, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 160, 255)),
+        })
+        badgeGrad.Parent = countBadge
+
         local countLbl = Instance.new("TextLabel")
-        countLbl.Parent = row
+        countLbl.Parent = countBadge
         countLbl.BackgroundTransparency = 1
-        countLbl.Position = UDim2.new(1, -100, 0, 0)
-        countLbl.Size = UDim2.fromOffset(88, 38)
+        countLbl.Size = UDim2.new(1, 0, 1, 0)
         countLbl.Font = Enum.Font.GothamBold
-        countLbl.TextSize = 13
-        countLbl.TextXAlignment = Enum.TextXAlignment.Right
-        countLbl.TextColor3 = Color3.fromRGB(170, 220, 255)
-        countLbl.Text = "x" .. tostring(count)
-        countLbl.ZIndex = 4
+        countLbl.TextSize = 16
+        countLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        countLbl.Text = "✕ " .. tostring(count)
+        countLbl.ZIndex = 5
     end
 
     local lastCounts = {}
@@ -858,9 +889,11 @@ local function buildMainUI_FULL()
     local function render(filterText)
         filterText = (filterText or ""):lower()
         clearRows()
+        local idx = 0
         for _, it in ipairs(sortedList(lastCounts)) do
             if filterText == "" or it.name:lower():find(filterText, 1, true) then
-                addRow(it.name, it.count)
+                idx = idx + 1
+                addRow(it.name, it.count, idx)
             end
         end
     end
@@ -871,15 +904,19 @@ local function buildMainUI_FULL()
         lastTotal = total
         local unique = 0
         for _ in pairs(counts) do unique += 1 end
-        stats.Text = string.format("Total: %d | Unique: %d | Last: %s", lastTotal, unique, nowTimeString())
+        
+        totalStat.Text = tostring(lastTotal)
+        uniqueStat.Text = tostring(unique)
+        timeStat.Text = nowTimeString()
+        
         render(search.Text)
     end
 
     refreshBtn.MouseButton1Click:Connect(function() pcall(doRefresh) end)
     pauseBtn.MouseButton1Click:Connect(function()
         autoOn = not autoOn
-        pauseBtn.Text = autoOn and "Auto: ON" or "Auto: OFF"
-        pauseBtn.BackgroundColor3 = autoOn and Color3.fromRGB(42, 42, 58) or Color3.fromRGB(140, 60, 60)
+        pauseBtn.Text = autoOn and "✓ Auto: ON" or "✕ Auto: OFF"
+        pauseBtn.BackgroundColor3 = autoOn and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(200, 80, 80)
     end)
 
     intervalBox.FocusLost:Connect(function()
@@ -899,18 +936,18 @@ local function buildMainUI_FULL()
     miniBtn.MouseButton1Click:Connect(function() setUIVisible(true) end)
     closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
-    -- drag window
+    -- Drag window
     do
         local dragging = false
         local dragStart, startPos
-        top.InputBegan:Connect(function(input)
+        header.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
                 dragStart = input.Position
                 startPos = root.Position
             end
         end)
-        top.InputEnded:Connect(function(input)
+        header.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
         end)
         UIS.InputChanged:Connect(function(input)
@@ -942,21 +979,20 @@ local function buildMainUI_FULL()
 end
 
 if IS_MAIN then
-    buildMainUI_FULL()
+    buildMainUI_MODERN()
 end
 
 --=========================================================
--- CLONE TRADE LOOP (LOG FULL STEPS)
+-- ✅ CLONE TRADE LOOP (FIXED - KHÔNG KICK SỚM)
 --=========================================================
 if not IS_MAIN then
     task.spawn(function()
         local lastNotFound = 0
-        local isGifting = false  -- ✅ Thêm flag để track đang gift
+        local isGifting = false
         LOG("INFO", "Bắt đầu vòng lặp clone...")
 
         while task.wait(1) do
             local ok, err = pcall(function()
-                -- ✅ Nếu đang gift thì SKIP vòng này
                 if isGifting then
                     LOG("INFO", "Đang trong quá trình gift, bỏ qua check...")
                     return
@@ -988,7 +1024,6 @@ if not IS_MAIN then
                     return
                 end
 
-                -- ✅ BẮT ĐẦU GIFT - BẬT FLAG
                 isGifting = true
 
                 LOG("INFO", ("Đang tele đến nv MAIN (%s)..."):format(mainPlr.Name))
@@ -998,7 +1033,7 @@ if not IS_MAIN then
                 local items = buildTargetUUIDsWithNames()
                 if #items == 0 then
                     LOG("WARN", "List pet target rỗng -> chờ vòng sau")
-                    isGifting = false  -- ✅ TẮT FLAG
+                    isGifting = false
                     return
                 end
 
@@ -1011,15 +1046,12 @@ if not IS_MAIN then
                 end
 
                 LOG("OK", "Hoàn tất gửi tất cả Gif.")
-                
-                -- ✅ KẾT THÚC GIFT - TẮT FLAG
                 isGifting = false
-                
                 task.wait(2)
             end)
 
             if not ok then
-                isGifting = false  -- ✅ Có lỗi cũng phải tắt flag
+                isGifting = false
                 LOG("ERR", ("Lỗi vòng trade: %s"):format(tostring(err)))
             end
         end
