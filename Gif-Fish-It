@@ -979,10 +979,7 @@ if not IS_MAIN then
 					pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
 					LP:Kick("gif done: 267")
 					return
-				end
-
-
-                end
+				end                
 
                 LOG("INFO", ("Đang tele đến nv MAIN (%s)..."):format(mainPlr.Name))
                 LP.Character.HumanoidRootPart.CFrame = mainPlr.Character.HumanoidRootPart.CFrame
