@@ -1,3 +1,4 @@
+
 pcall(function() if setfpscap then setfpscap(15) end end)
 repeat task.wait() until game:IsLoaded()
 task.wait(0.8)
@@ -6,15 +7,15 @@ task.wait(0.8)
 -- CONFIG
 --========================
 local DefaultConfig = {
-    ["Account Main"] = {"AlfredShopOfficial"},
-    ["PetName"] = {"Megalodon","Robot Kraken","Worm Fish","Ghost Shark"},
+    ["Account Main"] = {""},
+    ["PetName"] = {""},
     ["GiftDelay"] = 5,
     ["TeleportDelay"] = 0.2,
     ["UI_AutoRefresh"] = true,
     ["UI_RefreshSeconds"] = 3,
     ["Hotkey_ToggleUI"] = "H",
-    ["CloneLog_MaxLines"] = 30,
-    ["CloneLog_Position"] = "TopRight",
+    ["CloneLog_Show"] = true,
+    ["CloneLog_Center"] = true,
 }
 
 getgenv().Config = getgenv().Config or DefaultConfig
@@ -43,6 +44,68 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local LP = Players.LocalPlayer
+local IS_MAIN = table.find(mainAccounts, LP.Name) ~= nil
+
+--========================
+-- Anti-AFK
+--========================
+do
+    local VirtualUser = game:service("VirtualUser")
+    LP.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
+
+pcall(function() if setfpscap then setfpscap(15) end end)
+repeat task.wait() until game:IsLoaded()
+task.wait(0.8)
+
+--========================
+-- CONFIG
+--========================
+local DefaultConfig = {
+    ["Account Main"] = {""},
+    ["PetName"] = {""},
+    ["GiftDelay"] = 5,
+    ["TeleportDelay"] = 0.2,
+    ["UI_AutoRefresh"] = true,
+    ["UI_RefreshSeconds"] = 3,
+    ["Hotkey_ToggleUI"] = "H",
+    ["CloneLog_Show"] = true,
+    ["CloneLog_Center"] = true,
+}
+
+getgenv().Config = getgenv().Config or DefaultConfig
+local Config = getgenv().Config
+for k, v in pairs(DefaultConfig) do
+    if Config[k] == nil then Config[k] = v end
+end
+
+local mainAccounts = Config["Account Main"] or {}
+local targetPetNames = Config["PetName"] or {}
+
+local giftDelay = tonumber(Config["GiftDelay"]) or 5
+if giftDelay < 0 then giftDelay = 0 end
+local tpDelay = tonumber(Config["TeleportDelay"]) or 0
+if tpDelay < 0 then tpDelay = 0 end
+
+local uiAutoOn = (Config["UI_AutoRefresh"] ~= false)
+local uiRefreshInterval = tonumber(Config["UI_RefreshSeconds"]) or 3
+if uiRefreshInterval < 1 then uiRefreshInterval = 1 end
+if uiRefreshInterval > 30 then uiRefreshInterval = 30 end
+
+--========================
+-- Services
+--========================
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local LP = Players.LocalPlayer
 local IS_MAIN = table.find(mainAccounts, LP.Name) ~= nil
@@ -199,133 +262,198 @@ task.spawn(function()
 end)
 
 --=========================================================
--- CLONE LOG PANEL (only for CLONE)
+-- CLONE LOG UI (CENTER WHITE, 6 LINES, TOP->BOTTOM, taller)
 --=========================================================
 local CloneLog = nil
 
-local function createCloneLogPanel()
-    local maxLines = tonumber(Config["CloneLog_MaxLines"]) or 30
-    if maxLines < 5 then maxLines = 5 end
-    if maxLines > 120 then maxLines = 120 end
-    local pos = tostring(Config["CloneLog_Position"] or "TopRight")
-
+local function createCloneLogCenter()
     local gui = Instance.new("ScreenGui")
-    gui.Name = "CLONE_LOG_PANEL"
+    gui.Name = "CLONE_LOG_CENTER"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.Parent = LP:WaitForChild("PlayerGui")
 
-    local frame = Instance.new("Frame")
-    frame.Parent = gui
-    frame.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-    frame.BackgroundTransparency = 0.25
-    frame.BorderSizePixel = 0
-    frame.Size = UDim2.fromOffset(560, 230)
-    frame.ZIndex = 999
+    local root = Instance.new("Frame")
+    root.Parent = gui
+    root.AnchorPoint = Vector2.new(0.5, 0.5)
+    root.Position = UDim2.fromScale(0.5, 0.5)
+    root.Size = UDim2.fromOffset(850, 340) -- ✅ taller
+    root.BorderSizePixel = 0
+    root.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    root.BackgroundTransparency = 0.02
+    root.ZIndex = 999
 
     local cr = Instance.new("UICorner")
-    cr.CornerRadius = UDim.new(0, 14)
-    cr.Parent = frame
+    cr.CornerRadius = UDim.new(0, 26)
+    cr.Parent = root
 
     local st = Instance.new("UIStroke")
-    st.Color = Color3.fromRGB(90, 90, 120)
-    st.Transparency = 0.55
-    st.Thickness = 1
-    st.Parent = frame
+    st.Thickness = 2
+    st.Transparency = 0.78
+    st.Color = Color3.fromRGB(0, 0, 0)
+    st.Parent = root
+
+    local shadow = Instance.new("ImageLabel")
+    shadow.Parent = root
+    shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    shadow.Position = UDim2.fromScale(0.5, 0.5)
+    shadow.Size = UDim2.new(1, 70, 1, 70)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://1316045217"
+    shadow.ImageTransparency = 0.62
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(10, 10, 118, 118)
+    shadow.ZIndex = 998
+
+    local grad = Instance.new("UIGradient")
+    grad.Rotation = 90
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(244, 248, 255)),
+    })
+    grad.Parent = root
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
-    pad.PaddingTop = UDim.new(0, 10)
-    pad.PaddingBottom = UDim.new(0, 10)
-    pad.Parent = frame
+    pad.PaddingLeft = UDim.new(0, 26)
+    pad.PaddingRight = UDim.new(0, 26)
+    pad.PaddingTop = UDim.new(0, 20)
+    pad.PaddingBottom = UDim.new(0, 18)
+    pad.Parent = root
 
     local header = Instance.new("TextLabel")
-    header.Parent = frame
+    header.Parent = root
     header.BackgroundTransparency = 1
-    header.Size = UDim2.new(1, 0, 0, 22)
-    header.Font = Enum.Font.GothamBold
-    header.TextSize = 14
+    header.Size = UDim2.new(1, 0, 0, 34)
+    header.Font = Enum.Font.GothamBlack
+    header.TextSize = 24
     header.TextXAlignment = Enum.TextXAlignment.Left
-    header.TextColor3 = Color3.fromRGB(255, 255, 255)
-    header.Text = ("CLONE LOG • %s"):format(LP.Name)
+    header.TextColor3 = Color3.fromRGB(18, 18, 28)
+    header.Text = ("CLONE STATUS • %s"):format(LP.Name)
     header.ZIndex = 1000
 
     local sub = Instance.new("TextLabel")
-    sub.Parent = frame
+    sub.Parent = root
     sub.BackgroundTransparency = 1
-    sub.Position = UDim2.fromOffset(0, 22)
-    sub.Size = UDim2.new(1, 0, 0, 18)
-    sub.Font = Enum.Font.Gotham
-    sub.TextSize = 12
+    sub.Position = UDim2.fromOffset(0, 34)
+    sub.Size = UDim2.new(1, 0, 0, 22)
+    sub.Font = Enum.Font.GothamBold
+    sub.TextSize = 16
     sub.TextXAlignment = Enum.TextXAlignment.Left
-    sub.TextColor3 = Color3.fromRGB(200, 200, 220)
+    sub.TextColor3 = Color3.fromRGB(60, 70, 90)
     sub.Text = ("GiftDelay=%ss | TeleportDelay=%ss"):format(tostring(giftDelay), tostring(tpDelay))
     sub.ZIndex = 1000
 
-    local list = Instance.new("ScrollingFrame")
-    list.Parent = frame
-    list.BackgroundTransparency = 1
-    list.BorderSizePixel = 0
-    list.Position = UDim2.fromOffset(0, 46)
-    list.Size = UDim2.new(1, 0, 1, -46)
-    list.ScrollBarThickness = 4
-    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    list.CanvasSize = UDim2.new(0,0,0,0)
-    list.ZIndex = 1000
+    local line = Instance.new("Frame")
+    line.Parent = root
+    line.Position = UDim2.fromOffset(0, 62)
+    line.Size = UDim2.new(1, 0, 0, 1)
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    line.BackgroundTransparency = 0.88
+    line.ZIndex = 1000
+
+    -- container for 6 lines
+    local box = Instance.new("Frame")
+    box.Parent = root
+    box.BackgroundTransparency = 1
+    box.Position = UDim2.fromOffset(0, 78)
+    box.Size = UDim2.new(1, 0, 1, -88) -- ✅ a bit more room
+    box.ZIndex = 1000
 
     local layout = Instance.new("UIListLayout")
-    layout.Parent = list
+    layout.Parent = box
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 6)
+    layout.Padding = UDim.new(0, 10)
 
-    if pos == "TopLeft" then
-        frame.AnchorPoint = Vector2.new(0, 0)
-        frame.Position = UDim2.fromOffset(10, 10)
-    elseif pos == "BottomRight" then
-        frame.AnchorPoint = Vector2.new(1, 1)
-        frame.Position = UDim2.new(1, -10, 1, -10)
-    elseif pos == "BottomLeft" then
-        frame.AnchorPoint = Vector2.new(0, 1)
-        frame.Position = UDim2.new(0, 10, 1, -10)
-    else
-        frame.AnchorPoint = Vector2.new(1, 0)
-        frame.Position = UDim2.new(1, -10, 0, 10)
+    -- accent bottom bar (hidden because bạn bảo khó nhìn)
+    local accent = Instance.new("Frame")
+    accent.Parent = root
+    accent.AnchorPoint = Vector2.new(0, 1)
+    accent.Position = UDim2.new(0, 0, 1, 0)
+    accent.Size = UDim2.new(1, 0, 0, 10)
+    accent.BorderSizePixel = 0
+    accent.BackgroundColor3 = Color3.fromRGB(120, 150, 255)
+    accent.ZIndex = 1001
+    local acr = Instance.new("UICorner")
+    acr.CornerRadius = UDim.new(0, 30)
+    acr.Parent = accent
+    local ag = Instance.new("UIGradient")
+    ag.Rotation = 0
+    ag.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 160, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 120, 255)),
+    })
+    ag.Parent = accent
+    accent.Visible = false -- ✅ tắt hẳn thanh xanh
+
+    -- create 6 line labels (TOP->BOTTOM)
+    local lines = {}
+    for i = 1, 6 do
+        local lbl = Instance.new("TextLabel")
+        lbl.Parent = box
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 0, 30)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 20
+        lbl.TextWrapped = false
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextColor3 = Color3.fromRGB(20, 30, 45)
+        lbl.Text = (i == 1) and "Đang khởi động..." or ""
+        lbl.ZIndex = 1000
+
+        local txtStroke = Instance.new("UIStroke")
+        txtStroke.Thickness = 2
+        txtStroke.Transparency = 0.92
+        txtStroke.Color = Color3.fromRGB(0, 0, 0)
+        txtStroke.Parent = lbl
+
+        lines[i] = lbl
     end
 
-    local lines = {}
-    local colors = {
-        INFO = Color3.fromRGB(200, 230, 255),
-        OK   = Color3.fromRGB(170, 255, 180),
-        WARN = Color3.fromRGB(255, 220, 120),
-        ERR  = Color3.fromRGB(255, 140, 140),
+    -- buffer store (we append; newest at end)
+    local buffer = {}
+
+    local colorMap = {
+        INFO = Color3.fromRGB(20, 30, 45),
+        OK   = Color3.fromRGB(18, 100, 50),
+        WARN = Color3.fromRGB(170, 110, 0),
+        ERR  = Color3.fromRGB(190, 40, 40),
     }
 
-    local function addLine(kind, msg)
-        local label = Instance.new("TextLabel")
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.new(1, 0, 0, 18)
-        label.Font = Enum.Font.Gotham
-        label.TextSize = 12
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextWrapped = true
-        label.AutomaticSize = Enum.AutomaticSize.Y
-        label.TextColor3 = colors[kind] or colors.INFO
-        label.Text = ("[%s] [%s] %s"):format(nowTS(), LP.Name, msg)
-        label.Parent = list
+    local function render(kind)
+        local c = colorMap[kind] or colorMap.INFO
 
-        table.insert(lines, label)
-        if #lines > maxLines then
-            local old = table.remove(lines, 1)
-            if old then old:Destroy() end
+        -- show last 6 lines in natural order (oldest->newest)
+        local startIndex = math.max(1, #buffer - 6 + 1)
+
+        for i = 1, 6 do
+            local idx = startIndex + (i - 1)
+            lines[i].TextColor3 = c
+            lines[i].Text = buffer[idx] or ""
         end
-
-        task.defer(function()
-            list.CanvasPosition = Vector2.new(0, math.max(0, list.AbsoluteCanvasSize.Y - list.AbsoluteSize.Y))
-        end)
     end
 
-    return { add = addLine }
+    local function push(kind, msg)
+        local text = ("[%s] %s"):format(nowTS(), msg)
+
+        buffer[#buffer + 1] = text -- ✅ append cuối (đúng thứ tự)
+        if #buffer > 200 then
+            table.remove(buffer, 1)
+        end
+
+        render(kind)
+    end
+
+    -- intro animation
+    root.Size = UDim2.fromOffset(800, 320)
+    root.BackgroundTransparency = 0.08
+    TweenService:Create(root, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.fromOffset(850, 340),
+        BackgroundTransparency = 0.02
+    }):Play()
+
+    return { push = push }
 end
 
 local function LOG(kind, msg)
@@ -335,12 +463,14 @@ local function LOG(kind, msg)
     else
         print("[AUTO]["..tostring(kind).."]", line)
     end
-    if CloneLog then CloneLog.add(kind, msg) end
+    if CloneLog then
+        CloneLog.push(kind, msg)
+    end
 end
 
-if not IS_MAIN then
-    CloneLog = createCloneLogPanel()
-    LOG("OK", "Clone log panel ready.")
+if (not IS_MAIN) and (Config["CloneLog_Show"] ~= false) then
+    CloneLog = createCloneLogCenter()
+    LOG("OK", "Clone script đã chạy. Đang chờ tìm MAIN trong server...")
 end
 
 --=========================================================
@@ -369,7 +499,6 @@ local function buildMainUI_FULL()
         c.Parent = parent
         return c
     end
-
     local function stroke(parent, color, t, trans)
         local s = Instance.new("UIStroke")
         s.Color = color or Color3.fromRGB(90, 90, 110)
@@ -378,7 +507,6 @@ local function buildMainUI_FULL()
         s.Parent = parent
         return s
     end
-
     local function gradient(parent, c1, c2, rot)
         local g = Instance.new("UIGradient")
         g.Color = ColorSequence.new({
@@ -389,7 +517,6 @@ local function buildMainUI_FULL()
         g.Parent = parent
         return g
     end
-
     local function shadow(parent)
         local img = Instance.new("ImageLabel")
         img.Name = "Shadow"
@@ -406,7 +533,6 @@ local function buildMainUI_FULL()
         return img
     end
 
-    -- Build UI
     local gui = Instance.new("ScreenGui")
     gui.Name = "PrettyFishScannerUI_MAIN"
     gui.ResetOnSpawn = false
@@ -443,7 +569,6 @@ local function buildMainUI_FULL()
     stroke(miniBtn, Color3.fromRGB(255, 255, 255), 1, 0.75)
     shadow(miniBtn)
 
-    -- drag mini
     do
         local dragging = false
         local dragStart, startPos
@@ -516,7 +641,7 @@ local function buildMainUI_FULL()
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
     subtitle.TextColor3 = Color3.fromRGB(225, 225, 240)
     subtitle.TextTransparency = 0.05
-    subtitle.Text = "Counts • Search • Auto refresh • Hotkey toggle"
+    subtitle.Text = ("Hotkey: %s | AutoRefresh: %ss"):format(tostring(Config["Hotkey_ToggleUI"]), tostring(uiRefreshInterval))
     subtitle.ZIndex = 4
 
     local minBtn = Instance.new("TextButton")
@@ -595,13 +720,11 @@ local function buildMainUI_FULL()
     intervalBox.Size = UDim2.fromOffset(78, 30)
     intervalBox.Position = UDim2.fromOffset(260, 8)
     intervalBox.Text = tostring(uiRefreshInterval)
-    intervalBox.PlaceholderText = "sec"
     intervalBox.ClearTextOnFocus = false
     intervalBox.Font = Enum.Font.GothamBold
     intervalBox.TextSize = 13
     intervalBox.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
     intervalBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    intervalBox.PlaceholderColor3 = Color3.fromRGB(160, 160, 175)
     intervalBox.BorderSizePixel = 0
     intervalBox.ZIndex = 3
     corner(intervalBox, 12)
@@ -629,7 +752,6 @@ local function buildMainUI_FULL()
     search.TextSize = 13
     search.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
     search.TextColor3 = Color3.fromRGB(255, 255, 255)
-    search.PlaceholderColor3 = Color3.fromRGB(160, 160, 175)
     search.BorderSizePixel = 0
     search.ZIndex = 3
     corner(search, 12)
@@ -736,9 +858,7 @@ local function buildMainUI_FULL()
     local function render(filterText)
         filterText = (filterText or ""):lower()
         clearRows()
-
-        local list = sortedList(lastCounts)
-        for _, it in ipairs(list) do
+        for _, it in ipairs(sortedList(lastCounts)) do
             if filterText == "" or it.name:lower():find(filterText, 1, true) then
                 addRow(it.name, it.count)
             end
@@ -749,17 +869,13 @@ local function buildMainUI_FULL()
         local counts, total = scanCounts()
         lastCounts = counts
         lastTotal = total
-
         local unique = 0
         for _ in pairs(counts) do unique += 1 end
         stats.Text = string.format("Total: %d | Unique: %d | Last: %s", lastTotal, unique, nowTimeString())
         render(search.Text)
     end
 
-    refreshBtn.MouseButton1Click:Connect(function()
-        pcall(doRefresh)
-    end)
-
+    refreshBtn.MouseButton1Click:Connect(function() pcall(doRefresh) end)
     pauseBtn.MouseButton1Click:Connect(function()
         autoOn = not autoOn
         pauseBtn.Text = autoOn and "Auto: ON" or "Auto: OFF"
@@ -768,14 +884,11 @@ local function buildMainUI_FULL()
 
     intervalBox.FocusLost:Connect(function()
         local n = tonumber(intervalBox.Text)
-        if not n then
-            intervalBox.Text = tostring(refreshInterval)
-            return
-        end
+        if not n then intervalBox.Text = tostring(refreshInterval); return end
         if n < 1 then n = 1 end
         if n > 30 then n = 30 end
         refreshInterval = n
-        intervalBox.Text = tostring(refreshInterval)
+        intervalBox.Text = tostring(n)
     end)
 
     search:GetPropertyChangedSignal("Text"):Connect(function()
@@ -833,51 +946,57 @@ if IS_MAIN then
 end
 
 --=========================================================
--- CLONE TRADE LOOP (only clones)
+-- CLONE TRADE LOOP (LOG FULL STEPS)
 --=========================================================
 if not IS_MAIN then
     task.spawn(function()
+        local lastNotFound = 0
+        LOG("INFO", "Bắt đầu vòng lặp clone...")
+
         while task.wait(1) do
             local ok, err = pcall(function()
                 local mainPlr = findFirstMainAccount()
                 if not mainPlr then
-                    LOG("WARN", "Không thấy nhân vật main trong server.")
+                    if tick() - lastNotFound > 3 then
+                        lastNotFound = tick()
+                        LOG("WARN", "Không thấy nhân vật MAIN trong server (đang chờ...)")
+                    end
                     return
                 end
 
                 if not hasHRP(LP) then
-                    LOG("WARN", ("Không thấy nhân vật (%s) (clone) trong game."):format(LP.Name))
+                    LOG("WARN", ("Không thấy nhân vật CLONE (%s) (chưa load HRP)"):format(LP.Name))
                     return
                 end
 
                 if not hasHRP(mainPlr) then
-                    LOG("WARN", ("Không thấy nhân vật (%s) trong server."):format(mainPlr.Name))
+                    LOG("WARN", ("Không thấy nhân vật MAIN (%s) trong server (chưa load HRP)"):format(mainPlr.Name))
                     return
                 end
 
                 if not havepet() then
-                    LOG("WARN", "Không có pet target trong túi -> shutdown.")
-                    pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
-                    game:Shutdown()
-                    return
+					LOG("WARN", "Không có pet target trong túi -> KICK (267)")
+					pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
+					LP:Kick("267: gif done (no target pets)")
+				return
+
                 end
 
-                LOG("INFO", ("Đang tele đến nv main (%s)..."):format(mainPlr.Name))
+                LOG("INFO", ("Đang tele đến nv MAIN (%s)..."):format(mainPlr.Name))
                 LP.Character.HumanoidRootPart.CFrame = mainPlr.Character.HumanoidRootPart.CFrame
                 if tpDelay > 0 then task.wait(tpDelay) end
 
                 local items = buildTargetUUIDsWithNames()
                 if #items == 0 then
-                    LOG("WARN", "List pet target rỗng -> bỏ qua.")
+                    LOG("WARN", "List pet target rỗng -> chờ vòng sau")
                     return
                 end
 
-                LOG("OK", ("Tìm thấy %d pet target. Bắt đầu gửi..."):format(#items))
-
+                LOG("OK", ("Tìm thấy %d fish/pet target. Bắt đầu gửi..."):format(#items))
                 for i, it in ipairs(items) do
-                    LOG("INFO", ("Đang gửi Gif (%s) đến nhân vật main (%s)... [%d/%d]"):format(it.name, mainPlr.Name, i, #items))
+                    LOG("INFO", ("Đang gửi Gif (%s) đến MAIN (%s)... [%d/%d]"):format(it.name, mainPlr.Name, i, #items))
                     invokeInitiateTrade(mainPlr.UserId, it.uuid)
-                    LOG("OK", ("Đã gọi trade cho (%s). Chờ %ss..."):format(it.name, tostring(giftDelay)))
+                    LOG("OK", ("Đã gọi gửi (%s). Chờ %ss..."):format(it.name, tostring(giftDelay)))
                     task.wait(giftDelay)
                 end
 
