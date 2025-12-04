@@ -683,12 +683,14 @@ local function buildMainUI_MODERN()
     local uniqueStat = createStatItem("🐠", "Unique Types", "0")
     local timeStat = createStatItem("⏰", "Last Update", "--:--:--")
 
+    -- ✅ ẨN PHẦN CONTROLS (Refresh, Auto, Interval, Search)
     -- Controls
     local controls = Instance.new("Frame")
     controls.Parent = body
     controls.Position = UDim2.fromOffset(0, 85)
-    controls.Size = UDim2.new(1, 0, 0, 52)
+    controls.Size = UDim2.new(1, 0, 0, 0)  -- ✅ Height = 0 để ẩn
     controls.BackgroundTransparency = 1
+    controls.Visible = false  -- ✅ Ẩn luôn
     controls.ZIndex = 2
 
     local controlsLayout = Instance.new("UIListLayout")
@@ -774,11 +776,11 @@ local function buildMainUI_MODERN()
     corner(search, 12)
     stroke(search, Color3.fromRGB(200, 210, 230), 2, 0.7)
 
-    -- List card - KHÔNG CÓ SCROLLING, CHỈ HIỂN THỊ TOP 5-6
+    -- ✅ List card DI CHUYỂN LÊN (vì đã ẩn controls)
     local listCard = Instance.new("Frame")
     listCard.Parent = body
-    listCard.Position = UDim2.fromOffset(0, 152)
-    listCard.Size = UDim2.new(1, 0, 1, -152)
+    listCard.Position = UDim2.fromOffset(0, 85)  -- ✅ Từ 152 -> 85
+    listCard.Size = UDim2.new(1, 0, 1, -85)      -- ✅ Từ -152 -> -85
     listCard.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
     listCard.BorderSizePixel = 0
     listCard.ZIndex = 2
