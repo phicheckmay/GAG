@@ -951,10 +951,17 @@ end
 if not IS_MAIN then
     task.spawn(function()
         local lastNotFound = 0
+        local isGifting = false  -- ✅ Thêm flag để track đang gift
         LOG("INFO", "Bắt đầu vòng lặp clone...")
 
         while task.wait(1) do
             local ok, err = pcall(function()
+                -- ✅ Nếu đang gift thì SKIP vòng này
+                if isGifting then
+                    LOG("INFO", "Đang trong quá trình gift, bỏ qua check...")
+                    return
+                end
+
                 local mainPlr = findFirstMainAccount()
                 if not mainPlr then
                     if tick() - lastNotFound > 3 then
@@ -975,12 +982,14 @@ if not IS_MAIN then
                 end
 
                 if not havepet() then
-					LOG("WARN", "Không có pet target trong túi -> KICK (267)")
-					pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
-					LP:Kick("267: gif done (267)")
-				return
-
+                    LOG("WARN", "Không có pet target trong túi -> KICK (267)")
+                    pcall(function() writefile(LP.Name .. "-Clone.txt", "Done") end)
+                    LP:Kick("267: gif done (267)")
+                    return
                 end
+
+                -- ✅ BẮT ĐẦU GIFT - BẬT FLAG
+                isGifting = true
 
                 LOG("INFO", ("Đang tele đến nv MAIN (%s)..."):format(mainPlr.Name))
                 LP.Character.HumanoidRootPart.CFrame = mainPlr.Character.HumanoidRootPart.CFrame
@@ -989,6 +998,7 @@ if not IS_MAIN then
                 local items = buildTargetUUIDsWithNames()
                 if #items == 0 then
                     LOG("WARN", "List pet target rỗng -> chờ vòng sau")
+                    isGifting = false  -- ✅ TẮT FLAG
                     return
                 end
 
@@ -1001,10 +1011,15 @@ if not IS_MAIN then
                 end
 
                 LOG("OK", "Hoàn tất gửi tất cả Gif.")
+                
+                -- ✅ KẾT THÚC GIFT - TẮT FLAG
+                isGifting = false
+                
                 task.wait(2)
             end)
 
             if not ok then
+                isGifting = false  -- ✅ Có lỗi cũng phải tắt flag
                 LOG("ERR", ("Lỗi vòng trade: %s"):format(tostring(err)))
             end
         end
