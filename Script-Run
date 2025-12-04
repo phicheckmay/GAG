@@ -22,7 +22,7 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Selling"] = {
         ["Auto Sell"] = true,
         ["Auto Sell Threshold"] = "Mythic",
-        ["Auto Sell Every"] = 100,
+        ["Auto Sell Every"] = 10,
     },
     ["Doing Quest"] = {
         ["Auto Ghostfinn Rod"] = true,
@@ -83,15 +83,16 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Rod List"] = {
         ["Auto Buying"] = true,
         ["Buy List"] = {
+            "Luck Rod",
             "Grass Rod",
             "Midnight Rod",
             "Astral Rod",
             "Ares Rod",
-            "Angler Rod",
+
         },
         ["Location Rods"] = { -- Farm location and minimum rod to start on that location, also only 1 rod and only 1 location
             ["Fisherman Island"] = {"Starter Rod"}, -- Do not change
-            ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
+            ["Kohana Volcano"] = {"Luck Rod", "Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
 	    ["Ocean"] = {"Element Rod", "Ghostfinn Rod", "Angler Rod", "Ares Rod"},
         },
@@ -102,7 +103,7 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Disable3DRender"] = true,
     ["AutoRemovePlayer"] = true,
     ["AutoReconnect"] = true,
-    ["Debug"] = true,
+    ["Debug"] = false,
 }
 
 script_key="A831DCC33A06DD75C7B215AC97FB8D4A";
