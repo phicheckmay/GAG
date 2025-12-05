@@ -74,44 +74,6 @@ local function rawItems()
     return Data:Get({ "Inventory", "Items" }) or {}
 end
 
--- ✅ CACHE cho ItemData
-local itemDataCache = {}
-
-local function getItemName(itemId)
-    -- Check cache trước
-    if itemDataCache[itemId] then
-        return itemDataCache[itemId]
-    end
-    
-    -- Thử lấy từ ItemUtil
-    local ok, base = pcall(function()
-        return ItemUtil:GetItemData(itemId)
-    end)
-    
-    if ok and base and base.Data and base.Data.Name then
-        local name = base.Data.Name
-        itemDataCache[itemId] = name
-        return name
-    end
-    
-    -- Thử lấy từ ReplicatedStorage.Shared.Items
-    local itemsFolder = RS:FindFirstChild("Shared") and RS.Shared:FindFirstChild("Items")
-    if itemsFolder then
-        for _, itemModule in pairs(itemsFolder:GetChildren()) do
-            if itemModule:IsA("ModuleScript") then
-                local ok2, data = pcall(function() return require(itemModule) end)
-                if ok2 and data and data.Data and data.Data.Name and tostring(data.Id or itemModule.Name) == tostring(itemId) then
-                    local name = data.Data.Name
-                    itemDataCache[itemId] = name
-                    return name
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
 --========================
 -- Time + character utils
 --========================
@@ -129,28 +91,39 @@ end
 --========================
 local function scanCounts()
     local counts, total = {}, 0
-    local unknownCount = 0
-    
     for _, v in pairs(rawItems()) do
-        -- ✅ Dùng hàm getItemName mới
-        local name = getItemName(v.Id)
+        -- ✅ Thử nhiều cách lấy tên cá
+        local name = nil
         
+        -- Cách 1: ItemUtil (cách cũ)
+        local ok1, base = pcall(function()
+            return ItemUtil:GetItemData(v.Id)
+        end)
+        if ok1 and base and base.Data and base.Data.Name then
+            name = base.Data.Name
+        end
+        
+        -- Cách 2: Lấy trực tiếp từ item (nếu có)
+        if not name and v.Name then
+            name = v.Name
+        end
+        
+        -- Cách 3: Lấy từ Id (fallback)
+        if not name and v.Id then
+            name = tostring(v.Id)
+        end
+        
+        -- Debug
         if name then
+            print("[SCAN] Found fish:", name)
             counts[name] = (counts[name] or 0) + 1
             total += 1
         else
-            -- Đếm cá không rõ tên
-            unknownCount += 1
-            total += 1
-            print("[SCAN] Unknown item ID:", v.Id, "- Có thể game chưa load data")
+            print("[SCAN] Unknown item:", v.Id or "no-id", "UUID:", v.UUID or "no-uuid")
         end
     end
     
-    -- ✅ Nếu có cá "Unknown", thêm vào list
-    if unknownCount > 0 then
-        counts["🔄 Loading..."] = unknownCount
-    end
-    
+    print("[SCAN] Total counted:", total, "Unique:", (function() local c=0 for _ in pairs(counts) do c+=1 end return c end)())
     return counts, total
 end
 
@@ -217,74 +190,38 @@ local function invokeInitiateTrade(targetUserId, uuid)
 end
 
 --========================
--- Auto popup "Yes" - FASTER VERSION
+-- Auto popup "Yes"
 --========================
 task.spawn(function()
     local pg = LP:WaitForChild("PlayerGui")
-    
-    -- ✅ Tìm prompt ngay từ đầu
-    local function findYesButton()
-        local ok, result = pcall(function()
-            return pg:FindFirstChild("Prompt")
-                and pg.Prompt:FindFirstChild("Blackout")
-                and pg.Prompt.Blackout:FindFirstChild("Options")
-                and pg.Prompt.Blackout.Options:FindFirstChild("Yes")
-        end)
-        return ok and result or nil
-    end
-    
-    local function findYesLabel()
-        local yesBtn = findYesButton()
-        return yesBtn and yesBtn:FindFirstChild("Label") or nil
-    end
-    
+    local ok, lbl = pcall(function()
+        return pg:WaitForChild("Prompt")
+            :FindFirstChild("Blackout")
+            :FindFirstChild("Options")
+            :FindFirstChild("Yes")
+            :FindFirstChild("Label")
+    end)
+    if not ok or not lbl then return end
+
     local cam = workspace.CurrentCamera
-    
-    -- ✅ Hàm click nhanh hơn
-    local function quickAccept()
-        print("[AUTO-YES] Đang click Yes...")
-        
-        -- Method 1: Fire BindableEvent
-        if getnilinstances then
-            for _, obj in ipairs(getnilinstances()) do
-                if obj:IsA("BindableEvent") then
-                    pcall(function() obj:Fire(true) end)
-                end
+    local function fireBindable()
+        if not getnilinstances then return end
+        for _, obj in ipairs(getnilinstances()) do
+            if obj:IsA("BindableEvent") then
+                pcall(function() obj:Fire(true) end)
             end
         end
-        
-        -- Method 2: Click trực tiếp button
-        local yesBtn = findYesButton()
-        if yesBtn and yesBtn:IsA("GuiButton") then
-            for _, conn in pairs(getconnections and getconnections(yesBtn.MouseButton1Click) or {}) do
-                pcall(function() conn:Fire() end)
-            end
-        end
-        
-        print("[AUTO-YES] Đã click!")
     end
-    
-    -- ✅ Watch label text thay đổi
-    local lbl = findYesLabel()
-    if lbl then
-        lbl:GetPropertyChangedSignal("Text"):Connect(function()
-            if lbl.Text == "Yes" then
-                print("[AUTO-YES] Phát hiện popup Yes, click sau 0.3s...")
-                task.wait(0.3)  -- ✅ Giảm từ 2s -> 0.3s
-                quickAccept()
-            end
-        end)
-    end
-    
-    -- ✅ Backup: Poll mỗi 0.5s
-    task.spawn(function()
-        while task.wait(0.5) do
-            local label = findYesLabel()
-            if label and label.Text == "Yes" and label.Parent.Parent.Parent.Visible then
-                print("[AUTO-YES] Poll detected Yes, clicking...")
-                quickAccept()
-                task.wait(1)
-            end
+
+    lbl:GetPropertyChangedSignal("Text"):Connect(function()
+        if lbl.Text == "Yes" then
+            local cf, ct = cam.CFrame, cam.CameraType
+            cam.CameraType = Enum.CameraType.Scriptable
+            task.wait(2)
+            fireBindable()
+            task.wait(2)
+            cam.CameraType = ct
+            cam.CFrame = cf
         end
     end)
 end)
