@@ -190,89 +190,40 @@ local function invokeInitiateTrade(targetUserId, uuid)
 end
 
 --========================
--- Auto popup "Yes" - FIXED ✅
+-- Auto popup "Yes"
 --========================
 task.spawn(function()
-    task.wait(3) -- Đợi UI load
-    
     local pg = LP:WaitForChild("PlayerGui")
-    
-    -- Thử nhiều cách tìm nút Yes
-    local function findYesButton()
-        -- Cách 1: Tìm trong Prompt
-        local prompt = pg:FindFirstChild("Prompt")
-        if prompt then
-            local yes = prompt:FindFirstChild("Yes", true)
-            if yes and yes:IsA("TextButton") then
-                return yes
-            end
-            
-            local yesLabel = prompt:FindFirstChild("Label", true)
-            if yesLabel and yesLabel:IsA("TextLabel") and yesLabel.Text == "Yes" then
-                return yesLabel.Parent
-            end
-        end
-        
-        -- Cách 2: Tìm trong tất cả GUI
-        for _, gui in pairs(pg:GetDescendants()) do
-            if gui:IsA("TextButton") and gui.Text == "Yes" then
-                return gui
-            end
-            if gui:IsA("TextLabel") and gui.Text == "Yes" and gui.Parent:IsA("TextButton") then
-                return gui.Parent
+    local ok, lbl = pcall(function()
+        return pg:WaitForChild("Prompt")
+            :FindFirstChild("Blackout")
+            :FindFirstChild("Options")
+            :FindFirstChild("Yes")
+            :FindFirstChild("Label")
+    end)
+    if not ok or not lbl then return end
+
+    local cam = workspace.CurrentCamera
+    local function fireBindable()
+        if not getnilinstances then return end
+        for _, obj in ipairs(getnilinstances()) do
+            if obj:IsA("BindableEvent") then
+                pcall(function() obj:Fire(true) end)
             end
         end
-        
-        return nil
     end
-    
-    local function clickYes()
-        local yesBtn = findYesButton()
-        if yesBtn then
-            print("[AUTO YES] Found Yes button, clicking...")
-            
-            -- Thử click bằng nhiều cách
-            pcall(function()
-                -- Cách 1: FireClick event
-                for _, conn in pairs(getconnections(yesBtn.MouseButton1Click)) do
-                    pcall(function() conn:Fire() end)
-                end
-            end)
-            
-            pcall(function()
-                -- Cách 2: Activate
-                if yesBtn:IsA("TextButton") then
-                    yesBtn.Activated:Fire()
-                end
-            end)
-            
-            pcall(function()
-                -- Cách 3: Fire bindable
-                if getnilinstances then
-                    for _, obj in ipairs(getnilinstances()) do
-                        if obj:IsA("BindableEvent") and obj.Name:lower():find("yes") then
-                            obj:Fire(true)
-                        end
-                    end
-                end
-            end)
-            
-            print("[AUTO YES] Clicked!")
-            return true
+
+    lbl:GetPropertyChangedSignal("Text"):Connect(function()
+        if lbl.Text == "Yes" then
+            local cf, ct = cam.CFrame, cam.CameraType
+            cam.CameraType = Enum.CameraType.Scriptable
+            task.wait(2)
+            fireBindable()
+            task.wait(2)
+            cam.CameraType = ct
+            cam.CFrame = cf
         end
-        return false
-    end
-    
-    -- Loop check và auto click
-    while task.wait(0.5) do
-        pcall(function()
-            local prompt = pg:FindFirstChild("Prompt")
-            if prompt and prompt.Visible then
-                task.wait(0.3)
-                clickYes()
-            end
-        end)
-    end
+    end)
 end)
 
 --=========================================================
@@ -459,7 +410,7 @@ if (not IS_MAIN) and (Config["CloneLog_Show"] ~= false) then
 end
 
 --=========================================================
--- ✅ MAIN UI MỚI - DESIGN HIỆN ĐẠI, CÓ NÚT RESET
+-- ✅ MAIN UI MỚI - DESIGN HIỆN ĐẠI, NỀN TRẮNG, CHỮ MÀU
 --=========================================================
 local function keycodeFromString(s)
     if typeof(s) ~= "string" then return Enum.KeyCode.H end
@@ -755,33 +706,104 @@ local function buildMainUI_MODERN()
     local uniqueStat = createStatItem("🐠", "Unique Types", "0")
     local timeStat = createStatItem("⏰", "Last Update", "--:--:--")
 
-    -- ✅ THÊM NÚT RESET Ở DƯỚI STATS
-    local resetBtn = Instance.new("TextButton")
-    resetBtn.Parent = body
-    resetBtn.Position = UDim2.fromOffset(0, 85)
-    resetBtn.Size = UDim2.new(1, 0, 0, 42)
-    resetBtn.Text = "🗑️ Reset Fish List"
-    resetBtn.Font = Enum.Font.GothamBold
-    resetBtn.TextSize = 15
-    resetBtn.BackgroundColor3 = Color3.fromRGB(220, 80, 80)
-    resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    resetBtn.BorderSizePixel = 0
-    resetBtn.ZIndex = 3
-    corner(resetBtn, 12)
+    -- ✅ ẨN PHẦN CONTROLS (Refresh, Auto, Interval, Search)
+    -- Controls
+    local controls = Instance.new("Frame")
+    controls.Parent = body
+    controls.Position = UDim2.fromOffset(0, 85)
+    controls.Size = UDim2.new(1, 0, 0, 0)  -- ✅ Height = 0 để ẩn
+    controls.BackgroundTransparency = 1
+    controls.Visible = false  -- ✅ Ẩn luôn
+    controls.ZIndex = 2
 
-    local resetGrad = Instance.new("UIGradient")
-    resetGrad.Rotation = 90
-    resetGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(220, 80, 80)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 60, 60)),
-    })
-    resetGrad.Parent = resetBtn
+    local controlsLayout = Instance.new("UIListLayout")
+    controlsLayout.Parent = controls
+    controlsLayout.FillDirection = Enum.FillDirection.Horizontal
+    controlsLayout.Padding = UDim.new(0, 12)
 
-    -- List card
+    local function createButton(text, color1, color2)
+        local btn = Instance.new("TextButton")
+        btn.Parent = controls
+        btn.Size = UDim2.fromOffset(140, 42)
+        btn.Text = text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        btn.BackgroundColor3 = color1
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.BorderSizePixel = 0
+        btn.ZIndex = 3
+        corner(btn, 12)
+        
+        local btnGrad = Instance.new("UIGradient")
+        btnGrad.Rotation = 90
+        btnGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, color1),
+            ColorSequenceKeypoint.new(1, color2),
+        })
+        btnGrad.Parent = btn
+        
+        return btn
+    end
+
+    local refreshBtn = createButton("🔄 Refresh", Color3.fromRGB(70, 150, 255), Color3.fromRGB(50, 120, 230))
+    
+    local pauseBtn = Instance.new("TextButton")
+    pauseBtn.Parent = controls
+    pauseBtn.Size = UDim2.fromOffset(140, 42)
+    pauseBtn.Text = uiAutoOn and "✓ Auto: ON" or "✕ Auto: OFF"
+    pauseBtn.Font = Enum.Font.GothamBold
+    pauseBtn.TextSize = 14
+    pauseBtn.BackgroundColor3 = uiAutoOn and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(200, 80, 80)
+    pauseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pauseBtn.BorderSizePixel = 0
+    pauseBtn.ZIndex = 3
+    corner(pauseBtn, 12)
+
+    local intervalBox = Instance.new("TextBox")
+    intervalBox.Parent = controls
+    intervalBox.Size = UDim2.fromOffset(80, 42)
+    intervalBox.Text = tostring(uiRefreshInterval)
+    intervalBox.ClearTextOnFocus = false
+    intervalBox.Font = Enum.Font.GothamBold
+    intervalBox.TextSize = 16
+    intervalBox.BackgroundColor3 = Color3.fromRGB(245, 247, 252)
+    intervalBox.TextColor3 = Color3.fromRGB(40, 60, 90)
+    intervalBox.BorderSizePixel = 0
+    intervalBox.ZIndex = 3
+    corner(intervalBox, 12)
+    stroke(intervalBox, Color3.fromRGB(200, 210, 230), 2, 0.7)
+
+    local intervalLbl = Instance.new("TextLabel")
+    intervalLbl.Parent = controls
+    intervalLbl.BackgroundTransparency = 1
+    intervalLbl.Size = UDim2.fromOffset(80, 42)
+    intervalLbl.Font = Enum.Font.Gotham
+    intervalLbl.TextSize = 13
+    intervalLbl.TextXAlignment = Enum.TextXAlignment.Left
+    intervalLbl.TextColor3 = Color3.fromRGB(100, 120, 150)
+    intervalLbl.Text = "seconds"
+    intervalLbl.ZIndex = 3
+
+    local search = Instance.new("TextBox")
+    search.Parent = controls
+    search.Size = UDim2.fromOffset(180, 42)
+    search.PlaceholderText = "🔍 Search..."
+    search.Text = ""
+    search.ClearTextOnFocus = false
+    search.Font = Enum.Font.Gotham
+    search.TextSize = 14
+    search.BackgroundColor3 = Color3.fromRGB(245, 247, 252)
+    search.TextColor3 = Color3.fromRGB(40, 60, 90)
+    search.BorderSizePixel = 0
+    search.ZIndex = 3
+    corner(search, 12)
+    stroke(search, Color3.fromRGB(200, 210, 230), 2, 0.7)
+
+    -- ✅ List card DI CHUYỂN LÊN (vì đã ẩn controls)
     local listCard = Instance.new("Frame")
     listCard.Parent = body
-    listCard.Position = UDim2.fromOffset(0, 142)  -- 85 + 42 + 15 spacing
-    listCard.Size = UDim2.new(1, 0, 1, -142)
+    listCard.Position = UDim2.fromOffset(0, 85)  -- ✅ Từ 152 -> 85
+    listCard.Size = UDim2.new(1, 0, 1, -85)      -- ✅ Từ -152 -> -85
     listCard.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
     listCard.BorderSizePixel = 0
     listCard.ZIndex = 2
@@ -891,8 +913,8 @@ local function buildMainUI_MODERN()
         local idx = 0
         local sortedItems = sortedList(lastCounts)
         
-        -- CHỈ HIỂN THỊ TOP 5-6
-        local maxDisplay = 5
+        -- CHỈ HIỂN THỊ TOP 5-6 (hoặc ít hơn nếu filter)
+        local maxDisplay = 6
         local displayed = 0
         
         for _, it in ipairs(sortedItems) do
@@ -905,6 +927,7 @@ local function buildMainUI_MODERN()
             end
         end
         
+        -- Nếu không có gì để hiển thị
         if displayed == 0 then
             local emptyLbl = Instance.new("TextLabel")
             emptyLbl.Parent = itemsContainer
@@ -929,30 +952,27 @@ local function buildMainUI_MODERN()
         uniqueStat.Text = tostring(unique)
         timeStat.Text = nowTimeString()
         
-        render("")
+        render(search.Text)
     end
 
-    -- ✅ RESET BUTTON HANDLER
-    resetBtn.MouseButton1Click:Connect(function()
-        print("[RESET] Clearing fish list...")
-        lastCounts = {}
-        lastTotal = 0
-        totalStat.Text = "0"
-        uniqueStat.Text = "0"
-        timeStat.Text = "--:--:--"
-        clearRows()
-        
-        local emptyLbl = Instance.new("TextLabel")
-        emptyLbl.Parent = itemsContainer
-        emptyLbl.Size = UDim2.new(1, 0, 1, 0)
-        emptyLbl.BackgroundTransparency = 1
-        emptyLbl.Font = Enum.Font.GothamBold
-        emptyLbl.TextSize = 16
-        emptyLbl.TextColor3 = Color3.fromRGB(150, 160, 180)
-        emptyLbl.Text = "✅ List cleared! Click anywhere to refresh"
-        emptyLbl.ZIndex = 4
-        
-        print("[RESET] Done!")
+    refreshBtn.MouseButton1Click:Connect(function() pcall(doRefresh) end)
+    pauseBtn.MouseButton1Click:Connect(function()
+        autoOn = not autoOn
+        pauseBtn.Text = autoOn and "✓ Auto: ON" or "✕ Auto: OFF"
+        pauseBtn.BackgroundColor3 = autoOn and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(200, 80, 80)
+    end)
+
+    intervalBox.FocusLost:Connect(function()
+        local n = tonumber(intervalBox.Text)
+        if not n then intervalBox.Text = tostring(refreshInterval); return end
+        if n < 1 then n = 1 end
+        if n > 30 then n = 30 end
+        refreshInterval = n
+        intervalBox.Text = tostring(n)
+    end)
+
+    search:GetPropertyChangedSignal("Text"):Connect(function()
+        render(search.Text)
     end)
 
     minBtn.MouseButton1Click:Connect(function() setUIVisible(false) end)
@@ -1006,7 +1026,7 @@ if IS_MAIN then
 end
 
 --=========================================================
--- CLONE TRADE LOOP
+-- ✅ CLONE TRADE LOOP (FIXED - KHÔNG KICK SỚM)
 --=========================================================
 if not IS_MAIN then
     task.spawn(function()
