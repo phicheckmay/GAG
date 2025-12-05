@@ -217,38 +217,74 @@ local function invokeInitiateTrade(targetUserId, uuid)
 end
 
 --========================
--- Auto popup "Yes"
+-- Auto popup "Yes" - FASTER VERSION
 --========================
 task.spawn(function()
     local pg = LP:WaitForChild("PlayerGui")
-    local ok, lbl = pcall(function()
-        return pg:WaitForChild("Prompt")
-            :FindFirstChild("Blackout")
-            :FindFirstChild("Options")
-            :FindFirstChild("Yes")
-            :FindFirstChild("Label")
-    end)
-    if not ok or not lbl then return end
-
+    
+    -- ✅ Tìm prompt ngay từ đầu
+    local function findYesButton()
+        local ok, result = pcall(function()
+            return pg:FindFirstChild("Prompt")
+                and pg.Prompt:FindFirstChild("Blackout")
+                and pg.Prompt.Blackout:FindFirstChild("Options")
+                and pg.Prompt.Blackout.Options:FindFirstChild("Yes")
+        end)
+        return ok and result or nil
+    end
+    
+    local function findYesLabel()
+        local yesBtn = findYesButton()
+        return yesBtn and yesBtn:FindFirstChild("Label") or nil
+    end
+    
     local cam = workspace.CurrentCamera
-    local function fireBindable()
-        if not getnilinstances then return end
-        for _, obj in ipairs(getnilinstances()) do
-            if obj:IsA("BindableEvent") then
-                pcall(function() obj:Fire(true) end)
+    
+    -- ✅ Hàm click nhanh hơn
+    local function quickAccept()
+        print("[AUTO-YES] Đang click Yes...")
+        
+        -- Method 1: Fire BindableEvent
+        if getnilinstances then
+            for _, obj in ipairs(getnilinstances()) do
+                if obj:IsA("BindableEvent") then
+                    pcall(function() obj:Fire(true) end)
+                end
             end
         end
+        
+        -- Method 2: Click trực tiếp button
+        local yesBtn = findYesButton()
+        if yesBtn and yesBtn:IsA("GuiButton") then
+            for _, conn in pairs(getconnections and getconnections(yesBtn.MouseButton1Click) or {}) do
+                pcall(function() conn:Fire() end)
+            end
+        end
+        
+        print("[AUTO-YES] Đã click!")
     end
-
-    lbl:GetPropertyChangedSignal("Text"):Connect(function()
-        if lbl.Text == "Yes" then
-            local cf, ct = cam.CFrame, cam.CameraType
-            cam.CameraType = Enum.CameraType.Scriptable
-            task.wait(2)
-            fireBindable()
-            task.wait(2)
-            cam.CameraType = ct
-            cam.CFrame = cf
+    
+    -- ✅ Watch label text thay đổi
+    local lbl = findYesLabel()
+    if lbl then
+        lbl:GetPropertyChangedSignal("Text"):Connect(function()
+            if lbl.Text == "Yes" then
+                print("[AUTO-YES] Phát hiện popup Yes, click sau 0.3s...")
+                task.wait(0.3)  -- ✅ Giảm từ 2s -> 0.3s
+                quickAccept()
+            end
+        end)
+    end
+    
+    -- ✅ Backup: Poll mỗi 0.5s
+    task.spawn(function()
+        while task.wait(0.5) do
+            local label = findYesLabel()
+            if label and label.Text == "Yes" and label.Parent.Parent.Parent.Visible then
+                print("[AUTO-YES] Poll detected Yes, clicking...")
+                quickAccept()
+                task.wait(1)
+            end
         end
     end)
 end)
