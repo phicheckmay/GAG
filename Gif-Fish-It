@@ -1,6 +1,10 @@
 pcall(function() if setfpscap then setfpscap(15) end end)
 repeat task.wait() until game:IsLoaded()
-task.wait(0.8)
+
+-- ✅ THÊM DELAY 5s CHỜ GAME LOAD ỔN
+print("[FISH SCRIPT] Game loaded, chờ 5s để game ổn định...")
+task.wait(5)
+print("[FISH SCRIPT] Bắt đầu chạy script!")
 
 --========================
 -- CONFIG
@@ -88,15 +92,38 @@ end
 local function scanCounts()
     local counts, total = {}, 0
     for _, v in pairs(rawItems()) do
-        local ok, base = pcall(function()
+        -- ✅ Thử nhiều cách lấy tên cá
+        local name = nil
+        
+        -- Cách 1: ItemUtil (cách cũ)
+        local ok1, base = pcall(function()
             return ItemUtil:GetItemData(v.Id)
         end)
-        local name = ok and base and base.Data and base.Data.Name
+        if ok1 and base and base.Data and base.Data.Name then
+            name = base.Data.Name
+        end
+        
+        -- Cách 2: Lấy trực tiếp từ item (nếu có)
+        if not name and v.Name then
+            name = v.Name
+        end
+        
+        -- Cách 3: Lấy từ Id (fallback)
+        if not name and v.Id then
+            name = tostring(v.Id)
+        end
+        
+        -- Debug
         if name then
+            print("[SCAN] Found fish:", name)
             counts[name] = (counts[name] or 0) + 1
             total += 1
+        else
+            print("[SCAN] Unknown item:", v.Id or "no-id", "UUID:", v.UUID or "no-uuid")
         end
     end
+    
+    print("[SCAN] Total counted:", total, "Unique:", (function() local c=0 for _ in pairs(counts) do c+=1 end return c end)())
     return counts, total
 end
 
@@ -163,44 +190,93 @@ local function invokeInitiateTrade(targetUserId, uuid)
 end
 
 --========================
--- Auto popup "Yes"
+-- Auto popup "Yes" - FIXED ✅
 --========================
 task.spawn(function()
+    task.wait(3) -- Đợi UI load
+    
     local pg = LP:WaitForChild("PlayerGui")
-    local ok, lbl = pcall(function()
-        return pg:WaitForChild("Prompt")
-            :FindFirstChild("Blackout")
-            :FindFirstChild("Options")
-            :FindFirstChild("Yes")
-            :FindFirstChild("Label")
-    end)
-    if not ok or not lbl then return end
-
-    local cam = workspace.CurrentCamera
-    local function fireBindable()
-        if not getnilinstances then return end
-        for _, obj in ipairs(getnilinstances()) do
-            if obj:IsA("BindableEvent") then
-                pcall(function() obj:Fire(true) end)
+    
+    -- Thử nhiều cách tìm nút Yes
+    local function findYesButton()
+        -- Cách 1: Tìm trong Prompt
+        local prompt = pg:FindFirstChild("Prompt")
+        if prompt then
+            local yes = prompt:FindFirstChild("Yes", true)
+            if yes and yes:IsA("TextButton") then
+                return yes
+            end
+            
+            local yesLabel = prompt:FindFirstChild("Label", true)
+            if yesLabel and yesLabel:IsA("TextLabel") and yesLabel.Text == "Yes" then
+                return yesLabel.Parent
             end
         end
-    end
-
-    lbl:GetPropertyChangedSignal("Text"):Connect(function()
-        if lbl.Text == "Yes" then
-            local cf, ct = cam.CFrame, cam.CameraType
-            cam.CameraType = Enum.CameraType.Scriptable
-            task.wait(2)
-            fireBindable()
-            task.wait(2)
-            cam.CameraType = ct
-            cam.CFrame = cf
+        
+        -- Cách 2: Tìm trong tất cả GUI
+        for _, gui in pairs(pg:GetDescendants()) do
+            if gui:IsA("TextButton") and gui.Text == "Yes" then
+                return gui
+            end
+            if gui:IsA("TextLabel") and gui.Text == "Yes" and gui.Parent:IsA("TextButton") then
+                return gui.Parent
+            end
         end
-    end)
+        
+        return nil
+    end
+    
+    local function clickYes()
+        local yesBtn = findYesButton()
+        if yesBtn then
+            print("[AUTO YES] Found Yes button, clicking...")
+            
+            -- Thử click bằng nhiều cách
+            pcall(function()
+                -- Cách 1: FireClick event
+                for _, conn in pairs(getconnections(yesBtn.MouseButton1Click)) do
+                    pcall(function() conn:Fire() end)
+                end
+            end)
+            
+            pcall(function()
+                -- Cách 2: Activate
+                if yesBtn:IsA("TextButton") then
+                    yesBtn.Activated:Fire()
+                end
+            end)
+            
+            pcall(function()
+                -- Cách 3: Fire bindable
+                if getnilinstances then
+                    for _, obj in ipairs(getnilinstances()) do
+                        if obj:IsA("BindableEvent") and obj.Name:lower():find("yes") then
+                            obj:Fire(true)
+                        end
+                    end
+                end
+            end)
+            
+            print("[AUTO YES] Clicked!")
+            return true
+        end
+        return false
+    end
+    
+    -- Loop check và auto click
+    while task.wait(0.5) do
+        pcall(function()
+            local prompt = pg:FindFirstChild("Prompt")
+            if prompt and prompt.Visible then
+                task.wait(0.3)
+                clickYes()
+            end
+        end)
+    end
 end)
 
 --=========================================================
--- CLONE LOG UI
+-- CLONE LOG UI (CENTER WHITE)
 --=========================================================
 local CloneLog = nil
 
@@ -383,7 +459,7 @@ if (not IS_MAIN) and (Config["CloneLog_Show"] ~= false) then
 end
 
 --=========================================================
--- MAIN UI - MATCH UPLOADED IMAGE DESIGN
+-- ✅ MAIN UI MỚI - DESIGN HIỆN ĐẠI, CÓ NÚT RESET
 --=========================================================
 local function keycodeFromString(s)
     if typeof(s) ~= "string" then return Enum.KeyCode.H end
@@ -400,257 +476,404 @@ local function keycodeFromString(s)
 end
 local TOGGLE_KEY = keycodeFromString(Config["Hotkey_ToggleUI"])
 
-local function buildMainUI_ImageMatch()
+local function buildMainUI_MODERN()
+    -- Helper functions
     local function corner(parent, r)
         local c = Instance.new("UICorner")
         c.CornerRadius = UDim.new(0, r or 12)
         c.Parent = parent
         return c
     end
+    
+    local function stroke(parent, color, t, trans)
+        local s = Instance.new("UIStroke")
+        s.Color = color or Color3.fromRGB(200, 200, 210)
+        s.Thickness = t or 2
+        s.Transparency = trans or 0.7
+        s.Parent = parent
+        return s
+    end
+    
+    local function shadow(parent)
+        local img = Instance.new("ImageLabel")
+        img.Name = "Shadow"
+        img.Parent = parent
+        img.AnchorPoint = Vector2.new(0.5, 0.5)
+        img.Position = UDim2.fromScale(0.5, 0.5)
+        img.Size = UDim2.new(1, 50, 1, 50)
+        img.BackgroundTransparency = 1
+        img.ImageTransparency = 0.75
+        img.Image = "rbxassetid://1316045217"
+        img.ScaleType = Enum.ScaleType.Slice
+        img.SliceCenter = Rect.new(10, 10, 118, 118)
+        img.ZIndex = 0
+        return img
+    end
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "MainInventoryUI"
+    gui.Name = "ModernFishUI"
     gui.ResetOnSpawn = false
     gui.Parent = LP:WaitForChild("PlayerGui")
 
-    -- 📱 Main container - giống ảnh: nền xám nhạt
+    -- Main container - NỀN TRẮNG
     local root = Instance.new("Frame")
     root.Name = "Root"
     root.Parent = gui
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = UDim2.fromOffset(400, 520)
-    root.BackgroundColor3 = Color3.fromRGB(230, 232, 237)
+    root.Size = UDim2.fromOffset(700, 520)
+    root.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     root.BorderSizePixel = 0
     root.ZIndex = 1
-    corner(root, 16)
+    corner(root, 24)
+    stroke(root, Color3.fromRGB(220, 220, 230), 2, 0.5)
+    shadow(root)
 
-    -- 🔵 Header - nền xanh đậm như ảnh
+    -- Gradient overlay nhẹ
+    local bgGrad = Instance.new("UIGradient")
+    bgGrad.Rotation = 135
+    bgGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(245, 248, 255)),
+    })
+    bgGrad.Parent = root
+
+    -- Mini button
+    local miniBtn = Instance.new("TextButton")
+    miniBtn.Name = "MiniIcon"
+    miniBtn.Parent = gui
+    miniBtn.Position = UDim2.fromOffset(20, 120)
+    miniBtn.Size = UDim2.fromOffset(56, 56)
+    miniBtn.Text = "🐟"
+    miniBtn.Font = Enum.Font.GothamBold
+    miniBtn.TextSize = 24
+    miniBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    miniBtn.TextColor3 = Color3.fromRGB(70, 130, 255)
+    miniBtn.BorderSizePixel = 0
+    miniBtn.Visible = false
+    miniBtn.ZIndex = 50
+    corner(miniBtn, 18)
+    stroke(miniBtn, Color3.fromRGB(70, 130, 255), 2, 0.5)
+    shadow(miniBtn)
+
+    -- Drag mini button
+    do
+        local dragging = false
+        local dragStart, startPos
+        miniBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = miniBtn.Position
+            end
+        end)
+        miniBtn.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        end)
+        UIS.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local delta = input.Position - dragStart
+                miniBtn.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end)
+    end
+
+    local uiVisible = true
+    local function setUIVisible(state)
+        uiVisible = state
+        root.Visible = uiVisible
+        miniBtn.Visible = not uiVisible
+    end
+    local function toggleUI() setUIVisible(not uiVisible) end
+
+    -- Header với gradient màu
     local header = Instance.new("Frame")
     header.Parent = root
-    header.Size = UDim2.new(1, 0, 0, 55)
-    header.BackgroundColor3 = Color3.fromRGB(35, 50, 150)
+    header.Size = UDim2.new(1, 0, 0, 90)
+    header.BackgroundColor3 = Color3.fromRGB(70, 130, 255)
     header.BorderSizePixel = 0
     header.ZIndex = 2
-    corner(header, 16)
+    corner(header, 24)
 
-    -- Cover bottom corners of header
-    local headerCover = Instance.new("Frame")
-    headerCover.Parent = header
-    headerCover.Position = UDim2.fromOffset(0, 40)
-    headerCover.Size = UDim2.new(1, 0, 0, 15)
-    headerCover.BackgroundColor3 = Color3.fromRGB(35, 50, 150)
-    headerCover.BorderSizePixel = 0
-    headerCover.ZIndex = 2
+    local headerGrad = Instance.new("UIGradient")
+    headerGrad.Rotation = 45
+    headerGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 130, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(100, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 100, 255)),
+    })
+    headerGrad.Parent = header
 
+    -- Icon lớn
+    local icon = Instance.new("TextLabel")
+    icon.Parent = header
+    icon.BackgroundTransparency = 1
+    icon.Position = UDim2.fromOffset(24, 20)
+    icon.Size = UDim2.fromOffset(50, 50)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 36
+    icon.Text = "🎣"
+    icon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    icon.ZIndex = 3
+
+    -- Title với tên nhân vật
     local title = Instance.new("TextLabel")
     title.Parent = header
     title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(16, 0)
-    title.Size = UDim2.new(1, -100, 1, 0)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 16
+    title.Position = UDim2.fromOffset(84, 18)
+    title.Size = UDim2.new(1, -250, 0, 26)
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 21
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Text = "Inventory - " .. LP.Name
+    title.Text = "Fish Inventory • " .. LP.Name
     title.ZIndex = 3
 
-    -- ✕ Close button
+    -- Subtitle
+    local subtitle = Instance.new("TextLabel")
+    subtitle.Parent = header
+    subtitle.BackgroundTransparency = 1
+    subtitle.Position = UDim2.fromOffset(84, 46)
+    subtitle.Size = UDim2.new(1, -250, 0, 18)
+    subtitle.Font = Enum.Font.Gotham
+    subtitle.TextSize = 13
+    subtitle.TextXAlignment = Enum.TextXAlignment.Left
+    subtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    subtitle.TextTransparency = 0.25
+    subtitle.Text = ("⌨ %s | 🔄 %ds"):format(Config["Hotkey_ToggleUI"], uiRefreshInterval)
+    subtitle.ZIndex = 3
+
+    -- Buttons header
+    local minBtn = Instance.new("TextButton")
+    minBtn.Parent = header
+    minBtn.Size = UDim2.fromOffset(40, 32)
+    minBtn.Position = UDim2.new(1, -24-40-48, 0, 29)
+    minBtn.Text = "—"
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 20
+    minBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    minBtn.BackgroundTransparency = 0.15
+    minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minBtn.BorderSizePixel = 0
+    minBtn.ZIndex = 3
+    corner(minBtn, 10)
+
     local closeBtn = Instance.new("TextButton")
     closeBtn.Parent = header
-    closeBtn.Size = UDim2.fromOffset(35, 35)
-    closeBtn.Position = UDim2.new(1, -45, 0, 10)
+    closeBtn.Size = UDim2.fromOffset(40, 32)
+    closeBtn.Position = UDim2.new(1, -24-40, 0, 29)
     closeBtn.Text = "✕"
     closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 18
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    closeBtn.TextSize = 16
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.BackgroundTransparency = 0.15
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.BorderSizePixel = 0
-    closeBtn.ZIndex = 4
-    corner(closeBtn, 8)
+    closeBtn.ZIndex = 3
+    corner(closeBtn, 10)
 
-    -- 🟢 Stats bar - giống ảnh: nền xanh lá
-    local statsBar = Instance.new("Frame")
-    statsBar.Parent = root
-    statsBar.Position = UDim2.fromOffset(0, 55)
-    statsBar.Size = UDim2.new(1, 0, 0, 50)
-    statsBar.BackgroundColor3 = Color3.fromRGB(80, 180, 100)
-    statsBar.BorderSizePixel = 0
-    statsBar.ZIndex = 2
+    -- Body
+    local body = Instance.new("Frame")
+    body.Parent = root
+    body.Position = UDim2.fromOffset(0, 90)
+    body.Size = UDim2.new(1, 0, 1, -90)
+    body.BackgroundTransparency = 1
+    body.ZIndex = 2
 
-    -- 3 stat boxes
-    local function createStatBox(parent, pos, label, value)
-        local box = Instance.new("Frame")
-        box.Parent = parent
-        box.Position = pos
-        box.Size = UDim2.fromOffset(110, 40)
-        box.BackgroundTransparency = 1
-        box.ZIndex = 3
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 24)
+    padding.PaddingRight = UDim.new(0, 24)
+    padding.PaddingTop = UDim.new(0, 20)
+    padding.PaddingBottom = UDim.new(0, 24)
+    padding.Parent = body
 
-        local lbl = Instance.new("TextLabel")
-        lbl.Parent = box
-        lbl.BackgroundTransparency = 1
-        lbl.Size = UDim2.new(1, 0, 0, 14)
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 11
-        lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-        lbl.TextTransparency = 0.3
-        lbl.Text = label
-        lbl.ZIndex = 3
+    -- Stats card với màu sắc
+    local statsCard = Instance.new("Frame")
+    statsCard.Parent = body
+    statsCard.Size = UDim2.new(1, 0, 0, 70)
+    statsCard.BackgroundColor3 = Color3.fromRGB(250, 252, 255)
+    statsCard.BorderSizePixel = 0
+    statsCard.ZIndex = 2
+    corner(statsCard, 16)
+    stroke(statsCard, Color3.fromRGB(70, 130, 255), 2, 0.85)
 
-        local val = Instance.new("TextLabel")
-        val.Parent = box
-        val.BackgroundTransparency = 1
-        val.Position = UDim2.fromOffset(0, 16)
-        val.Size = UDim2.new(1, 0, 0, 20)
-        val.Font = Enum.Font.GothamBold
-        val.TextSize = 16
-        val.TextColor3 = Color3.fromRGB(255, 255, 255)
-        val.Text = value
-        val.ZIndex = 3
-        val.Name = "Value"
+    local statsLayout = Instance.new("UIListLayout")
+    statsLayout.Parent = statsCard
+    statsLayout.FillDirection = Enum.FillDirection.Horizontal
+    statsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    statsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    statsLayout.Padding = UDim.new(0, 40)
 
-        return val
+    local function createStatItem(emoji, label, value)
+        local container = Instance.new("Frame")
+        container.Parent = statsCard
+        container.Size = UDim2.fromOffset(150, 50)
+        container.BackgroundTransparency = 1
+        container.ZIndex = 3
+
+        local emojiLbl = Instance.new("TextLabel")
+        emojiLbl.Parent = container
+        emojiLbl.BackgroundTransparency = 1
+        emojiLbl.Size = UDim2.fromOffset(40, 40)
+        emojiLbl.Position = UDim2.fromOffset(0, 5)
+        emojiLbl.Font = Enum.Font.GothamBold
+        emojiLbl.TextSize = 28
+        emojiLbl.Text = emoji
+        emojiLbl.ZIndex = 4
+
+        local labelTxt = Instance.new("TextLabel")
+        labelTxt.Parent = container
+        labelTxt.BackgroundTransparency = 1
+        labelTxt.Position = UDim2.fromOffset(48, 8)
+        labelTxt.Size = UDim2.fromOffset(100, 16)
+        labelTxt.Font = Enum.Font.Gotham
+        labelTxt.TextSize = 12
+        labelTxt.TextXAlignment = Enum.TextXAlignment.Left
+        labelTxt.TextColor3 = Color3.fromRGB(100, 120, 150)
+        labelTxt.Text = label
+        labelTxt.ZIndex = 4
+
+        local valueTxt = Instance.new("TextLabel")
+        valueTxt.Parent = container
+        valueTxt.BackgroundTransparency = 1
+        valueTxt.Position = UDim2.fromOffset(48, 26)
+        valueTxt.Size = UDim2.fromOffset(100, 20)
+        valueTxt.Font = Enum.Font.GothamBold
+        valueTxt.TextSize = 18
+        valueTxt.TextXAlignment = Enum.TextXAlignment.Left
+        valueTxt.TextColor3 = Color3.fromRGB(30, 40, 60)
+        valueTxt.Text = value
+        valueTxt.ZIndex = 4
+
+        return valueTxt
     end
 
-    local totalStat = createStatBox(statsBar, UDim2.fromOffset(15, 5), "Total Fish", "29")
-    local uniqueStat = createStatBox(statsBar, UDim2.fromOffset(145, 5), "Unique Types", "4")
-    local lastStat = createStatBox(statsBar, UDim2.fromOffset(275, 5), "Last Update", "11:48:10")
+    local totalStat = createStatItem("📦", "Total Fish", "0")
+    local uniqueStat = createStatItem("🐠", "Unique Types", "0")
+    local timeStat = createStatItem("⏰", "Last Update", "--:--:--")
 
-    -- 🎛️ Controls - giống ảnh
-    local controls = Instance.new("Frame")
-    controls.Parent = root
-    controls.Position = UDim2.fromOffset(12, 115)
-    controls.Size = UDim2.new(1, -24, 0, 42)
-    controls.BackgroundTransparency = 1
-    controls.ZIndex = 2
+    -- ✅ THÊM NÚT RESET Ở DƯỚI STATS
+    local resetBtn = Instance.new("TextButton")
+    resetBtn.Parent = body
+    resetBtn.Position = UDim2.fromOffset(0, 85)
+    resetBtn.Size = UDim2.new(1, 0, 0, 42)
+    resetBtn.Text = "🗑️ Reset Fish List"
+    resetBtn.Font = Enum.Font.GothamBold
+    resetBtn.TextSize = 15
+    resetBtn.BackgroundColor3 = Color3.fromRGB(220, 80, 80)
+    resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    resetBtn.BorderSizePixel = 0
+    resetBtn.ZIndex = 3
+    corner(resetBtn, 12)
 
-    local refreshBtn = Instance.new("TextButton")
-    refreshBtn.Parent = controls
-    refreshBtn.Size = UDim2.fromOffset(100, 36)
-    refreshBtn.Position = UDim2.fromOffset(0, 0)
-    refreshBtn.Text = "Refresh"
-    refreshBtn.Font = Enum.Font.GothamBold
-    refreshBtn.TextSize = 13
-    refreshBtn.BackgroundColor3 = Color3.fromRGB(50, 120, 220)
-    refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    refreshBtn.BorderSizePixel = 0
-    refreshBtn.ZIndex = 3
-    corner(refreshBtn, 10)
+    local resetGrad = Instance.new("UIGradient")
+    resetGrad.Rotation = 90
+    resetGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(220, 80, 80)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 60, 60)),
+    })
+    resetGrad.Parent = resetBtn
 
-    local autoBtn = Instance.new("TextButton")
-    autoBtn.Parent = controls
-    autoBtn.Size = UDim2.fromOffset(100, 36)
-    autoBtn.Position = UDim2.fromOffset(110, 0)
-    autoBtn.Text = uiAutoOn and "Auto: ON" or "Auto: OFF"
-    autoBtn.Font = Enum.Font.GothamBold
-    autoBtn.TextSize = 13
-    autoBtn.BackgroundColor3 = uiAutoOn and Color3.fromRGB(80, 180, 100) or Color3.fromRGB(180, 80, 80)
-    autoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    autoBtn.BorderSizePixel = 0
-    autoBtn.ZIndex = 3
-    corner(autoBtn, 10)
+    -- List card
+    local listCard = Instance.new("Frame")
+    listCard.Parent = body
+    listCard.Position = UDim2.fromOffset(0, 142)  -- 85 + 42 + 15 spacing
+    listCard.Size = UDim2.new(1, 0, 1, -142)
+    listCard.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
+    listCard.BorderSizePixel = 0
+    listCard.ZIndex = 2
+    corner(listCard, 18)
+    stroke(listCard, Color3.fromRGB(220, 230, 245), 2, 0.6)
 
-    local search = Instance.new("TextBox")
-    search.Parent = controls
-    search.Size = UDim2.fromOffset(156, 36)
-    search.Position = UDim2.new(1, -156, 0, 0)
-    search.PlaceholderText = "Search..."
-    search.Text = ""
-    search.ClearTextOnFocus = false
-    search.Font = Enum.Font.Gotham
-    search.TextSize = 13
-    search.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    search.TextColor3 = Color3.fromRGB(60, 70, 90)
-    search.BorderSizePixel = 0
-    search.ZIndex = 3
-    corner(search, 10)
-
-    -- 📜 List container - nền trắng với cards
-    local listContainer = Instance.new("Frame")
-    listContainer.Parent = root
-    listContainer.Position = UDim2.fromOffset(12, 167)
-    listContainer.Size = UDim2.new(1, -24, 1, -179)
-    listContainer.BackgroundColor3 = Color3.fromRGB(230, 232, 237)
-    listContainer.BorderSizePixel = 0
-    listContainer.ZIndex = 2
-
-    local scrolling = Instance.new("ScrollingFrame")
-    scrolling.Parent = listContainer
-    scrolling.Position = UDim2.fromOffset(0, 0)
-    scrolling.Size = UDim2.new(1, 0, 1, 0)
-    scrolling.BackgroundTransparency = 1
-    scrolling.BorderSizePixel = 0
-    scrolling.ScrollBarThickness = 4
-    scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scrolling.ZIndex = 3
+    -- Container cho items (KHÔNG SCROLL)
+    local itemsContainer = Instance.new("Frame")
+    itemsContainer.Parent = listCard
+    itemsContainer.Position = UDim2.fromOffset(16, 16)
+    itemsContainer.Size = UDim2.new(1, -32, 1, -32)
+    itemsContainer.BackgroundTransparency = 1
+    itemsContainer.ZIndex = 3
 
     local layout = Instance.new("UIListLayout")
-    layout.Parent = scrolling
+    layout.Parent = itemsContainer
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 8)
+    layout.Padding = UDim.new(0, 10)
 
     local function clearRows()
-        for _, ch in ipairs(scrolling:GetChildren()) do
+        for _, ch in ipairs(itemsContainer:GetChildren()) do
             if ch:IsA("Frame") then ch:Destroy() end
         end
     end
 
-    -- 🎨 Color bars như trong ảnh
-    local colorBars = {
-        Color3.fromRGB(230, 110, 140),  -- Pink
-        Color3.fromRGB(120, 180, 110),  -- Green
-        Color3.fromRGB(255, 180, 80),   -- Orange
-        Color3.fromRGB(150, 130, 220),  -- Purple
+    -- Color palette cho các row
+    local colors = {
+        Color3.fromRGB(100, 150, 255),
+        Color3.fromRGB(255, 120, 150),
+        Color3.fromRGB(150, 200, 100),
+        Color3.fromRGB(255, 180, 80),
+        Color3.fromRGB(180, 130, 255),
     }
 
     local function addRow(name, count, index)
         local row = Instance.new("Frame")
-        row.Parent = scrolling
+        row.Parent = itemsContainer
         row.Size = UDim2.new(1, 0, 0, 48)
         row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         row.BorderSizePixel = 0
         row.ZIndex = 3
-        corner(row, 12)
+        corner(row, 14)
+        stroke(row, Color3.fromRGB(230, 235, 245), 2, 0.5)
 
-        -- Color bar bên trái
         local colorBar = Instance.new("Frame")
         colorBar.Parent = row
-        colorBar.Size = UDim2.fromOffset(6, 48)
-        colorBar.BackgroundColor3 = colorBars[((index - 1) % #colorBars) + 1]
+        colorBar.Size = UDim2.fromOffset(8, 48)
+        colorBar.BackgroundColor3 = colors[(index % #colors) + 1]
         colorBar.BorderSizePixel = 0
         colorBar.ZIndex = 4
-        corner(colorBar, 12)
+        corner(colorBar, 14)
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Parent = row
         nameLbl.BackgroundTransparency = 1
-        nameLbl.Position = UDim2.fromOffset(18, 0)
-        nameLbl.Size = UDim2.new(1, -120, 1, 0)
+        nameLbl.Position = UDim2.fromOffset(24, 0)
+        nameLbl.Size = UDim2.new(1, -140, 1, 0)
         nameLbl.Font = Enum.Font.GothamBold
-        nameLbl.TextSize = 14
+        nameLbl.TextSize = 15
         nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-        nameLbl.TextColor3 = Color3.fromRGB(40, 50, 70)
-        nameLbl.Text = name
+        nameLbl.TextColor3 = Color3.fromRGB(30, 40, 60)
+        nameLbl.Text = "🐟 " .. name
         nameLbl.ZIndex = 4
 
-        -- Button xanh bên phải giống ảnh
-        local countBtn = Instance.new("TextButton")
-        countBtn.Parent = row
-        countBtn.Size = UDim2.fromOffset(60, 32)
-        countBtn.Position = UDim2.new(1, -70, 0, 8)
-        countBtn.Text = tostring(count)
-        countBtn.Font = Enum.Font.GothamBlack
-        countBtn.TextSize = 15
-        countBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 230)
-        countBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        countBtn.BorderSizePixel = 0
-        countBtn.ZIndex = 4
-        corner(countBtn, 10)
+        local countBadge = Instance.new("Frame")
+        countBadge.Parent = row
+        countBadge.Position = UDim2.new(1, -110, 0.5, -16)
+        countBadge.Size = UDim2.fromOffset(95, 32)
+        countBadge.BackgroundColor3 = Color3.fromRGB(70, 130, 255)
+        countBadge.BorderSizePixel = 0
+        countBadge.ZIndex = 4
+        corner(countBadge, 10)
+
+        local badgeGrad = Instance.new("UIGradient")
+        badgeGrad.Rotation = 90
+        badgeGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 130, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 160, 255)),
+        })
+        badgeGrad.Parent = countBadge
+
+        local countLbl = Instance.new("TextLabel")
+        countLbl.Parent = countBadge
+        countLbl.BackgroundTransparency = 1
+        countLbl.Size = UDim2.new(1, 0, 1, 0)
+        countLbl.Font = Enum.Font.GothamBold
+        countLbl.TextSize = 16
+        countLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        countLbl.Text = "✕ " .. tostring(count)
+        countLbl.ZIndex = 5
     end
 
-    -- 🔄 Logic
     local lastCounts = {}
     local lastTotal = 0
     local accumulator = 0
@@ -665,12 +888,33 @@ local function buildMainUI_ImageMatch()
     local function render(filterText)
         filterText = (filterText or ""):lower()
         clearRows()
-        local index = 1
-        for _, it in ipairs(sortedList(lastCounts)) do
+        local idx = 0
+        local sortedItems = sortedList(lastCounts)
+        
+        -- CHỈ HIỂN THỊ TOP 5-6
+        local maxDisplay = 5
+        local displayed = 0
+        
+        for _, it in ipairs(sortedItems) do
+            if displayed >= maxDisplay then break end
+            
             if filterText == "" or it.name:lower():find(filterText, 1, true) then
-                addRow(it.name, it.count, index)
-                index = index + 1
+                idx = idx + 1
+                displayed = displayed + 1
+                addRow(it.name, it.count, idx)
             end
+        end
+        
+        if displayed == 0 then
+            local emptyLbl = Instance.new("TextLabel")
+            emptyLbl.Parent = itemsContainer
+            emptyLbl.Size = UDim2.new(1, 0, 1, 0)
+            emptyLbl.BackgroundTransparency = 1
+            emptyLbl.Font = Enum.Font.GothamBold
+            emptyLbl.TextSize = 16
+            emptyLbl.TextColor3 = Color3.fromRGB(150, 160, 180)
+            emptyLbl.Text = filterText ~= "" and "🔍 No results found" or "📭 No fish in inventory"
+            emptyLbl.ZIndex = 4
         end
     end
 
@@ -681,28 +925,41 @@ local function buildMainUI_ImageMatch()
         local unique = 0
         for _ in pairs(counts) do unique += 1 end
         
-        totalStat.Text = tostring(total)
+        totalStat.Text = tostring(lastTotal)
         uniqueStat.Text = tostring(unique)
-        lastStat.Text = nowTimeString()
+        timeStat.Text = nowTimeString()
         
-        render(search.Text)
+        render("")
     end
 
-    refreshBtn.MouseButton1Click:Connect(function() pcall(doRefresh) end)
-    
-    autoBtn.MouseButton1Click:Connect(function()
-        autoOn = not autoOn
-        autoBtn.Text = autoOn and "Auto: ON" or "Auto: OFF"
-        autoBtn.BackgroundColor3 = autoOn and Color3.fromRGB(80, 180, 100) or Color3.fromRGB(180, 80, 80)
+    -- ✅ RESET BUTTON HANDLER
+    resetBtn.MouseButton1Click:Connect(function()
+        print("[RESET] Clearing fish list...")
+        lastCounts = {}
+        lastTotal = 0
+        totalStat.Text = "0"
+        uniqueStat.Text = "0"
+        timeStat.Text = "--:--:--"
+        clearRows()
+        
+        local emptyLbl = Instance.new("TextLabel")
+        emptyLbl.Parent = itemsContainer
+        emptyLbl.Size = UDim2.new(1, 0, 1, 0)
+        emptyLbl.BackgroundTransparency = 1
+        emptyLbl.Font = Enum.Font.GothamBold
+        emptyLbl.TextSize = 16
+        emptyLbl.TextColor3 = Color3.fromRGB(150, 160, 180)
+        emptyLbl.Text = "✅ List cleared! Click anywhere to refresh"
+        emptyLbl.ZIndex = 4
+        
+        print("[RESET] Done!")
     end)
 
-    search:GetPropertyChangedSignal("Text"):Connect(function()
-        render(search.Text)
-    end)
-
+    minBtn.MouseButton1Click:Connect(function() setUIVisible(false) end)
+    miniBtn.MouseButton1Click:Connect(function() setUIVisible(true) end)
     closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
-    -- Draggable
+    -- Drag window
     do
         local dragging = false
         local dragStart, startPos
@@ -729,9 +986,7 @@ local function buildMainUI_ImageMatch()
 
     UIS.InputBegan:Connect(function(input, gp)
         if gp then return end
-        if input.KeyCode == TOGGLE_KEY then 
-            root.Visible = not root.Visible
-        end
+        if input.KeyCode == TOGGLE_KEY then toggleUI() end
     end)
 
     RunService.Heartbeat:Connect(function(dt)
@@ -747,7 +1002,7 @@ local function buildMainUI_ImageMatch()
 end
 
 if IS_MAIN then
-    buildMainUI_ImageMatch()
+    buildMainUI_MODERN()
 end
 
 --=========================================================
