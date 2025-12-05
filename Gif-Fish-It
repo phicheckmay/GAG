@@ -74,6 +74,44 @@ local function rawItems()
     return Data:Get({ "Inventory", "Items" }) or {}
 end
 
+-- ✅ CACHE cho ItemData
+local itemDataCache = {}
+
+local function getItemName(itemId)
+    -- Check cache trước
+    if itemDataCache[itemId] then
+        return itemDataCache[itemId]
+    end
+    
+    -- Thử lấy từ ItemUtil
+    local ok, base = pcall(function()
+        return ItemUtil:GetItemData(itemId)
+    end)
+    
+    if ok and base and base.Data and base.Data.Name then
+        local name = base.Data.Name
+        itemDataCache[itemId] = name
+        return name
+    end
+    
+    -- Thử lấy từ ReplicatedStorage.Shared.Items
+    local itemsFolder = RS:FindFirstChild("Shared") and RS.Shared:FindFirstChild("Items")
+    if itemsFolder then
+        for _, itemModule in pairs(itemsFolder:GetChildren()) do
+            if itemModule:IsA("ModuleScript") then
+                local ok2, data = pcall(function() return require(itemModule) end)
+                if ok2 and data and data.Data and data.Data.Name and tostring(data.Id or itemModule.Name) == tostring(itemId) then
+                    local name = data.Data.Name
+                    itemDataCache[itemId] = name
+                    return name
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
 --========================
 -- Time + character utils
 --========================
@@ -91,39 +129,28 @@ end
 --========================
 local function scanCounts()
     local counts, total = {}, 0
+    local unknownCount = 0
+    
     for _, v in pairs(rawItems()) do
-        -- ✅ Thử nhiều cách lấy tên cá
-        local name = nil
+        -- ✅ Dùng hàm getItemName mới
+        local name = getItemName(v.Id)
         
-        -- Cách 1: ItemUtil (cách cũ)
-        local ok1, base = pcall(function()
-            return ItemUtil:GetItemData(v.Id)
-        end)
-        if ok1 and base and base.Data and base.Data.Name then
-            name = base.Data.Name
-        end
-        
-        -- Cách 2: Lấy trực tiếp từ item (nếu có)
-        if not name and v.Name then
-            name = v.Name
-        end
-        
-        -- Cách 3: Lấy từ Id (fallback)
-        if not name and v.Id then
-            name = tostring(v.Id)
-        end
-        
-        -- Debug
         if name then
-            print("[SCAN] Found fish:", name)
             counts[name] = (counts[name] or 0) + 1
             total += 1
         else
-            print("[SCAN] Unknown item:", v.Id or "no-id", "UUID:", v.UUID or "no-uuid")
+            -- Đếm cá không rõ tên
+            unknownCount += 1
+            total += 1
+            print("[SCAN] Unknown item ID:", v.Id, "- Có thể game chưa load data")
         end
     end
     
-    print("[SCAN] Total counted:", total, "Unique:", (function() local c=0 for _ in pairs(counts) do c+=1 end return c end)())
+    -- ✅ Nếu có cá "Unknown", thêm vào list
+    if unknownCount > 0 then
+        counts["🔄 Loading..."] = unknownCount
+    end
+    
     return counts, total
 end
 
