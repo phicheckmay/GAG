@@ -1,176 +1,104 @@
---====================================================
--- ⚙️ CONFIG — chỉ cần chỉnh trong phần này
---====================================================
-local CONFIG = {
-    WAIT_BEFORE_START = 3,    -- đợi 3s cho game load xong
-    SELL_INTERVAL = 120,      -- 120s/lần bán toàn bộ
-    BUY_INTERVAL  = 10,       -- 10s/lần mua hạt
-    ENABLE_UNFAVORITE = true, -- Bỏ tim tất cả pet ❤️
-    ENABLE_AUTOSELL   = true, -- Set autosell
-    ENABLE_SELL_LOOP  = true, -- Lặp Sell All
-    ENABLE_BUY_SEED   = true, -- Mua hạt
+_G.FishItConfig = _G.FishItConfig or {
+    ["Fishing"] = {
+        ["Auto Perfect"] = true,
+    },
+    ["Auto Trade"] = {
+        ["Enabled"] = false,
+        ["Whitelist Username"] = {""},
+        ["Category Fish"] = { -- Only Select one, fill in the fish category or fish name
+            "Secret",
+        },
+        ["Fish Name"] = {
+        },
+    },
+    ["Farm Coin Only"] = {
+        ["Enabled"] = false, -- Farm coins only [ cant buy rod, bait, enchant, weather ]
+        ["Target"] = 190000,
+    },
+    ["Selling"] = {
+        ["Auto Sell"] = true,
+        ["Auto Sell Threshold"] = "Mythic",
+        ["Auto Sell Every"] = 100,
+    },
+    ["Doing Quest"] = {
+        ["Auto Ghostfinn Rod"] = true,
+        ["Auto Element Rod"] = false,
+        ["Allowed Sacrifice"] = {
+            "Blob Shark",
+            "Thin Armor Shark",
+            "Ghost Shark",
+            "Cryoshade Glider",
+        },
+        ["FARM_LOC_SECRET_SACRIFICE"] = "Ocean",
 
-    SEED_SELLER = "George",   -- NPC bán hạt
-    SEED_LIST = { "Shroombino", "Mango", "King Limone", "Starfruit" },
+        ["Minimum Rod"] = "Astral Rod",
+    },
+    ["WebHook"] = {
+        ["Link Webhook"] = "https://discordapp.com/api/webhooks/1445071527522336850/lDnsRPjoUDXv9mkVuoj5M1fQ5xYp_-biVaJzYers-0u4W91l6QfHhyDrHHeuJwe_0cpj",
+        ["Auto Sending"] = true,
+        ["Category"] = {"Secret"},
 
-    AUTOSELL_CONFIG = {       -- true = xám = bán, false = màu = giữ
-        Normal     = true,
-        Rare       = true,
-        Epic       = true,
-        Legendary  = true,
-        Mythic     = true,
-        Secret     = true,
-        Godly      = true,
-        Limited    = true,
-        Diamond    = true,
-        Neon       = true,
-        CandyCorn  = true,
-        Rainbow    = true,
-        Magma      = true,
-        Headless   = true,
-        Ruby       = true,
-    }
+        ["Link Webhook Quest Complete"] = "https://discordapp.com/api/webhooks/1445326539247063060/Rqg41bvvOkTt0hGsfubf97Yqyqs5KHrMV5KuIOgoryaDjv-XuvsD6FTYAPWYPiRnm_rw",
+    },
+    ["Weather"] = {
+        ["Auto Buying"] = true,
+        ["Minimum Rod"] = "Ghostfinn Rod",
+        ["Weather List"] = {
+            "Wind",
+        },
+    },
+    ["Event"] = {
+        ["Start Farm"] = true,
+        ["Minimum Rod"] = "Ghostfinn Rod",
+        ["Event List"] = {
+            "Megalodon Hunt",
+            "Ghost Shark Hunt",
+            "Shark Hunt",
+        },
+    },
+    ["Enchant"] = {
+        ["Auto Enchant"] = true,
+        ["Roll Enchant"] = false, -- Roll enchant until get Leprechaun II
+        ["Minimum Rod"] = "Astral Rod",
+        ["Enchant List"] = {
+            "Leprechaun II",
+            "Mutation Hunter II",
+            "Prismatic I",
+        },
+    },
+    ["Bait List"] = {
+        ["Auto Buying"] = true,
+        ["Buy List"] = {
+            "Midnight Bait",
+            "Chroma Bait",
+            "Corrupt Bait",
+            "Aether Bait",
+	    "Singularity Bait",
+        },
+    },
+    ["Rod List"] = {
+        ["Auto Buying"] = true,
+        ["Buy List"] = {
+            "Grass Rod",
+            "Midnight Rod",
+            "Astral Rod",
+            "Ares Rod",
+            "Angler Rod",
+        },
+        ["Location Rods"] = { -- Farm location and minimum rod to start on that location, also only 1 rod and only 1 location
+            ["Fisherman Island"] = {"Starter Rod"}, -- Do not change
+            ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
+            ["Tropical Grove"] = {"Astral Rod"},
+	    ["Ocean"] = {"Element Rod", "Ghostfinn Rod", "Angler Rod", "Ares Rod"},
+        },
+    },
+
+    ["ExtremeFpsBoost"] = true,
+    ["UltimatePerformance"] = true,
+    ["Disable3DRender"] = true,
+    ["AutoRemovePlayer"] = true,
+    ["AutoReconnect"] = true,
+    ["Debug"] = true,
 }
-
---====================================================
--- 🚀 SYSTEM START
---====================================================
-repeat task.wait() until game:IsLoaded()
-task.wait(CONFIG.WAIT_BEFORE_START)
-
-local RS = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local LP = Players.LocalPlayer
-local Remotes = RS:FindFirstChild("Remotes") or RS
-
-local FavoriteItem = Remotes:FindFirstChild("FavoriteItem", true)
-local AutoSellRemote = Remotes:FindFirstChild("AutoSell", true)
-local SellRemote = Remotes:WaitForChild("ItemSell")
-local RequestAsset = Remotes:FindFirstChild("SelectiveAssetService", true)
-	and Remotes.SelectiveAssetService:FindFirstChild("RequestAsset")
-local BuyItem = Remotes:FindFirstChild("BuyItem", true)
-
---====================================================
--- 🩷 B1: BỎ TIM TOÀN BỘ PET
---====================================================
-local function UnfavoriteAll()
-	if not CONFIG.ENABLE_UNFAVORITE then return end
-	print("🔓 Đang bỏ tim tất cả pet...")
-	if not FavoriteItem then return warn("❌ Không có Remote FavoriteItem") end
-
-	local FavoritesTable
-	for _, v in ipairs(getgc(true)) do
-		if typeof(v) == "table" and rawget(v, "Favorites") then
-			FavoritesTable = rawget(v, "Favorites")
-			break
-		end
-	end
-	if not FavoritesTable then return warn("❌ Không tìm thấy bảng Favorites") end
-
-	local count = 0
-	for uuid in pairs(FavoritesTable) do
-		if typeof(uuid) == "string" and uuid:match("%x+%-%x+%-%x+%-%x+%-%x+") then
-			FavoriteItem:FireServer(uuid)
-			count += 1
-			task.wait(0.05)
-		end
-	end
-	print(("✅ Đã bỏ tim %d pet có ❤️"):format(count))
-end
-
---====================================================
--- ⚙️ B2: SET AUTOSELL
---====================================================
-local function LocateAutoSellTable()
-	for _, v in ipairs(getgc(true)) do
-		if typeof(v) == "table" and rawget(v, "AutoSell") then
-			return v.AutoSell
-		end
-	end
-end
-
-local function isOn(tbl, rarity)
-	local v = tbl and tbl[rarity]
-	return v == 1 or v == true
-end
-
-local function toggleUntil(remote, tbl, rarity, targetOn, maxTries, delayStep)
-	maxTries = maxTries or 3
-	delayStep = delayStep or 0.15
-	for i = 1, maxTries do
-		if isOn(tbl, rarity) == targetOn then
-			return true, ("✅ %s đã đúng (%s)"):format(rarity, targetOn and "GRAY" or "COLOR")
-		end
-		if remote then remote:FireServer(rarity) end
-		local t0 = tick()
-		repeat
-			task.wait(delayStep)
-			if isOn(tbl, rarity) == targetOn then
-				return true, ("⚙️ %s → %s (sau %d lần)"):format(rarity, targetOn and "GRAY" or "COLOR", i)
-			end
-		until tick() - t0 > 2
-	end
-	return false, ("❌ %s không hội tụ về %s"):format(rarity, targetOn and "GRAY" or "COLOR")
-end
-
-local function ApplyAutoSellConfig()
-	if not CONFIG.ENABLE_AUTOSELL then return end
-	local tbl = LocateAutoSellTable()
-	if not (tbl and AutoSellRemote) then return warn("❌ Không tìm thấy AutoSell table/remote") end
-	print("⚙️ Cấu hình AutoSell...")
-	for rarity, wantGray in pairs(CONFIG.AUTOSELL_CONFIG) do
-		local ok, msg = toggleUntil(AutoSellRemote, tbl, rarity, wantGray, 3, 0.1)
-		print(msg)
-		task.wait(0.05)
-	end
-	print("🎯 AUTOSELL hoàn tất.")
-end
-
---====================================================
--- 💰 B3: AUTO SELL ALL (chuẩn chữ ký)
---====================================================
-local function SellAllLoop()
-	if not CONFIG.ENABLE_SELL_LOOP then return end
-	task.spawn(function()
-		while true do
-			SellRemote:FireServer(nil, nil, true) -- 🗑 bán tất cả Brainrots
-			print("✅ SELL ALL Brainrots DONE!")
-			task.wait(CONFIG.SELL_INTERVAL)
-		end
-	end)
-end
-
---====================================================
--- 🌾 B4: AUTO BUY SEED
---====================================================
-local function AutoBuySeedLoop()
-	if not CONFIG.ENABLE_BUY_SEED then return end
-	if not (RequestAsset and BuyItem) then return warn("❌ Không có Remote mua hạt") end
-	local seller = CONFIG.SEED_SELLER
-	local list = CONFIG.SEED_LIST
-
-	task.spawn(function()
-		while true do
-			RequestAsset:FireServer("Brainrots", seller)
-			task.wait(1)
-			for _, seed in ipairs(list) do
-				pcall(function()
-					BuyItem:FireServer(seed, true)
-					print("🌱 Đã mua:", seed)
-				end)
-				task.wait(0.3)
-			end
-			task.wait(CONFIG.BUY_INTERVAL)
-		end
-	end)
-end
-
---====================================================
--- 🚀 RUN SEQUENCE
---====================================================
-UnfavoriteAll()
-task.wait(1)
-ApplyAutoSellConfig()
-SellAllLoop()
-AutoBuySeedLoop()
-print("✅ Hệ thống tự động (Unlock + AutoSell + SellAll + BuySeed) đã khởi chạy!")
+script_key="A831DCC33A06DD75C7B215AC97FB8D4A";
+loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/roblog/refs/heads/main/fishit-78c86024ea87c8eca577549807421962.lua"))()
