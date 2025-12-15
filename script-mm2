@@ -1,62 +1,48 @@
--- ========================================================================
--- 🎄 KENPHYSICAL MM2 CHRISTMAS FARM & AUTO BOX OPENER
--- ========================================================================
--- ✅ Auto farm Christmas Tokens
--- ✅ Auto open box khi đạt 3,000 tokens
--- ✅ Full optimization để giảm lag
--- ✅ Anti-AFK system
--- ✅ Beautiful full-screen UI
--- ========================================================================
-
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-task.wait(10)
 
--- ========================================================================
--- OPTIMIZATION - Chạy ngay từ đầu
--- ========================================================================
+local MYSTERY_BOX_PRICE = 800
 
-setfpscap(15)
+local WEAPONS = {
+    {id = "Snowcannon", displayName = "Snowcannon"},
+    {id = "SnowcannonChroma", displayName = "Snowcannon (Chroma)"},
+    {id = "SnowDagger", displayName = "Snow Dagger"},
+    {id = "SnowDaggerChroma", displayName = "Snow Dagger (Chroma)"}
+}
 
--- OptimizationSafe Function
-local function OptimizationSafe()
-    local RunService = game:GetService("RunService")
-    local Lighting = game:GetService("Lighting")
+local Player = game.Players.LocalPlayer
+local Players = game.Players
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local BadanPart = Character:WaitForChild("HumanoidRootPart")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
-    pcall(function() RunService:Set3dRenderingEnabled(true) end)
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
+local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
+local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
+local AutofarmStarted = false
+local RoundEnded = false
+local ResetWhenFullBag = true 
+local CurrentCoinType = "SnowTokens2025"
+local BagFull = false
 
-    for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("BloomEffect") 
-        or effect:IsA("SunRaysEffect") 
-        or effect:IsA("DepthOfFieldEffect")
-        or effect:IsA("BlurEffect")
-        or effect:IsA("ColorCorrectionEffect") then
-            effect.Enabled = false
-        elseif effect:IsA("Atmosphere") then
-            effect.Density = 0
-            effect.Haze = 0
-            effect.Color = Color3.new(1, 1, 1)
-            effect.Decay = Color3.new(1, 1, 1)
-        end
-    end
+local christmasTokenCounterGui = nil
+local christmasTokenGreenScreenGui = nil
+local christmasTokenToggleButtonGui = nil
+local christmasTokenDetectorThread = nil
+local isGreenScreenEnabled = true
+local christmasTokenDetectorInitialized = false
+local christmasTokenTarget = 110000
 
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
-            continue
-        end
-        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
-        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-            obj.Enabled = false
-        end
-    end
-end
+local screenGui = nil
+local toggleGui = nil
+local isEnabled = true
+local initialized = false
 
-OptimizationSafe()
-
--- Disable collision
 task.spawn(function()
     task.wait(10)
     while true do
@@ -71,24 +57,6 @@ task.spawn(function()
     end
 end)
 
--- Anti-AFK System
-task.spawn(function()
-    pcall(function()
-        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
-    end)
-    task.wait(0.2)
-
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    while task.wait(300) do
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
-            task.wait(0.2)
-            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
-        end)
-    end
-end)
-
--- Auto select Tablet device
 task.spawn(function()
     task.wait(2)
     local maxWaitTime = 30
@@ -115,57 +83,135 @@ task.spawn(function()
                 end
             end
         end)
-        if not clicked then task.wait(0.5) end
+        
+        if not clicked then
+            task.wait(0.5)
+        end
     end
 end)
 
--- ========================================================================
--- VARIABLES & CONSTANTS
--- ========================================================================
+task.spawn(function()
+    task.wait(60)
+    local function AntiAFK()
+        local GC = getconnections or get_signal_cons
+        if GC then
+            for _, v in pairs(GC(Player.Idled)) do
+                if v["Disable"] then
+                    v["Disable"](v)
+                elseif v["Disconnect"] then
+                    v["Disconnect"](v)
+                end
+            end
+        else
+            local VirtualUser = cloneref(game:GetService("VirtualUser"))
+            Players.LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+    end
+    AntiAFK()
+end)
 
-local Player = game.Players.LocalPlayer
-local Players = game.Players
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local BadanPart = Character:WaitForChild("HumanoidRootPart")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
+coroutine.wrap(function()
+    task.wait(60)
+    local function setupGUIToggle()
+        local guiObjects = {}
+        
+        local success = pcall(function()
+            for _, gui in pairs(gethui():GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    if gui.Name == "ChristmasTokenCounter" or gui.Name == "ChristmasTokenGreenScreen" or 
+                       gui.Name == "GreenScreen" or gui.Name == "ChristmasTokenToggleButton" or 
+                       gui.Name == "BeachBallCounter" or gui.Name == "WeaponChecker" or gui.Name == "WeaponToggle" then
+                        continue
+                    end
+                    
+                    for _, obj in pairs(gui:GetDescendants()) do
+                        if obj:IsA("GuiObject") and obj.Visible ~= nil then
+                            obj.Visible = false
+                            table.insert(guiObjects, obj)
+                        end
+                    end
+                end
+            end
+        end)
+        
+        if not success then
+            return
+        end
+        
+        local btnGui = Instance.new("ScreenGui")
+        btnGui.Name = "ToggleGuiButton"
+        btnGui.ResetOnSpawn = false
+        btnGui.IgnoreGuiInset = true
+        btnGui.Parent = gethui()
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 100, 0, 30)
+        btn.Position = UDim2.new(1, -110, 1, -40)
+        btn.Text = "Show GUIs"
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextStrokeTransparency = 0
+        btn.TextStrokeColor3 = Color3.new(0, 0, 0)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 12
+        btn.Parent = btnGui
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 5)
+        corner.Parent = btn
+        
+        local visible = false
+        btn.MouseButton1Click:Connect(function()
+            visible = not visible
+            
+            if visible then
+                btn.Text = "Hide GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+            else
+                btn.Text = "Show GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end
+            
+            local toggledCount = 0
+            for _, obj in ipairs(guiObjects) do
+                if obj and obj:IsA("GuiObject") and obj.Parent then
+                    obj.Visible = visible
+                    toggledCount = toggledCount + 1
+                end
+            end
+        end)
+    end
+    setupGUIToggle()
+end)()
 
-local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
-local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
-local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
-local AutofarmStarted = false
-local RoundEnded = false
-local ResetWhenFullBag = true 
-local CurrentCoinType = "SnowTokens2025"
-local BagFull = false
-
--- Box opener variables
-local BOX_NAME = "Christmas2025Box"
-local BOX_TYPE = "MysteryBox"
-local TOKEN_TYPE = "SnowTokens2025"
-local BOX_PRICE = 600
-local START_OPENING_AT = 3000
-local STOP_OPENING_AT = 600
-local CHECK_INTERVAL = 10
-local OPEN_INTERVAL = 3
-
--- Stats tracking
-local totalBoxesOpened = 0
-local startTime = tick()
-
--- ========================================================================
--- UTILITY FUNCTIONS
--- ========================================================================
-
-local function getChristmasTokens()
-    local tokens = 0
+local function getSnowTokens()
+    local snowTokens = 0
     pcall(function()
         local ProfileData = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("ProfileData"))
         if ProfileData and ProfileData.Materials and ProfileData.Materials.Owned then
-            tokens = tonumber(ProfileData.Materials.Owned[TOKEN_TYPE]) or 0
+            snowTokens = tonumber(ProfileData.Materials.Owned["SnowTokens2025"]) or 0
         end
     end)
-    return tokens
+    return snowTokens
+end
+
+local function getSnowKeys()
+    local snowKeys = 0
+    pcall(function()
+        local ProfileData = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("ProfileData"))
+        if ProfileData and ProfileData.Materials and ProfileData.Materials.Owned then
+            snowKeys = tonumber(ProfileData.Materials.Owned["SnowKey2025"]) or 0
+        end
+    end)
+    return snowKeys
+end
+
+local function getChristmasTokens()
+    return getSnowTokens()
 end
 
 local function formatNumber(num)
@@ -178,261 +224,457 @@ local function formatNumber(num)
     return formatted
 end
 
--- ========================================================================
--- BEAUTIFUL FULL-SCREEN UI
--- ========================================================================
-
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "KenPhysicalMM2UI"
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ResetOnSpawn = false
-
--- Full black background
-local bg = Instance.new("Frame", ScreenGui)
-bg.Size = UDim2.new(1, 0, 1, 0)
-bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-bg.BorderSizePixel = 0
-bg.BackgroundTransparency = 0
-
--- Neon effect function
-local function createNeon(label, color)
-    local stroke = Instance.new("UIStroke", label)
-    stroke.Thickness = 2
-    stroke.Color = color
-    stroke.Transparency = 0.3
-    
-    local glow = Instance.new("UIGradient", label)
-    glow.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, color)
-    }
-    glow.Rotation = 45
-end
-
--- Title
-local Title = Instance.new("TextLabel", bg)
-Title.Size = UDim2.new(1, 0, 0, 100)
-Title.Position = UDim2.new(0, 0, 0.15, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "🎄 Kenphysical Farm MM2"
-Title.TextColor3 = Color3.fromRGB(0, 255, 150)
-Title.Font = Enum.Font.GothamBold
-Title.TextScaled = true
-createNeon(Title, Color3.fromRGB(0, 255, 150))
-
--- Username Label
-local UsernameLabel = Instance.new("TextLabel", bg)
-UsernameLabel.Size = UDim2.new(1, 0, 0, 70)
-UsernameLabel.Position = UDim2.new(0, 0, 0.30, 0)
-UsernameLabel.BackgroundTransparency = 1
-UsernameLabel.Text = "👤 Tên: " .. Player.Name
-UsernameLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
-UsernameLabel.Font = Enum.Font.GothamSemibold
-UsernameLabel.TextScaled = true
-createNeon(UsernameLabel, Color3.fromRGB(100, 200, 255))
-
--- Snowflake Tokens Label
-local TokensLabel = Instance.new("TextLabel", bg)
-TokensLabel.Name = "TokensLabel"
-TokensLabel.Size = UDim2.new(1, 0, 0, 90)
-TokensLabel.Position = UDim2.new(0, 0, 0.42, 0)
-TokensLabel.BackgroundTransparency = 1
-TokensLabel.Text = "❄️ Bông tuyết: 0"
-TokensLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
-TokensLabel.Font = Enum.Font.GothamBold
-TokensLabel.TextScaled = true
-createNeon(TokensLabel, Color3.fromRGB(100, 200, 255))
-
--- Boxes Opened Label
-local BoxesLabel = Instance.new("TextLabel", bg)
-BoxesLabel.Name = "BoxesLabel"
-BoxesLabel.Size = UDim2.new(1, 0, 0, 80)
-BoxesLabel.Position = UDim2.new(0, 0, 0.56, 0)
-BoxesLabel.BackgroundTransparency = 1
-BoxesLabel.Text = "🎁 Số lần mở box: 0"
-BoxesLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-BoxesLabel.Font = Enum.Font.GothamBold
-BoxesLabel.TextScaled = true
-createNeon(BoxesLabel, Color3.fromRGB(255, 200, 0))
-
--- Online Time Label
-local OnlineLabel = Instance.new("TextLabel", bg)
-OnlineLabel.Name = "OnlineLabel"
-OnlineLabel.Size = UDim2.new(1, 0, 0, 70)
-OnlineLabel.Position = UDim2.new(0, 0, 0.70, 0)
-OnlineLabel.BackgroundTransparency = 1
-OnlineLabel.Text = "🕐 Online: 00:00"
-OnlineLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-OnlineLabel.Font = Enum.Font.GothamSemibold
-OnlineLabel.TextScaled = true
-createNeon(OnlineLabel, Color3.fromRGB(150, 150, 150))
-
--- Status Label (shows what script is doing)
-local StatusLabel = Instance.new("TextLabel", bg)
-StatusLabel.Name = "StatusLabel"
-StatusLabel.Size = UDim2.new(1, 0, 0, 60)
-StatusLabel.Position = UDim2.new(0, 0, 0.83, 0)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "⚡ Status: Đang khởi động..."
-StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.TextScaled = true
-createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
-
--- Toggle UI with H key
-local UIS = game:GetService("UserInputService")
-local uiVisible = true
-UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.H then
-        uiVisible = not uiVisible
-        bg.Visible = uiVisible
-    end
-end)
-
--- ========================================================================
--- UI UPDATE SYSTEM (Safe Data Reading Pattern)
--- ========================================================================
-
-local cachedTokens = 0
-local cachedBoxes = 0
-
--- Background thread: Only read data
-task.spawn(function()
-    task.wait(5)
-    while task.wait(2) do
-        pcall(function()
-            cachedTokens = getChristmasTokens()
-            cachedBoxes = totalBoxesOpened
-        end)
-    end
-end)
-
--- Main thread: Only update UI
-task.spawn(function()
-    while task.wait(1) do
-        pcall(function()
-            -- Update tokens
-            TokensLabel.Text = "❄️ Bông tuyết: " .. formatNumber(cachedTokens)
-            
-            -- Update boxes
-            BoxesLabel.Text = "🎁 Số lần mở box: " .. formatNumber(cachedBoxes)
-            
-            -- Update online time
-            local elapsed = math.floor(tick() - startTime)
-            local days = math.floor(elapsed / 86400)
-            local hours = math.floor((elapsed % 86400) / 3600)
-            local mins = math.floor((elapsed % 3600) / 60)
-            local secs = elapsed % 60
-            
-            if days > 0 then
-                OnlineLabel.Text = string.format("🕐 Online: %d ngày %02d:%02d:%02d", days, hours, mins, secs)
-            else
-                OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d", hours, mins, secs)
-            end
-        end)
-    end
-end)
-
--- ========================================================================
--- BOX OPENER FUNCTIONS
--- ========================================================================
-
-local function openChristmasBox()
-    local success = false
-    local itemReceived = nil
-    
-    local ok, result = pcall(function()
-        local remote = game.ReplicatedStorage.Remotes.Shop.OpenCrate
-        return remote:InvokeServer(BOX_NAME, BOX_TYPE, TOKEN_TYPE)
+local function CreateFiles(FileName, File)
+    pcall(function()
+        makefolder("ServerHopper")
+        makefolder("ServerHopper//" .. game.PlaceId)
+        writefile("ServerHopper//" .. game.PlaceId .. "//" .. FileName .. ".json", File)
     end)
-    
-    if ok then
-        success = true
-        itemReceived = result
-    end
-    
-    return success, itemReceived
 end
 
-local function boxOpenerLoop()
-    while true do
-        local currentTokens = getChristmasTokens()
+local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
+    if Players == nil then
+        Players = 3
+    end
+
+    if Amount == nil then
+        Amount = tonumber(math.huge)
+    end
+    
+    local JobIDs = {}
+    local API, ServerPages
+    
+    local function FetchJobIDs()
+        JobIDs = {os.date("*t").hour}
+        local _s = tick()
         
-        if currentTokens >= START_OPENING_AT then
-            StatusLabel.Text = "⚡ Status: Đang mở box..."
-            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-            
-            while currentTokens >= STOP_OPENING_AT do
-                currentTokens = getChristmasTokens()
-                
-                if currentTokens < STOP_OPENING_AT then
-                    break
-                end
-                
-                local success, item = openChristmasBox()
-                
-                if success then
-                    totalBoxesOpened = totalBoxesOpened + 1
-                    task.wait(2)
-                    currentTokens = getChristmasTokens()
-                end
-                
-                if currentTokens >= STOP_OPENING_AT then
-                    task.wait(OPEN_INTERVAL)
+        repeat
+            task.wait(2)
+            local success, result = pcall(function()
+                API = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (ServerPages and "&cursor=" .. ServerPages or "")))
+            end)
+
+            if not success then
+                task.wait(10)
+                return false
+            end
+
+            for i, v in next, API["data"] do
+                if v["id"] ~= game.JobId and v["playing"] ~= v["maxPlayers"] and v["playing"] >= MinPlayers and v["playing"] <= MaxPlayers then
+                    if #JobIDs < Amount + 1 then
+                        table.insert(JobIDs, v["id"])
+                    end
                 end
             end
-            
-            StatusLabel.Text = "⚡ Status: Chờ farm thêm token..."
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-        else
-            StatusLabel.Text = "⚡ Status: Đang farm tokens..."
-            StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
-        end
+            ServerPages = API.nextPageCursor
+        until not ServerPages or #JobIDs >= Amount + 1
         
-        task.wait(CHECK_INTERVAL)
+        return true
     end
+    
+    if not isfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json") then
+        FetchJobIDs()
+        CreateFiles("low_players-jobids", HttpService:JSONEncode(JobIDs))
+    end
+    
+    JobIDs = HttpService:JSONDecode(readfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json"))
+    
+    if JobIDs[1] ~= os.date("*t").hour then
+        FetchJobIDs()
+        writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
+    end
+    
+    local function RandomJobID()
+        return JobIDs[math.random(1, #JobIDs)]
+    end
+    
+    local SelectedJobID = RandomJobID()
+    
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+    
+    game.Players.LocalPlayer.OnTeleport:Connect(function(Status)
+        if Status == Enum.TeleportState.Failed then
+            SelectedJobID = RandomJobID()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+        end
+    end)
 end
 
--- ========================================================================
--- FARM FUNCTIONS
--- ========================================================================
-
-local platform = nil
-local lastRoundStartTime = 0
+local roundTimeout = 10 * 60
+local lastRoundStartTime = tick()
 local isRoundActive = false
 
 local function checkRoundTimeout()
-    if isRoundActive and lastRoundStartTime > 0 then
-        local elapsed = tick() - lastRoundStartTime
-        if elapsed > 300 then
-            pcall(function()
-                if Player.Character and Player.Character:FindFirstChild("Humanoid") then
-                    Player.Character.Humanoid.Health = 0
-                end
-            end)
-            isRoundActive = false
-        end
+    local currentTime = tick()
+    local timeSinceLastRound = currentTime - lastRoundStartTime
+    
+    if timeSinceLastRound >= roundTimeout and not isRoundActive then
+        hopToLowPlayers(false, 50, 4, 10)
     end
 end
 
-local function createPlatform()
-    if platform and platform.Parent then
-        return platform
+local function setupChristmasTokenTracker()
+    if christmasTokenDetectorInitialized then return end
+    christmasTokenDetectorInitialized = true
+    
+    christmasTokenCounterGui = Instance.new("ScreenGui")
+    christmasTokenCounterGui.Name = "ChristmasTokenCounter"
+    christmasTokenCounterGui.ResetOnSpawn = false
+    christmasTokenCounterGui.IgnoreGuiInset = true
+    christmasTokenCounterGui.DisplayOrder = 999
+    christmasTokenCounterGui.Enabled = true
+    
+    local counterText = Instance.new("TextLabel")
+    counterText.Size = UDim2.new(0, 800, 0, 150)
+    counterText.Position = UDim2.new(0.5, -400, 0.5, -75)
+    counterText.BackgroundTransparency = 0
+    counterText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    counterText.BorderSizePixel = 0
+    counterText.Font = Enum.Font.SourceSansBold
+    counterText.TextSize = 50
+    counterText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    counterText.Text = string.format("❄️ %s", formatNumber(getChristmasTokens()))
+    counterText.TextStrokeTransparency = 0
+    counterText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    counterText.Name = "CounterText"
+    counterText.Parent = christmasTokenCounterGui
+    
+    christmasTokenCounterGui.Parent = gethui()
+    
+    christmasTokenGreenScreenGui = Instance.new("ScreenGui")
+    christmasTokenGreenScreenGui.Name = "ChristmasTokenGreenScreen"
+    christmasTokenGreenScreenGui.ResetOnSpawn = false
+    christmasTokenGreenScreenGui.IgnoreGuiInset = true
+    christmasTokenGreenScreenGui.DisplayOrder = 1000
+    christmasTokenGreenScreenGui.Enabled = false
+    
+    local greenFrame = Instance.new("Frame")
+    greenFrame.Size = UDim2.new(1, 0, 1, 0)
+    greenFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    greenFrame.BorderSizePixel = 0
+    greenFrame.Name = "GreenScreen"
+    greenFrame.Parent = christmasTokenGreenScreenGui
+    
+    local achievementText = Instance.new("TextLabel")
+    achievementText.Size = UDim2.new(0.8, 0, 0.6, 0)
+    achievementText.Position = UDim2.new(0.1, 0, 0.2, 0)
+    achievementText.BackgroundTransparency = 1
+    achievementText.Font = Enum.Font.SourceSansBold
+    achievementText.TextSize = 80
+    achievementText.TextWrapped = true
+    achievementText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    achievementText.Text = "🎉 TARGET ACHIEVED! 🎉"
+    achievementText.TextStrokeTransparency = 0
+    achievementText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    achievementText.Name = "AchievementText"
+    achievementText.Parent = greenFrame
+    
+    local copyButton = Instance.new("TextButton")
+    copyButton.Size = UDim2.new(0, 200, 0, 50)
+    copyButton.Position = UDim2.new(0.5, -100, 0.85, 0)
+    copyButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    copyButton.BorderSizePixel = 2
+    copyButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    copyButton.Font = Enum.Font.SourceSansBold
+    copyButton.TextSize = 25
+    copyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    copyButton.Text = "Copy Job ID"
+    copyButton.Parent = greenFrame
+    
+    copyButton.MouseButton1Click:Connect(function()
+        setclipboard(game.JobId)
+        copyButton.Text = "Copied!"
+        copyButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+        task.wait(1)
+        copyButton.Text = "Copy Job ID"
+        copyButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end)
+    
+    christmasTokenGreenScreenGui.Parent = gethui()
+    
+    christmasTokenToggleButtonGui = Instance.new("ScreenGui")
+    christmasTokenToggleButtonGui.Name = "ChristmasTokenToggleButton"
+    christmasTokenToggleButtonGui.ResetOnSpawn = false
+    christmasTokenToggleButtonGui.IgnoreGuiInset = true
+    christmasTokenToggleButtonGui.DisplayOrder = 1001
+    christmasTokenToggleButtonGui.Enabled = false
+    
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 150, 0, 40)
+    toggleButton.Position = UDim2.new(0.5, -75, 0, 10)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 191, 255)
+    toggleButton.BorderSizePixel = 2
+    toggleButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    toggleButton.Font = Enum.Font.SourceSansBold
+    toggleButton.TextSize = 16
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Text = "❄️ HIDE GREEN"
+    toggleButton.Name = "ChristmasTokenToggle"
+    toggleButton.Parent = christmasTokenToggleButtonGui
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        isGreenScreenEnabled = not isGreenScreenEnabled
+        christmasTokenGreenScreenGui.Enabled = isGreenScreenEnabled
+        toggleButton.Text = isGreenScreenEnabled and "❄️ HIDE GREEN" or "❄️ SHOW GREEN"
+    end)
+    
+    christmasTokenToggleButtonGui.Parent = gethui()
+    
+    christmasTokenDetectorThread = task.spawn(function()
+        while true do
+            pcall(function()
+                local currentTokens = getChristmasTokens()
+                
+                if christmasTokenCounterGui and christmasTokenCounterGui.CounterText then
+                    local newText = string.format("❄️ %s", formatNumber(currentTokens))
+                    christmasTokenCounterGui.CounterText.Text = newText
+                end
+                
+                if currentTokens >= christmasTokenTarget then
+                    christmasTokenToggleButtonGui.Enabled = true
+                    christmasTokenGreenScreenGui.Enabled = isGreenScreenEnabled
+                    
+                    if christmasTokenGreenScreenGui.GreenScreen and christmasTokenGreenScreenGui.GreenScreen.AchievementText then
+                        local playerName = game.Players.LocalPlayer.Name
+                        christmasTokenGreenScreenGui.GreenScreen.AchievementText.Text = string.format(
+                            "🎉 %s 🎉\n\nTARGET ACHIEVED!\n\n❄️ %s Snow Tokens\n\n📱 %s",
+                            playerName,
+                            string.format("%,d", currentTokens),
+                            game.JobId:sub(1, 8) .. "..."
+                        )
+                    end
+                else
+                    christmasTokenToggleButtonGui.Enabled = false
+                    christmasTokenGreenScreenGui.Enabled = false
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+setupChristmasTokenTracker()
+
+local function setupWeaponChecker()
+    if initialized then return end
+    initialized = true
+    
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "WeaponChecker"
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 1002
+    screenGui.Enabled = false
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    frame.BorderSizePixel = 0
+    frame.Name = "Screen"
+    frame.Parent = screenGui
+    
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(0.8, 0, 0.7, 0)
+    text.Position = UDim2.new(0.1, 0, 0.15, 0)
+    text.BackgroundTransparency = 1
+    text.Font = Enum.Font.SourceSansBold
+    text.TextSize = 50
+    text.TextWrapped = true
+    text.TextColor3 = Color3.fromRGB(255, 255, 255)
+    text.TextStrokeTransparency = 0
+    text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    text.Name = "Text"
+    text.Parent = frame
+    
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.new(0.2, 0, 0.08, 0)
+    copyBtn.Position = UDim2.new(0.4, 0, 0.85, 0)
+    copyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    copyBtn.BorderSizePixel = 0
+    copyBtn.Font = Enum.Font.SourceSansBold
+    copyBtn.TextSize = 18
+    copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    copyBtn.Text = "Copy JobID"
+    copyBtn.Parent = frame
+    
+    copyBtn.MouseButton1Click:Connect(function()
+        setclipboard(game.JobId)
+        copyBtn.Text = "Copied!"
+        task.wait(1)
+        copyBtn.Text = "Copy JobID"
+    end)
+    
+    screenGui.Parent = gethui()
+    
+    toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "WeaponToggle"
+    toggleGui.ResetOnSpawn = false
+    toggleGui.IgnoreGuiInset = true
+    toggleGui.DisplayOrder = 1003
+    toggleGui.Enabled = false
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 120, 0, 35)
+    toggleBtn.Position = UDim2.new(0.5, -60, 0, 20)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Font = Enum.Font.SourceSansBold
+    toggleBtn.TextSize = 14
+    toggleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    toggleBtn.Text = "🗡️ HIDE"
+    toggleBtn.Parent = toggleGui
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        isEnabled = not isEnabled
+        screenGui.Enabled = isEnabled
+        toggleBtn.Text = isEnabled and "🗡️ HIDE" or "🗡️ SHOW"
+    end)
+    
+    toggleGui.Parent = gethui()
+end
+
+task.spawn(function()
+    setupWeaponChecker()
+    
+    while true do
+        pcall(function()
+            local ownedWeapons = {}
+            local hasChroma = false
+            
+            local ProfileData = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("ProfileData"))
+            if ProfileData and ProfileData.Weapons and ProfileData.Weapons.Owned then
+                for _, weapon in pairs(WEAPONS) do
+                    local quantity = ProfileData.Weapons.Owned[weapon.id] or 0
+                    if quantity > 0 then
+                        table.insert(ownedWeapons, {
+                            displayName = weapon.displayName,
+                            id = weapon.id,
+                            quantity = quantity
+                        })
+                        if string.find(weapon.id, "Chroma") then
+                            hasChroma = true
+                        end
+                    end
+                end
+            end
+            
+            if #ownedWeapons > 0 then
+                toggleGui.Enabled = true
+                
+                local color = hasChroma and Color3.fromRGB(128, 0, 128) or Color3.fromRGB(0, 255, 0)
+                local title = hasChroma and "🟣 CHROMA WEAPONS" or "🟢 WEAPONS OWNED"
+                
+                screenGui.Screen.BackgroundColor3 = color
+                
+                local weaponText = ""
+                for _, weapon in pairs(ownedWeapons) do
+                    local chromaText = string.find(weapon.id, "Chroma") and " (Chroma)" or ""
+                    weaponText = weaponText .. weapon.quantity .. "x " .. weapon.displayName .. chromaText .. "\n"
+                end
+                
+                local displayText = string.format(
+                    "%s\n\n%s\n\n%s\n📱 %s",
+                    game.Players.LocalPlayer.Name,
+                    title,
+                    weaponText,
+                    game.JobId:sub(1, 8) .. "..."
+                )
+                
+                screenGui.Screen.Text.Text = displayText
+                screenGui.Enabled = isEnabled
+                
+                local toggleBtn = toggleGui:FindFirstChild("TextButton")
+                if toggleBtn then
+                    toggleBtn.Text = isEnabled and "🗡️ HIDE" or "🗡️ SHOW"
+                end
+            else
+                toggleGui.Enabled = false
+                screenGui.Enabled = false
+            end
+        end)
+        task.wait(3)
     end
-    
-    platform = Instance.new("Part")
-    platform.Name = "FarmPlatform"
-    platform.Size = Vector3.new(20, 1, 20)
-    platform.Position = Vector3.new(0, 10000, 0)
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            local snowTokens = getSnowTokens()
+            
+            if snowTokens >= MYSTERY_BOX_PRICE then
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Remotes.Shop.OpenCrate:InvokeServer("Christmas2025Box", "MysteryBox", "SnowTokens2025")
+                end)
+                task.wait(2)
+            else
+                task.wait(10)
+            end
+        end)
+        task.wait(3)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            local snowKeys = getSnowKeys()
+            
+            if snowKeys > 0 then
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Remotes.Shop.OpenCrate:InvokeServer("Christmas2025Box", "MysteryBox", "SnowKey2025")
+                end)
+                task.wait(2)
+            else
+                task.wait(10)
+            end
+        end)
+        task.wait(3)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if game:GetService("Players").LocalPlayer.PlayerGui.MainGUI.Game.NewItem.Visible == true then
+                task.wait(1)
+                firesignal(game:GetService("Players").LocalPlayer.PlayerGui.MainGUI.Game.NewItem.Container.Claim.MouseButton1Click)
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+local function createPlatform()
+    local existingPlatform = workspace:FindFirstChild("Papan")
+    if existingPlatform then
+        return existingPlatform
+    end
+
+    local platform = Instance.new("Part")
+    platform.Size = Vector3.new(50, 1, 50)
     platform.Anchored = true
-    platform.Transparency = 1
     platform.CanCollide = true
+    platform.Material = Enum.Material.SmoothPlastic
+    platform.Color = Color3.new(1, 1, 1)
+    platform.Name = "Papan"
+
+    local randomX = math.random(-100, -50)
+    local randomZ = math.random(-150, -100)
+    platform.CFrame = CFrame.new(randomX, -180, randomZ)
+
     platform.Parent = workspace
-    
     return platform
 end
 
+task.spawn(function()
+    while true do
+        createPlatform()
+        task.wait(5)
+    end
+end)
+
 local function teleportToPlatform()
+    local platform = workspace:FindFirstChild("Papan")
     if not platform then
         platform = createPlatform()
     end
@@ -471,6 +713,7 @@ local function tweenWithBodyVelocity(targetCFrame)
 
     bodyVelocity.Velocity = Vector3.zero
     bodyVelocity:Destroy()
+
     BadanPart.CFrame = targetCFrame
 end
 
@@ -497,10 +740,6 @@ local function getRandomCoin(container)
     end
     return nil
 end
-
--- ========================================================================
--- EVENT HANDLERS
--- ========================================================================
 
 CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
     AutofarmStarted = true
@@ -548,7 +787,6 @@ RoundEndEvent.OnClientEvent:Connect(function()
     RoundEnded = true
 end)
 
--- Check timeout
 task.spawn(function()
     task.wait(30)
     while true do
@@ -556,22 +794,6 @@ task.spawn(function()
         task.wait(30)
     end
 end)
-
--- ========================================================================
--- START BOX OPENER LOOP
--- ========================================================================
-
-task.spawn(function()
-    task.wait(20)
-    boxOpenerLoop()
-end)
-
--- ========================================================================
--- MAIN AUTOFARM LOOP
--- ========================================================================
-
-print("🎄 Kenphysical MM2 Christmas Farm - Started!")
-print("⌨️ Press H to toggle UI")
 
 while true do
     pcall(function()
@@ -584,7 +806,6 @@ while true do
                 end)
                 return success and result
             end)() then
-            
             local character = Player.Character
             if character and character:FindFirstChild("HumanoidRootPart") then
                 BadanPart = character.HumanoidRootPart 
@@ -603,8 +824,8 @@ while true do
                                 firetouchinterest(BadanPart, coin, 1)
                             end)
                         end
-                        
                         teleportToPlatform()
+
                         task.wait(1.7)
                     end
                 end
