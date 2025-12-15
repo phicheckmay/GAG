@@ -20,7 +20,7 @@ task.wait(10)
 -- ========================================================================
 
 local MYSTERY_BOX_PRICE = 600
-local START_OPENING_AT = 3000
+local START_OPENING_AT = 1200
 local STOP_OPENING_AT = 600
 local CHECK_INTERVAL = 10
 local OPEN_INTERVAL = 3
