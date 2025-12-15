@@ -8,7 +8,7 @@ getgenv().CONFIG = {
     },
     HUGE_VALUE_FOR_CRAFT = 15000, --// Total Payout Ingridients < this value to craft Huge
     PLAYERS_TO_SEND = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}, --// Support Inf Players
-    GEMS_TRESHOLD = 100000000,
+    GEMS_TRESHOLD = 15000000,
 }
 
 loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/4beab139eb1823b5f586cc9c47f761cc.lua"))()
