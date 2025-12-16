@@ -1,14 +1,7 @@
 getgenv().CONFIG = {
-    WEBHOOK_URL = "https://discordapp.com/api/webhooks/1437461376653328428/c7FMkwD-LuG0IGKKUjw3OP0AiUXqZCVXjDu3XHrjYU1b03ORUYwycVXjGDS8zeib6UgH",
-    DISCORD_ID = "1180137647587463210",
-    INDEX_COUNT_TO_COLLECT = 2, --// Count to collect full index (need for craft)
-    INDEX_EXCLUDE_PETS = {
-        ["Vampire Agony"] = { [2] = true }, --// Exclude hard pets from indexing
-        ["Spectral Deer"] = { [2] = true },
-    },
-    HUGE_VALUE_FOR_CRAFT = 15000, --// Total Payout Ingridients < this value to craft Huge
-    PLAYERS_TO_SEND = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}, --// Support Inf Players
-    GEMS_TRESHOLD = 15000000,
+    WEBHOOK = "https://discordapp.com/api/webhooks/1443307624618791087/VoU2QdOmkvJDQ8dPmersO_VMWa5er_z5h1k8j1q8prT7Q9-oB7Ih28NffESfxun1hOBA";
+    DISCORD_ID = "1180137647587463210";
+    TRIGGER_PRICE = 200000; --// If fish price >= this value then discord webhook
 }
 
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/4beab139eb1823b5f586cc9c47f761cc.lua"))()
+loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/08c950bf8089aca4c29a9661b699ed65.lua"))()
