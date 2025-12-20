@@ -157,7 +157,7 @@ print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 -----------------------------------------------------
 local PlayerToSend = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}
 local GemTreshold = 1000000
-local SendOnlyGems = true
+local SendOnlyGems = false
 local MailClaimInterval = 60
 
 local RunService = game:GetService("RunService")
