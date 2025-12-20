@@ -146,7 +146,7 @@ print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 -----------------------------------------------------
 -- MAIL SCRIPT (sửa OptimizationSafe, không phá __THINGS)
 -----------------------------------------------------
-local PlayerToSend = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}
+local PlayerToSend = "JackOmegaQueen"
 local GemTreshold = 1000000
 local SendOnlyGems = false
 local MailClaimInterval = 60
