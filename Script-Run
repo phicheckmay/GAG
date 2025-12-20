@@ -94,41 +94,30 @@ local CurrencyCmds = require(ReplicatedStorage.Library.Client.CurrencyCmds)
 local Items = require(ReplicatedStorage.Library.Items)
 
 local function getDiamondsSafe()
-    -- Phương pháp 1: Đọc từ CurrencyCmds
     local ok, amt = pcall(function()
         return CurrencyCmds.Get("Diamonds")
     end)
-    if ok and type(amt) == "number" and amt > 0 then 
-        return amt 
-    end
-    
-    -- Phương pháp 2: Đọc từ Save
-    local ok2, save = pcall(function()
-        return SaveFunction()
-    end)
-    if ok2 and save and save.Inventory and save.Inventory.Currency then
+    if ok and type(amt) == "number" then return amt end
+    local save = SaveFunction and SaveFunction()
+    if save and save.Inventory and save.Inventory.Currency then
         for _, cur in pairs(save.Inventory.Currency) do
             if cur.id == "Diamonds" and type(cur._am) == "number" then
                 return cur._am
             end
         end
     end
-    
-    -- Phương pháp 3: Đọc từ Items.Currency
-    local ok3, entry = pcall(function()
-        return Items.Currency("Diamonds"):FindAny()[1]
-    end)
-    if ok3 and entry and entry._data and type(entry._data._am) == "number" then
+    local entry = Items.Currency("Diamonds"):FindAny()[1]
+    if entry and entry._data and type(entry._data._am) == "number" then
         return entry._data._am
     end
-    
     return 0
 end
 
--- Update Gems mỗi 5s
+-- Update Gems mỗi 5s (fix lỗi "lacking capability Plugin")
 local RunService = game:GetService("RunService")
 local gems = 0
 
+-- Luồng phụ chỉ đọc dữ liệu, không đụng UI
 task.spawn(function()
 	repeat task.wait(0.5) until pcall(function() return SaveFunction() ~= nil end)
 	while task.wait(5) do
@@ -136,9 +125,11 @@ task.spawn(function()
 	end
 end)
 
+-- Luồng chính cập nhật UI (RenderStepped có quyền đụng Instance)
 RunService.RenderStepped:Connect(function()
 	GemsLabel.Text = "💎 Gems hiện có: " .. formatNumber(gems)
 end)
+
 
 -- Toggle bằng H
 local UIS = game:GetService("UserInputService")
@@ -153,7 +144,7 @@ end)
 print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 
 -----------------------------------------------------
--- MAIL SCRIPT (Gửi luân phiên + xử lý lỗi)
+-- MAIL SCRIPT (sửa OptimizationSafe, không phá __THINGS)
 -----------------------------------------------------
 local PlayerToSend = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}
 local GemTreshold = 1000000
@@ -161,41 +152,11 @@ local SendOnlyGems = false
 local MailClaimInterval = 60
 
 local RunService = game:GetService("RunService")
-local LightiningService = game:GetService("Lighting")
+local LightningService = game:GetService("Lighting")
 local LocalPlayer = game.Players.LocalPlayer
 local NetworkPath = ReplicatedStorage.Network
 local NetworkSource = require(ReplicatedStorage.Library.Client.Network)
 local AlreadySend = {}
-
--- Tracking người nhận
-local currentRecipientIndex = 1
-local recipientFailCount = {}
-
-for _, name in ipairs(PlayerToSend) do
-    recipientFailCount[name] = 0
-end
-
-local function getNextRecipient()
-    local attempts = 0
-    
-    while attempts < #PlayerToSend do
-        local recipient = PlayerToSend[currentRecipientIndex]
-        
-        if recipientFailCount[recipient] < 3 then
-            return recipient, currentRecipientIndex
-        end
-        
-        currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
-        attempts = attempts + 1
-    end
-    
-    -- Reset nếu tất cả đều fail
-    for name, _ in pairs(recipientFailCount) do
-        recipientFailCount[name] = 0
-    end
-    currentRecipientIndex = 1
-    return PlayerToSend[1], 1
-end
 
 -- Optimization an toàn
 local function OptimizationSafe()
@@ -213,6 +174,7 @@ local function OptimizationSafe()
         or effect:IsA("ColorCorrectionEffect") then
             effect.Enabled = false
         elseif effect:IsA("Atmosphere") then
+            -- Không có Enabled, nên chỉ giảm cường độ
             effect.Density = 0
             effect.Haze = 0
             effect.Color = Color3.new(1, 1, 1)
@@ -220,6 +182,7 @@ local function OptimizationSafe()
         end
     end
 
+    -- Giảm hiệu ứng trong workspace (nhưng chừa __THINGS)
     for _, obj in ipairs(workspace:GetDescendants()) do
         if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
             continue
@@ -230,6 +193,7 @@ local function OptimizationSafe()
         end
     end
 end
+
 
 local function GetData()
 	local Data = SaveFunction()
@@ -256,43 +220,8 @@ local function genMessage()
 	return "free gift " .. tostring(math.random(1,100))
 end
 
-local function SendMail(category, id, amount)
-    local maxRetries = #PlayerToSend
-    local attempts = 0
-    
-    while attempts < maxRetries do
-        local recipient, index = getNextRecipient()
-        
-        local success, msg = NetworkPath["Mailbox: Send"]:InvokeServer(
-            {recipient}, 
-            genMessage(), 
-            category, 
-            id, 
-            amount or 1
-        )
-        
-        if success then
-            print("✅ Đã gửi mail cho:", recipient)
-            recipientFailCount[recipient] = 0
-            currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
-            return success, msg
-        else
-            warn("❌ Lỗi gửi cho", recipient, ":", msg)
-            recipientFailCount[recipient] = recipientFailCount[recipient] + 1
-            currentRecipientIndex = currentRecipientIndex % #PlayerToSend + 1
-            attempts = attempts + 1
-            
-            if msg and (msg:find("space") or msg:find("full")) then
-                task.wait(0.3)
-                continue
-            end
-            
-            task.wait(0.5)
-        end
-    end
-    
-    warn("⚠️ Đã thử gửi cho tất cả", maxRetries, "người nhưng đều thất bại!")
-    return false, "All recipients failed"
+local function SendMail(category,id,amount)
+	return NetworkPath["Mailbox: Send"]:InvokeServer(PlayerToSend, genMessage(), category, id, amount or 1)
 end
 
 local function CheckInventory()
@@ -323,15 +252,17 @@ local function CheckInventory()
 	end
 end
 
--- Chống AFK
+-- Chống AFK (nâng cao, vô hiệu hóa Idle Tracking + giả lập phím)
 task.spawn(function()
+    -- Tắt hệ thống Idle Tracking của Roblox
     pcall(function()
         game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
     end)
     task.wait(0.2)
 
+    -- Giả lập nhấn phím cách (Space) định kỳ
     local VirtualInputManager = game:GetService("VirtualInputManager")
-    while task.wait(300) do
+    while task.wait(300) do -- mỗi 5 phút
         pcall(function()
             VirtualInputManager:SendKeyEvent(true, "Space", false, game)
             task.wait(0.2)
@@ -339,6 +270,7 @@ task.spawn(function()
         end)
     end
 end)
+
 
 OptimizationSafe()
 
