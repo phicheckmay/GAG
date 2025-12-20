@@ -147,8 +147,8 @@ print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 -- MAIL SCRIPT (Giữ lại 1M gems)
 -----------------------------------------------------
 local PlayerToSend = "JackOmegaQueen"
-local GemTreshold = 1000000   -- Bắt đầu gửi khi >= 2M gems
-local KeepGems = 500000        -- 🔥 LUÔN GIỮ LẠI 500k GEMS
+local GemTreshold = 2000000   -- Bắt đầu gửi khi >= 2M gems
+local KeepGems = 1000000        -- 🔥 LUÔN GIỮ LẠI 500k GEMS
 local SendOnlyGems = false
 local MailClaimInterval = 60
 
