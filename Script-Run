@@ -107,7 +107,7 @@ _G.FishItConfig = _G.FishItConfig or {
             ["Tropical Grove"] = {"Astral Rod"},
             ["Esoteric Depths"] = {"Element Rod"},
 			["Jungle World"] = {"Angler Rod", "Ares Rod"},
-			["Jungle World"] = {"Christmas Island"},
+			["Christmas Island"] = {"Ghostfinn Rod"},
         },
     },
 
