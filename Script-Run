@@ -10,13 +10,14 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Auto Trade"] = {
         ["Enabled"] = false,
         ["Whitelist Username"] = {""},
-        ["Category Fish"] = {
+        ["Category Fish"] = { -- Only Select one, fill in the fish category or fish name
             "Secret",
         },
-        ["Fish Name"] = {},
+        ["Fish Name"] = {
+        },
     },
     ["Farm Coin Only"] = {
-        ["Enabled"] = false,
+        ["Enabled"] = false, -- Farm coins only [ cant buy rod, bait, enchant, weather ]
         ["Target"] = 190000,
     },
     ["Selling"] = {
@@ -31,14 +32,15 @@ _G.FishItConfig = _G.FishItConfig or {
             "Blob Shark",
             "Ghost Shark",
         },
-        -- 🔥 QUAN TRỌNG: Đặt farm location cho secret sacrifice
-        ["FARM_LOC_SECRET_SACRIFICE"] = "Jungle World", -- Câu ở Jungle khi không có event
+        ["FARM_LOC_SECRET_SACRIFICE"] = "Ocean",
+
         ["Minimum Rod"] = "Astral Rod",
     },
     ["WebHook"] = {
         ["Link Webhook"] = "https://discordapp.com/api/webhooks/1445071527522336850/lDnsRPjoUDXv9mkVuoj5M1fQ5xYp_-biVaJzYers-0u4W91l6QfHhyDrHHeuJwe_0cpj",
         ["Auto Sending"] = false,
         ["Category"] = {"Secret"},
+
         ["Link Webhook Quest Complete"] = "https://discordapp.com/api/webhooks/1445326539247063060/Rqg41bvvOkTt0hGsfubf97Yqyqs5KHrMV5KuIOgoryaDjv-XuvsD6FTYAPWYPiRnm_rw",
     },
     ["Weather"] = {
@@ -53,13 +55,12 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Minimum Rod"] = "Astral Rod",
     },
     ["Event"] = {
-        -- 🔥 BẬT EVENT
-        ["Start Farm"] = true, -- Bật để tham gia event
+        ["Start Farm"] = false,
         ["Minimum Rod"] = "Ghostfinn Rod",
         ["Event List"] = {
-            "Megalodon Hunt", -- Event ở Ocean
-            "Ghost Shark Hunt", -- Event ở Ocean
-            "Shark Hunt", -- Event ở Ocean
+            "Megalodon Hunt",
+            "Ghost Shark Hunt",
+            "Shark Hunt",
         },
     },
     ["Enchant"] = {
@@ -100,19 +101,19 @@ _G.FishItConfig = _G.FishItConfig or {
             "Ares Rod",
             "Angler Rod",
         },
-        -- 🔥 THIẾT LẬP FARM LOCATION
-        ["Location Rods"] = {
+        ["Location Rods"] = { -- Farm location and minimum rod to start on that location, also only 1 rod and only 1 location
             ["Fisherman Island"] = {"Starter Rod"},
             ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
-            ["Jungle World"] = {"Ghostfinn Rod", "Angler Rod", "Ares Rod"}, -- 🔥 FARM Ở JUNGLE
-            ["Esoteric Depths"] = {"Element Rod"},
+            ["Esoteric Depths"] = {"Element Rod", "Ghostfinn Rod", "Angler Rod", "Ares Rod"},
         },
     },
-    ["ExtremeFpsBoost"] = true,
+
+    ["ExtremeFpsBoost"] = false,
     ["UltimatePerformance"] = false,
     ["Disable3DRender"] = false,
     ["AutoRemovePlayer"] = true,
+
     ["AutoReconnect"] = true,
     ["HideGUI"] = false,
     ["EXIT_MAP_IF_DISCONNECT"] = false,
