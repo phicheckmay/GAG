@@ -1,3 +1,67 @@
+-----------------------------------------------------
+-- OPTIMIZATION - Tối ưu hiệu suất trước khi chạy script
+-----------------------------------------------------
+local function OptimizationSafe()
+    local RunService = game:GetService("RunService")
+    local Lighting = game:GetService("Lighting")
+
+    -- Bật 3D render và giảm chất lượng xuống thấp nhất
+    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+
+    -- Tắt các hiệu ứng ánh sáng
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("BloomEffect") 
+        or effect:IsA("SunRaysEffect") 
+        or effect:IsA("DepthOfFieldEffect")
+        or effect:IsA("BlurEffect")
+        or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = false
+        elseif effect:IsA("Atmosphere") then
+            effect.Density = 0
+            effect.Haze = 0
+            effect.Color = Color3.new(1, 1, 1)
+            effect.Decay = Color3.new(1, 1, 1)
+        end
+    end
+
+    -- Tắt hiệu ứng particles trong workspace (BỎ QUA __THINGS)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
+            continue
+        end
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
+        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+            obj.Enabled = false
+        end
+    end
+end
+
+-----------------------------------------------------
+-- CHỐNG AFK
+-----------------------------------------------------
+task.spawn(function()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+    task.wait(0.2)
+
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    while task.wait(300) do
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
+            task.wait(0.2)
+            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
+        end)
+    end
+end)
+
+-- Chạy tối ưu trước
+OptimizationSafe()
+
+-----------------------------------------------------
+-- CONFIG FISH IT
+-----------------------------------------------------
 _G.FishItConfig = _G.FishItConfig or {
     ["Fishing"] = {
         ["Auto Perfect"] = true,
@@ -10,14 +74,14 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Auto Trade"] = {
         ["Enabled"] = false,
         ["Whitelist Username"] = {""},
-        ["Category Fish"] = { -- Only Select one, fill in the fish category or fish name
+        ["Category Fish"] = {
             "Secret",
         },
         ["Fish Name"] = {
         },
     },
     ["Farm Coin Only"] = {
-        ["Enabled"] = false, -- Farm coins only [ cant buy rod, bait, enchant, weather ]
+        ["Enabled"] = false,
         ["Target"] = 190000,
     },
     ["Selling"] = {
@@ -33,14 +97,12 @@ _G.FishItConfig = _G.FishItConfig or {
             "Ghost Shark",
         },
         ["FARM_LOC_SECRET_SACRIFICE"] = "Ocean",
-
         ["Minimum Rod"] = "Astral Rod",
     },
     ["WebHook"] = {
         ["Link Webhook"] = "https://discordapp.com/api/webhooks/1445071527522336850/lDnsRPjoUDXv9mkVuoj5M1fQ5xYp_-biVaJzYers-0u4W91l6QfHhyDrHHeuJwe_0cpj",
         ["Auto Sending"] = false,
         ["Category"] = {"Secret"},
-
         ["Link Webhook Quest Complete"] = "https://discordapp.com/api/webhooks/1445326539247063060/Rqg41bvvOkTt0hGsfubf97Yqyqs5KHrMV5KuIOgoryaDjv-XuvsD6FTYAPWYPiRnm_rw",
     },
     ["Weather"] = {
@@ -101,12 +163,12 @@ _G.FishItConfig = _G.FishItConfig or {
             "Ares Rod",
             "Angler Rod",
         },
-        ["Location Rods"] = { -- Farm location and minimum rod to start on that location, also only 1 rod and only 1 location
+        ["Location Rods"] = {
             ["Fisherman Island"] = {"Starter Rod"},
             ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
             ["Esoteric Depths"] = {"Element Rod"},
-			["Jungle World"] = {"Angler Rod", "Ares Rod"},
+            ["Jungle World"] = {"Angler Rod", "Ares Rod"},
             ["Christmas Island"] = {"Ghostfinn Rod"},
         },
     },
@@ -115,10 +177,10 @@ _G.FishItConfig = _G.FishItConfig or {
     ["UltimatePerformance"] = false,
     ["Disable3DRender"] = false,
     ["AutoRemovePlayer"] = true,
-
     ["AutoReconnect"] = true,
     ["HideGUI"] = false,
     ["EXIT_MAP_IF_DISCONNECT"] = false,
 }
+
 script_key="A831DCC33A06DD75C7B215AC97FB8D4A";
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/roblog/refs/heads/main/fishit-78c86024ea87c8eca577549807421962.lua"))()
