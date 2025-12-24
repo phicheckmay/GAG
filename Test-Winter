@@ -92,12 +92,12 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Fish Name"] = {
             "Sacred Guardian Squid",
         },
-        ["Auto Accept Trade"] = false,
+        ["Auto Accept Trade"] = true,
     },
     ["Auto Trade"] = {
         ["Enabled"] = false,
         ["Whitelist Username"] = {""},
-        ["Category Fish"] = { -- Only Select one, fill in the fish category or fish name
+        ["Category Fish"] = { -- Only Select one, fill in the Category Fish or Fish Name
             "Secret",
         },
         ["Fish Name"] = {
@@ -110,7 +110,7 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Selling"] = {
         ["Auto Sell"] = true,
         ["Auto Sell Threshold"] = "Legendary",
-        ["Auto Sell Every"] = 150,
+        ["Auto Sell Every"] = 100,
     },
     ["Doing Quest"] = {
         ["Auto Ghostfinn Rod"] = true,
@@ -141,6 +141,15 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Potions"] = {
         ["Auto Use"] = true,
         ["Minimum Rod"] = "Astral Rod",
+    },
+    ["Totems"] = {
+        ["Auto Use"] = true,
+        ["Minimum Rod"] = "Ghostfinn Rod",
+        ["Buy List"] = {
+            "Luck Totem",
+            "Mutation Totem",
+            "Shiny Totem",
+        },
     },
     ["Event"] = {
         ["Start Farm"] = true,
@@ -190,7 +199,7 @@ _G.FishItConfig = _G.FishItConfig or {
             "Ares Rod",
             "Angler Rod",
         },
-        ["Location Rods"] = { -- Farm location and minimum rod to start on that location, also only 1 rod and only 1 location
+        ["Location Rods"] = {
             ["Fisherman Island"] = {"Starter Rod"},
             ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
@@ -199,8 +208,8 @@ _G.FishItConfig = _G.FishItConfig or {
     },
 
     ["ExtremeFpsBoost"] = true,
-    ["UltimatePerformance"] = true,
-    ["Disable3DRender"] = true,
+    ["UltimatePerformance"] = false,
+    ["Disable3DRender"] = false,
     ["AutoRemovePlayer"] = true,
 
     ["AutoReconnect"] = true,
