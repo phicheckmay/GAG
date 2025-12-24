@@ -4,6 +4,6 @@ getgenv().CONFIG = {
     TRIGGER_PRICE = 200000; --// If fish price >= this value then discord webhook
     SKIP_MEGALODON_HUNT = false; --// This Event may bug idk
     SKIP_ALL_EVENTS = false; --// Skip all no admin events
-    LOCATION_AFTER_MAX_ACCOUNT = "Christmas Island"; --// If no event farm this location when acc have ghostfin rode | Default: Sisyphus Statue
+    LOCATION_AFTER_MAX_ACCOUNT = "Sisyphus Statue"; --// If no event farm this location when acc have ghostfin rode | Default: Sisyphus Statue
 }
 loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/08c950bf8089aca4c29a9661b699ed65.lua"))()
