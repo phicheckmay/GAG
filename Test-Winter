@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- FPS UNLOCKER & LIMITER
 -----------------------------------------------------
-local FPS_CAP = 30 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
+local FPS_CAP = 3 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
 
 pcall(function()
     setfpscap(FPS_CAP)
@@ -125,11 +125,11 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Minimum Rod"] = "Astral Rod",
     },
     ["WebHook"] = {
-        ["Link Webhook"] = "https://discordapp.com/api/webhooks/1445071527522336850/lDnsRPjoUDXv9mkVuoj5M1fQ5xYp_-biVaJzYers-0u4W91l6QfHhyDrHHeuJwe_0cpj",
+        ["Link Webhook"] = "",
         ["Auto Sending"] = false,
         ["Category"] = {"Secret"},
 
-        ["Link Webhook Quest Complete"] = "https://discordapp.com/api/webhooks/1445326539247063060/Rqg41bvvOkTt0hGsfubf97Yqyqs5KHrMV5KuIOgoryaDjv-XuvsD6FTYAPWYPiRnm_rw",
+        ["Link Webhook Quest Complete"] = "",
     },
     ["Weather"] = {
         ["Auto Buying"] = false,
@@ -156,6 +156,7 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Minimum Rod"] = "Ghostfinn Rod",
         ["Event List"] = {
             ["Christmas Cave"] = true,
+            ["Hacker Event"] = true,
             "Megalodon Hunt",
             "Ghost Shark Hunt",
             "Shark Hunt",
