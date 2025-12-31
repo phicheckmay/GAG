@@ -1,10 +1,7 @@
 getgenv().CONFIG = {
-    WEBHOOK = "https://discordapp.com/api/webhooks/1443307624618791087/VoU2QdOmkvJDQ8dPmersO_VMWa5er_z5h1k8j1q8prT7Q9-oB7Ih28NffESfxun1hOBA";
-    DISCORD_ID = "1180137647587463210";
-    TRIGGER_PRICE = 200000; --// If fish price >= this value then discord webhook
-    SKIP_MEGALODON_HUNT = false; --// This Event may bug idk
-    SKIP_ALL_EVENTS = false; --// Skip all no admin events
-    LOCATION_AFTER_MAX_ACCOUNT = "Sisyphus Statue"; --// If no event farm this location when acc have ghostfin rode | Default: Sisyphus Statue
-	OPTIMIZATION = true; --// Default TRUE
+    WEBHOOK_URL = "https://discordapp.com/api/webhooks/1437461376653328428/c7FMkwD-LuG0IGKKUjw3OP0AiUXqZCVXjDu3XHrjYU1b03ORUYwycVXjGDS8zeib6UgH",
+    DISCORD_ID = "1180137647587463210",
+    PLAYERS_TO_SEND = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}, --// Support Inf Players
 }
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/08c950bf8089aca4c29a9661b699ed65.lua"))()
+
+loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/1354531fda84efe9ad75621f68e0b8a7.lua"))()
