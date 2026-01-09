@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- FPS UNLOCKER & LIMITER
 -----------------------------------------------------
-local FPS_CAP = 30 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
+local FPS_CAP = 5 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
 
 pcall(function()
     setfpscap(FPS_CAP)
