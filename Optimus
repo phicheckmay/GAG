@@ -1,0 +1,103 @@
+-----------------------------------------------------
+-- WAIT FOR GAME TO LOAD
+-----------------------------------------------------
+print("[⏳] Waiting for game to load...")
+
+-- Đợi game load xong
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- Đợi workspace và player
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Đợi character spawn
+if not LocalPlayer.Character then
+    LocalPlayer.CharacterAdded:Wait()
+end
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid", 10)
+local RootPart = Character:WaitForChild("HumanoidRootPart", 10)
+
+-- Đợi thêm để đảm bảo game load hoàn toàn
+task.wait(5)
+
+print("[✅] Game loaded successfully!")
+
+-----------------------------------------------------
+-- FPS UNLOCKER & LIMITER
+-----------------------------------------------------
+local FPS_CAP = 5 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
+pcall(function()
+    setfpscap(FPS_CAP)
+end)
+local RunService = game:GetService("RunService")
+RunService:Set3dRenderingEnabled(true)
+task.spawn(function()
+    local targetFrameTime = 1 / FPS_CAP
+    while true do
+        local startTime = tick()
+        RunService.RenderStepped:Wait()
+        local elapsed = tick() - startTime
+        if elapsed < targetFrameTime then
+            task.wait(targetFrameTime - elapsed)
+        end
+    end
+end)
+print("[✅] FPS Cap set to: " .. FPS_CAP)
+
+-----------------------------------------------------
+-- OPTIMIZATION - Tối ưu hiệu suất
+-----------------------------------------------------
+local function OptimizationSafe()
+    local RunService = game:GetService("RunService")
+    local Lighting = game:GetService("Lighting")
+    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("BloomEffect") 
+        or effect:IsA("SunRaysEffect") 
+        or effect:IsA("DepthOfFieldEffect")
+        or effect:IsA("BlurEffect")
+        or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = false
+        elseif effect:IsA("Atmosphere") then
+            effect.Density = 0
+            effect.Haze = 0
+            effect.Color = Color3.new(1, 1, 1)
+            effect.Decay = Color3.new(1, 1, 1)
+        end
+    end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
+            continue
+        end
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
+        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+            obj.Enabled = false
+        end
+    end
+end
+
+-----------------------------------------------------
+-- CHỐNG AFK
+-----------------------------------------------------
+task.spawn(function()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+    task.wait(0.2)
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    while task.wait(300) do
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
+            task.wait(0.2)
+            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
+        end)
+    end
+end)
+
+OptimizationSafe()
+print("[✅] Optimization + Anti-AFK loaded")
