@@ -1,1 +1,17 @@
-PKG_ARXWNSHE6WSREQVH03BNBB5MRZU4GAGHCJVOD3OWC95SN9HRHH0TP1AHGKJ5HL1768951088
+{
+  "extension_path": "C:\\Users\\Admin\\Desktop\\Checker-Captcha\\Auto-captcha",
+  "placeid": "121864768012064",
+  "threads": 1,
+  "loops": 1,
+  "delay": 60,
+  "no_proxy": true,
+  "use_kiot": false,
+  "use_file": false,
+  "kiot_api": "",
+  "region": "random",
+  "check_only": false,
+  "open_browser": true,
+  "use_chromium": false,
+  "use_chrome": true,  
+  "Key_Omocaptcha": "PKG_ARXWNSHE6WSREQVH03BNBB5MRZU4GAGHCJVOD3OWC95SN9HRHH0TP1AHGKJ5HL1768951088"
+}
