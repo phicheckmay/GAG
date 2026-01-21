@@ -11,7 +11,7 @@
   "region": "random",
   "check_only": false,
   "open_browser": true,
-  "use_chromium": false,
-  "use_chrome": true,  
+  "use_chromium": true,
+  "use_chrome": false,  
   "Key_Omocaptcha": "PKG_ARXWNSHE6WSREQVH03BNBB5MRZU4GAGHCJVOD3OWC95SN9HRHH0TP1AHGKJ5HL1768951088"
 }
