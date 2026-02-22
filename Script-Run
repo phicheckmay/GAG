@@ -1,4 +1,49 @@
--- mm2 new 2026 Valentines
+-- ========================================================================
+-- 💕 KENPHYSICAL MM2 VALENTINE 2026 FARM & AUTO BOX OPENER
+-- ========================================================================
+-- ✅ Auto farm Valentine Tokens
+-- ✅ Auto detect event currency/box (không hardcode)
+-- ✅ Auto open crate khi đủ coin
+-- ✅ Full optimization để giảm lag
+-- ✅ Anti-AFK system
+-- ✅ Beautiful full-screen UI (nhấn H để ẩn/hiện)
+-- ✅ Discord Webhook thông báo Godly
+-- ✅ Server Hop khi không có round
+-- ✅ Auto Kick khi hết Daily Quest + hết coin
+-- ✅ Valentine Tracker (Coin, Crate, Daily Quest)
+-- ✅ Green Screen khi đạt target
+-- ========================================================================
+
+-- ========================================================================
+-- ⚙️ CONFIG - CHỈNH SỬA TẠI ĐÂY
+-- ========================================================================
+
+-- 🔗 Discord Webhook (để "" nếu không dùng)
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1472274917037834424/3mvmA-cX-MTA2Gf70WjwzaYuEvn2TLT4kZS3yREbI6tesfLYEFmRWnnqEmlIa7ZC-PGS"
+-- 🖼️ Ảnh embed webhook (để "" nếu không dùng)
+local WEBHOOK_IMAGE_URL = "https://files.catbox.moe/qri5x4.png"
+
+-- 🎯 Valentine Target (hiện Green Screen khi đạt)
+local VALENTINE_TARGET = 120000
+
+-- 🔄 Server Hop Settings
+local ROUND_TIMEOUT = 10 * 60          -- Thời gian chờ round (giây), mặc định 10 phút
+local HOP_MIN_PLAYERS = 4              -- Số player tối thiểu trong server để hop tới
+local HOP_MAX_PLAYERS = 10             -- Số player tối đa trong server để hop tới
+local HOP_SCRAPE_AMOUNT = 50           -- Số server scrape
+
+-- 💀 Auto Reset khi bag đầy (trừ Murderer)
+local RESET_WHEN_FULL_BAG = true
+
+-- ⏱️ Auto Open Crate delay
+local OPEN_CRATE_DELAY = 2             -- Delay giữa mỗi lần mở crate (giây)
+
+-- 🖥️ Optimization
+local FPS_CAP = 15                     -- Giới hạn FPS để giảm lag
+
+-- ========================================================================
+-- 🚀 KHỞI ĐỘNG
+-- ========================================================================
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -6,7 +51,51 @@ end
 
 task.wait(10)
 
--- Disable collision for all BaseParts in the character
+-- ========================================================================
+-- OPTIMIZATION - Chạy ngay từ đầu
+-- ========================================================================
+
+setfpscap(FPS_CAP)
+
+local function OptimizationSafe()
+    local RunService = game:GetService("RunService")
+    local Lighting = game:GetService("Lighting")
+
+    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("BloomEffect") 
+        or effect:IsA("SunRaysEffect") 
+        or effect:IsA("DepthOfFieldEffect")
+        or effect:IsA("BlurEffect")
+        or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = false
+        elseif effect:IsA("Atmosphere") then
+            effect.Density = 0
+            effect.Haze = 0
+            effect.Color = Color3.new(1, 1, 1)
+            effect.Decay = Color3.new(1, 1, 1)
+        end
+    end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
+            continue
+        end
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
+        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+            obj.Enabled = false
+        end
+    end
+end
+
+OptimizationSafe()
+
+-- ========================================================================
+-- DISABLE COLLISION
+-- ========================================================================
+
 task.spawn(function()
     task.wait(10)
     while true do
@@ -21,11 +110,14 @@ task.spawn(function()
     end
 end)
 
+-- ========================================================================
+-- ANTI-AFK SYSTEM
+-- ========================================================================
+
 task.spawn(function()
     task.wait(60)
     local function AntiAFK()
         local Player = game.Players.LocalPlayer
-        local Players = game.Players
         if not Player or not Player.Idled then return end
         local GC = getconnections or get_signal_cons
         if GC then
@@ -49,42 +141,25 @@ task.spawn(function()
     AntiAFK()
 end)
 
-local Player                = game.Players.LocalPlayer
-local Players               = game.Players
-local Character             = Player.Character or Player.CharacterAdded:Wait()
-local BadanPart             = Character:WaitForChild("HumanoidRootPart")
-local TweenService          = game:GetService("TweenService")
-local RunService            = game:GetService("RunService")
+-- Backup Anti-AFK (Idle Tracking)
+task.spawn(function()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+end)
 
-local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
-local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
-local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
-local AutofarmStarted = false
-local RoundEnded = false
-local ResetWhenFullBag = true
-local BagFull = false
-
-local OpenCrateRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Shop"):WaitForChild("OpenCrate")
-
--- Valentine Coin + Crate counter (farm targets normal coins in CoinContainer)
-local valentineCounterGui = nil
-local valentineGreenScreenGui = nil
-local valentineToggleButtonGui = nil
-local valentineDetectorThread = nil
-local isGreenScreenEnabled = true
-local valentineDetectorInitialized = false
-local valentineTarget = 120000
+-- ========================================================================
+-- AUTO SELECT TABLET DEVICE
+-- ========================================================================
 
 task.spawn(function()
-    task.wait(2) -- Wait for game to load
-    
-    local maxWaitTime = 30 -- Maximum time to wait for device selection
+    task.wait(2)
+    local maxWaitTime = 30
     local startTime = tick()
-    local clicked = false -- Flag to track if we clicked successfully
+    local clicked = false
     
     while tick() - startTime < maxWaitTime and not clicked do
         pcall(function()
-            -- Look for the DeviceSelect GUI
             local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
             if playerGui then
                 local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
@@ -95,33 +170,133 @@ task.spawn(function()
                         if tablet then
                             local button = tablet:FindFirstChild("Button")
                             if button then
-                                print("🖱️ Found Tablet button, clicking...")
-                                
-                                -- Click the tablet button
                                 firesignal(button.MouseButton1Click)
-                                
-                                print("✅ Successfully clicked Tablet selection!")
-                                clicked = true -- Set flag to exit the loop
+                                clicked = true
                             end
                         end
                     end
                 end
             end
         end)
-        
-        if not clicked then
-            task.wait(0.5) -- Only wait if we haven't clicked yet
-        end
-    end
-    
-    if clicked then
-        print("🎮 Tablet selection completed!")
-    else
-        print("⚠️ Device selection box not found or timed out")
+        if not clicked then task.wait(0.5) end
     end
 end)
 
--- Get real player ProfileData (same live table the game uses, updated by server)
+-- ========================================================================
+-- GUI TOGGLE SYSTEM (Ẩn GUI game để giảm lag)
+-- ========================================================================
+
+coroutine.wrap(function()
+    task.wait(60)
+
+    local function setupGUIToggle()
+        local guiObjects = {}
+        
+        local success = pcall(function()
+            for _, gui in pairs(gethui():GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    if gui.Name == "KenPhysicalMM2UI" then
+                        continue
+                    end
+                    
+                    for _, obj in pairs(gui:GetDescendants()) do
+                        if obj:IsA("GuiObject") and obj.Visible ~= nil then
+                            obj.Visible = false
+                            table.insert(guiObjects, obj)
+                        end
+                    end
+                end
+            end
+        end)
+        
+        if not success then return end
+        
+        local btnGui = Instance.new("ScreenGui")
+        btnGui.Name = "ToggleGuiButton"
+        btnGui.ResetOnSpawn = false
+        btnGui.IgnoreGuiInset = true
+        btnGui.Parent = gethui()
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 100, 0, 30)
+        btn.Position = UDim2.new(1, -110, 1, -40)
+        btn.Text = "Show GUIs"
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextStrokeTransparency = 0
+        btn.TextStrokeColor3 = Color3.new(0, 0, 0)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 12
+        btn.Parent = btnGui
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 5)
+        corner.Parent = btn
+        
+        local visible = false
+        btn.MouseButton1Click:Connect(function()
+            visible = not visible
+            
+            if visible then
+                btn.Text = "Hide GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+            else
+                btn.Text = "Show GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end
+            
+            for _, obj in ipairs(guiObjects) do
+                if obj and obj:IsA("GuiObject") and obj.Parent then
+                    obj.Visible = visible
+                end
+            end
+        end)
+    end
+
+    setupGUIToggle()
+end)()
+
+-- ========================================================================
+-- VARIABLES & SERVICES
+-- ========================================================================
+
+local Player = game.Players.LocalPlayer
+local Players = game.Players
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local BadanPart = Character:WaitForChild("HumanoidRootPart")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
+local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
+local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
+local OpenCrateRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Shop"):WaitForChild("OpenCrate")
+
+local AutofarmStarted = false
+local RoundEnded = false
+local BagFull = false
+
+-- Stats tracking
+local totalBoxesOpened = 0
+local startTime = tick()
+local lastRoundStartTime = tick()
+local isRoundActive = false
+
+-- Valentine tracker variables
+local valentineCounterGui = nil
+local valentineGreenScreenGui = nil
+local valentineToggleButtonGui = nil
+local valentineDetectorThread = nil
+local isGreenScreenEnabled = true
+local valentineDetectorInitialized = false
+
+-- ========================================================================
+-- PROFILE DATA & EVENT DETECTION (Auto detect - không hardcode)
+-- ========================================================================
+
 local function getProfileData()
     local tab = nil
     pcall(function()
@@ -130,7 +305,6 @@ local function getProfileData()
     return tab
 end
 
--- Get main event (Valentine 2026) so we use same CurrencyName/Title as the game
 local function getMainEvent()
     local event = nil
     pcall(function()
@@ -140,7 +314,6 @@ local function getMainEvent()
     return event
 end
 
--- Valentine currency: EventStartInfo.CurrencyName, KeyName, or derived from ShopData.Price (event data only).
 local function getValentineCurrencyName()
     local event = getMainEvent()
     if not event or not event.EventStartInfo then return nil end
@@ -162,7 +335,6 @@ local function getValentineCurrencyName()
     return nil
 end
 
--- Valentine Coin: amount the player currently has (real Materials.Owned from ProfileData). Missing key = 0 coins.
 local function getValentineCoins()
     local ProfileData = getProfileData()
     if not ProfileData or not ProfileData.Materials or not ProfileData.Materials.Owned then return nil end
@@ -175,7 +347,6 @@ local function getValentineCoins()
     return 0
 end
 
--- Valentine Crate Open: from ProfileData[event].Quests[questId].Progress where questId is the event (box) quest, not daily.
 local function getValentineCratesOpened()
     local ProfileData = getProfileData()
     if not ProfileData then return nil end
@@ -197,7 +368,6 @@ local function getValentineCratesOpened()
     return nil
 end
 
--- Daily Quest only: completed milestones. Ignores EVENT QUEST. Daily = quest with RefreshTime. No hardcoded total.
 local function getValentineDailyQuestsProgress()
     local completed, total = 0, 0
     pcall(function()
@@ -224,7 +394,25 @@ local function getValentineDailyQuestsProgress()
     return completed, total
 end
 
--- Format number with commas
+local function getValentineBoxIdAndPrice()
+    local event = getMainEvent()
+    if not event or not event.EventStartInfo or not event.EventStartInfo.ShopData then return nil, nil, nil end
+    local shop = event.EventStartInfo.ShopData
+    for boxId, item in pairs(shop) do
+        if type(item) == "table" and item.Type == "MysteryBox" and item.Price and type(item.Price) == "table" then
+            local currencyKey = getValentineCurrencyName()
+            if currencyKey and item.Price[currencyKey] then
+                return boxId, currencyKey, tonumber(item.Price[currencyKey])
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+-- ========================================================================
+-- UTILITY FUNCTIONS
+-- ========================================================================
+
 local function formatNumber(num)
     local formatted = tostring(num)
     local k
@@ -235,13 +423,14 @@ local function formatNumber(num)
     return formatted
 end
 
--- Display value only when real number; otherwise "-" (no fake fallback)
 local function displayNum(n)
     if n == nil or type(n) ~= "number" then return "-" end
     return formatNumber(n)
 end
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Auto Open Valentine Crate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+-- ========================================================================
+-- DISCORD WEBHOOK SYSTEM
+-- ========================================================================
 
 local function getSyncWeapons()
     local ok, Sync = pcall(function()
@@ -280,20 +469,267 @@ local function isChromaItem(itemId)
     return false
 end
 
-local function getValentineBoxIdAndPrice()
-    local event = getMainEvent()
-    if not event or not event.EventStartInfo or not event.EventStartInfo.ShopData then return nil, nil, nil end
-    local shop = event.EventStartInfo.ShopData
-    for boxId, item in pairs(shop) do
-        if type(item) == "table" and item.Type == "MysteryBox" and item.Price and type(item.Price) == "table" then
-            local currencyKey = getValentineCurrencyName()
-            if currencyKey and item.Price[currencyKey] then
-                return boxId, currencyKey, tonumber(item.Price[currencyKey])
+local function postWebhookBody(body)
+    if not WEBHOOK_URL or #WEBHOOK_URL == 0 then return end
+    pcall(function()
+        local json = type(body) == "string" and body or HttpService:JSONEncode(body)
+        local req = (getgenv and getgenv().request) or (getgenv and getgenv().http_request)
+        if type(req) == "function" then
+            req({
+                Url = WEBHOOK_URL,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = json
+            })
+        else
+            HttpService:PostAsync(WEBHOOK_URL, json)
+        end
+    end)
+end
+
+local function sendGodlyWebhook(playerName, weaponId)
+    if not WEBHOOK_URL or #WEBHOOK_URL == 0 then return end
+    local isChroma = isChromaItem(weaponId)
+    local variant = isChroma and "Chroma" or "Normal"
+    local weaponDisplayName = getItemDisplayName(weaponId)
+    local p, w = playerName or "-", weaponDisplayName or tostring(weaponId) or "-"
+    local embed = {
+        title = "🎁 Valentine Crate – Godly (" .. variant .. ")",
+        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapon**\n**" .. w .. "**\n\n**✨ Type**\n**" .. variant .. "**",
+        color = 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if WEBHOOK_IMAGE_URL and #WEBHOOK_IMAGE_URL > 0 then
+        embed.thumbnail = { url = WEBHOOK_IMAGE_URL }
+    end
+    postWebhookBody({ embeds = { embed } })
+end
+
+local function sendGodliesListWebhook(playerName, godlyItemIds)
+    if not WEBHOOK_URL or #WEBHOOK_URL == 0 or not godlyItemIds or #godlyItemIds == 0 then return end
+    local lines = {}
+    for _, itemId in ipairs(godlyItemIds) do
+        local variant = isChromaItem(itemId) and "Chroma" or "Normal"
+        local name = getItemDisplayName(itemId)
+        table.insert(lines, "**" .. name .. "** (" .. variant .. ")")
+    end
+    local weaponList = table.concat(lines, "\n")
+    local p = playerName or "-"
+    local embed = {
+        title = "🎁 Valentine – Godlies in inventory",
+        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapons**\n" .. weaponList,
+        color = 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if WEBHOOK_IMAGE_URL and #WEBHOOK_IMAGE_URL > 0 then
+        embed.thumbnail = { url = WEBHOOK_IMAGE_URL }
+    end
+    postWebhookBody({ embeds = { embed } })
+end
+
+local function getGodliesInInventory()
+    local list = {}
+    pcall(function()
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData.Weapons or not ProfileData.Weapons.Owned then return end
+        local Weapons = getSyncWeapons()
+        if not Weapons then return end
+        for itemId, _ in pairs(ProfileData.Weapons.Owned) do
+            if type(itemId) == "string" then
+                local item = Weapons[itemId]
+                if item and type(item) == "table" and item.Rarity == "Godly" then
+                    table.insert(list, itemId)
+                end
             end
         end
-    end
-    return nil, nil, nil
+    end)
+    return list
 end
+
+-- ========================================================================
+-- BEAUTIFUL FULL-SCREEN UI (Bản cũ - Neon style)
+-- ========================================================================
+
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "KenPhysicalMM2UI"
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+
+local bg = Instance.new("Frame", ScreenGui)
+bg.Size = UDim2.new(1, 0, 1, 0)
+bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+bg.BorderSizePixel = 0
+bg.BackgroundTransparency = 0
+
+local function createNeon(label, color)
+    local stroke = Instance.new("UIStroke", label)
+    stroke.Thickness = 2
+    stroke.Color = color
+    stroke.Transparency = 0.3
+    
+    local glow = Instance.new("UIGradient", label)
+    glow.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, color)
+    }
+    glow.Rotation = 45
+end
+
+-- Title
+local Title = Instance.new("TextLabel", bg)
+Title.Size = UDim2.new(1, 0, 0, 100)
+Title.Position = UDim2.new(0, 0, 0.08, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "💕 Kenphysical Farm MM2"
+Title.TextColor3 = Color3.fromRGB(255, 100, 150)
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+createNeon(Title, Color3.fromRGB(255, 100, 150))
+
+-- Username Label
+local UsernameLabel = Instance.new("TextLabel", bg)
+UsernameLabel.Size = UDim2.new(1, 0, 0, 60)
+UsernameLabel.Position = UDim2.new(0, 0, 0.20, 0)
+UsernameLabel.BackgroundTransparency = 1
+UsernameLabel.Text = "👤 Tên: " .. Player.Name
+UsernameLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
+UsernameLabel.Font = Enum.Font.GothamSemibold
+UsernameLabel.TextScaled = true
+createNeon(UsernameLabel, Color3.fromRGB(255, 150, 200))
+
+-- Valentine Tokens Label
+local TokensLabel = Instance.new("TextLabel", bg)
+TokensLabel.Name = "TokensLabel"
+TokensLabel.Size = UDim2.new(1, 0, 0, 80)
+TokensLabel.Position = UDim2.new(0, 0, 0.30, 0)
+TokensLabel.BackgroundTransparency = 1
+TokensLabel.Text = "💝 Valentine Coin: -"
+TokensLabel.TextColor3 = Color3.fromRGB(255, 80, 120)
+TokensLabel.Font = Enum.Font.GothamBold
+TokensLabel.TextScaled = true
+createNeon(TokensLabel, Color3.fromRGB(255, 80, 120))
+
+-- Crates Opened Label
+local CratesLabel = Instance.new("TextLabel", bg)
+CratesLabel.Name = "CratesLabel"
+CratesLabel.Size = UDim2.new(1, 0, 0, 70)
+CratesLabel.Position = UDim2.new(0, 0, 0.42, 0)
+CratesLabel.BackgroundTransparency = 1
+CratesLabel.Text = "🎁 Crate Opened: -"
+CratesLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+CratesLabel.Font = Enum.Font.GothamBold
+CratesLabel.TextScaled = true
+createNeon(CratesLabel, Color3.fromRGB(255, 200, 0))
+
+-- Daily Quest Label
+local DailyLabel = Instance.new("TextLabel", bg)
+DailyLabel.Name = "DailyLabel"
+DailyLabel.Size = UDim2.new(1, 0, 0, 60)
+DailyLabel.Position = UDim2.new(0, 0, 0.53, 0)
+DailyLabel.BackgroundTransparency = 1
+DailyLabel.Text = "📋 Daily Quest: -/-"
+DailyLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+DailyLabel.Font = Enum.Font.GothamSemibold
+DailyLabel.TextScaled = true
+createNeon(DailyLabel, Color3.fromRGB(150, 255, 150))
+
+-- Online Time Label
+local OnlineLabel = Instance.new("TextLabel", bg)
+OnlineLabel.Name = "OnlineLabel"
+OnlineLabel.Size = UDim2.new(1, 0, 0, 60)
+OnlineLabel.Position = UDim2.new(0, 0, 0.64, 0)
+OnlineLabel.BackgroundTransparency = 1
+OnlineLabel.Text = "🕐 Online: 00:00:00"
+OnlineLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+OnlineLabel.Font = Enum.Font.GothamSemibold
+OnlineLabel.TextScaled = true
+createNeon(OnlineLabel, Color3.fromRGB(150, 150, 150))
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel", bg)
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Size = UDim2.new(1, 0, 0, 50)
+StatusLabel.Position = UDim2.new(0, 0, 0.75, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "⚡ Status: Đang khởi động..."
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextScaled = true
+createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
+
+-- Target Label
+local TargetLabel = Instance.new("TextLabel", bg)
+TargetLabel.Name = "TargetLabel"
+TargetLabel.Size = UDim2.new(1, 0, 0, 50)
+TargetLabel.Position = UDim2.new(0, 0, 0.85, 0)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "🎯 Target: " .. formatNumber(VALENTINE_TARGET)
+TargetLabel.TextColor3 = Color3.fromRGB(255, 150, 50)
+TargetLabel.Font = Enum.Font.GothamSemibold
+TargetLabel.TextScaled = true
+createNeon(TargetLabel, Color3.fromRGB(255, 150, 50))
+
+-- Toggle UI with H key
+local UIS = game:GetService("UserInputService")
+local uiVisible = true
+UIS.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.H then
+        uiVisible = not uiVisible
+        bg.Visible = uiVisible
+    end
+end)
+
+-- ========================================================================
+-- UI UPDATE SYSTEM
+-- ========================================================================
+
+task.spawn(function()
+    task.wait(5)
+    while task.wait(1) do
+        pcall(function()
+            -- Update Valentine Coins
+            local coins = getValentineCoins()
+            TokensLabel.Text = "💝 Valentine Coin: " .. displayNum(coins)
+            
+            -- Update Crates Opened
+            local crates = getValentineCratesOpened()
+            CratesLabel.Text = "🎁 Crate Opened: " .. displayNum(crates)
+            
+            -- Update Daily Quest
+            local dqDone, dqTotal = getValentineDailyQuestsProgress()
+            local dqStr = (type(dqDone) == "number" and type(dqTotal) == "number") and (tostring(dqDone) .. "/" .. tostring(dqTotal)) or "-/-"
+            DailyLabel.Text = "📋 Daily Quest: " .. dqStr
+            
+            -- Update online time
+            local elapsed = math.floor(tick() - startTime)
+            local days = math.floor(elapsed / 86400)
+            local hours = math.floor((elapsed % 86400) / 3600)
+            local mins = math.floor((elapsed % 3600) / 60)
+            local secs = elapsed % 60
+            
+            if days > 0 then
+                OnlineLabel.Text = string.format("🕐 Online: %d ngày %02d:%02d:%02d", days, hours, mins, secs)
+            else
+                OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d", hours, mins, secs)
+            end
+            
+            -- Update target progress
+            if type(coins) == "number" then
+                local pct = math.floor(coins / VALENTINE_TARGET * 100)
+                TargetLabel.Text = "🎯 Target: " .. displayNum(coins) .. " / " .. formatNumber(VALENTINE_TARGET) .. " (" .. pct .. "%)"
+                if coins >= VALENTINE_TARGET then
+                    TargetLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                end
+            end
+        end)
+    end
+end)
+
+-- ========================================================================
+-- AUTO OPEN VALENTINE CRATE
+-- ========================================================================
 
 local function canOpenValentineCrate()
     local ProfileData = getProfileData()
@@ -320,108 +756,147 @@ local function noMoreDailyQuest()
     return total > 0 and completed >= total
 end
 
-local function getGodliesInInventory()
-    local list = {}
-    pcall(function()
-        local ProfileData = getProfileData()
-        if not ProfileData or not ProfileData.Weapons or not ProfileData.Weapons.Owned then return end
-        local Weapons = getSyncWeapons()
-        if not Weapons then return end
-        for itemId, _ in pairs(ProfileData.Weapons.Owned) do
-            if type(itemId) == "string" then
-                local item = Weapons[itemId]
-                if item and type(item) == "table" and item.Rarity == "Godly" then
-                    table.insert(list, itemId)
-                end
-            end
-        end
-    end)
-    return list
-end
-
+-- Auto Open Crate + Auto Kick Loop
 task.spawn(function()
     task.wait(10)
     local kicked = false
     while true do
         if kicked then break end
         pcall(function()
-                local coins = getValentineCoins()
-                if noMoreDailyQuest() and (coins == nil or coins == 0) then
-                    local godlies = getGodliesInInventory()
-                    writefile(game.Players.LocalPlayer.Character.Humanoid.DisplayName..".txt", "Yummytool")
-                    task.wait(1)
-                    kicked = true
-                    task.wait(2)
-                    game.Players.LocalPlayer:Kick("No more daily quest")
-                    return
+            local coins = getValentineCoins()
+            if noMoreDailyQuest() and (coins == nil or coins == 0) then
+                local godlies = getGodliesInInventory()
+                if godlies and #godlies > 0 then
+                    local playerName = Player.Name or "Player"
+                    sendGodliesListWebhook(playerName, godlies)
                 end
-                if canOpenValentineCrate() then
-                    openOneValentineCrate()
-                    task.wait(2)
-                end
-            end)
+                pcall(function()
+                    writefile(Player.Character.Humanoid.DisplayName .. ".txt", "Yummytool")
+                end)
+                task.wait(1)
+                kicked = true
+                StatusLabel.Text = "⚡ Status: Hết Daily Quest - Kick..."
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                task.wait(2)
+                Player:Kick("No more daily quest")
+                return
+            end
+            if canOpenValentineCrate() then
+                StatusLabel.Text = "⚡ Status: Đang mở crate..."
+                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                openOneValentineCrate()
+                task.wait(OPEN_CRATE_DELAY)
+            end
+        end)
         if kicked then break end
         task.wait(2)
     end
 end)
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Round Timeout System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+-- ========================================================================
+-- SERVER HOP SYSTEM
+-- ========================================================================
 
-local roundTimeout = 10 * 60 -- 10 minutes in seconds
-local lastRoundStartTime = tick()
-local isRoundActive = false
+local function CreateFiles(FileName, File)
+    pcall(function()
+        makefolder("ServerHopper")
+        makefolder("ServerHopper//" .. game.PlaceId)
+        writefile("ServerHopper//" .. game.PlaceId .. "//" .. FileName .. ".json", File)
+    end)
+end
 
--- Function to check if we need to server hop due to no round starting
+local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
+    if Amount == nil then Amount = tonumber(math.huge) end
+    
+    local JobIDs = {}
+    local API, ServerPages
+    
+    local function FetchJobIDs()
+        JobIDs = {os.date("*t").hour}
+        local _s = tick()
+        
+        if Logs then print("🔍 Scraping servers...") end
+        
+        repeat
+            task.wait(2)
+            local success, result = pcall(function()
+                API = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (ServerPages and "&cursor=" .. ServerPages or "")))
+            end)
+
+            if not success then
+                if Logs then print("❌ API Error:", result) end
+                task.wait(10)
+                return false
+            end
+
+            for i, v in next, API["data"] do
+                if v["id"] ~= game.JobId and v["playing"] ~= v["maxPlayers"] and v["playing"] >= MinPlayers and v["playing"] <= MaxPlayers then
+                    if #JobIDs < Amount + 1 then
+                        table.insert(JobIDs, v["id"])
+                    end
+                end
+            end
+            ServerPages = API.nextPageCursor
+        until not ServerPages or #JobIDs >= Amount + 1
+        
+        if Logs then print("✅ Found " .. (#JobIDs - 1) .. " servers in " .. math.round(tick() - _s) .. "s") end
+        return true
+    end
+    
+    if not isfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json") then
+        FetchJobIDs()
+        CreateFiles("low_players-jobids", HttpService:JSONEncode(JobIDs))
+    end
+    
+    JobIDs = HttpService:JSONDecode(readfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json"))
+    
+    if JobIDs[1] ~= os.date("*t").hour then
+        FetchJobIDs()
+        writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
+    end
+    
+    local function RandomJobID()
+        return JobIDs[math.random(1, #JobIDs)]
+    end
+    
+    local SelectedJobID = RandomJobID()
+    
+    if Logs then print("🎯 Hopping to server: " .. SelectedJobID) end
+    
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+    
+    Player.OnTeleport:Connect(function(Status)
+        if Status == Enum.TeleportState.Failed then
+            if Logs then print("❌ Failed, retrying...") end
+            SelectedJobID = RandomJobID()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+        end
+    end)
+end
+
+-- ========================================================================
+-- ROUND TIMEOUT → SERVER HOP
+-- ========================================================================
+
 local function checkRoundTimeout()
     local currentTime = tick()
     local timeSinceLastRound = currentTime - lastRoundStartTime
     
-    -- If no round has started for 10 minutes, server hop
-    if timeSinceLastRound >= roundTimeout and not isRoundActive then
-        print("🚨 No round started for 10 minutes! Server hopping...")
-        hopToLowPlayers(true, 50, 4, 10) -- Enable logs for this hop
+    if timeSinceLastRound >= ROUND_TIMEOUT and not isRoundActive then
+        print("🚨 No round started for " .. math.floor(ROUND_TIMEOUT / 60) .. " minutes! Server hopping...")
+        StatusLabel.Text = "⚡ Status: Server hop (no round)..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        hopToLowPlayers(true, HOP_SCRAPE_AMOUNT, HOP_MIN_PLAYERS, HOP_MAX_PLAYERS)
     end
 end
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tracker System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+-- ========================================================================
+-- GREEN SCREEN SYSTEM (khi đạt target)
+-- ========================================================================
 
--- Setup Valentine Coin + Crate Opened counter (same size/position, no other changes)
-local function setupValentineTracker()
-    if valentineDetectorInitialized then return end
-    valentineDetectorInitialized = true
-
-    -- 1️⃣ ALWAYS-VISIBLE COUNTER: Valentine Coin amount, under it Valentine Crate Opened
-    valentineCounterGui = Instance.new("ScreenGui")
-    valentineCounterGui.Name = "ValentineCounter"
-    valentineCounterGui.ResetOnSpawn = false
-    valentineCounterGui.IgnoreGuiInset = true
-    valentineCounterGui.DisplayOrder = 999
-    valentineCounterGui.Enabled = true
-
-    local counterText = Instance.new("TextLabel")
-    counterText.Size = UDim2.new(0, 800, 0, 320)
-    counterText.Position = UDim2.new(0.5, -400, 0.1, -100)
-    counterText.BackgroundTransparency = 0
-    counterText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    counterText.BorderSizePixel = 0
-    counterText.Font = Enum.Font.SourceSansBold
-    counterText.TextSize = 20 -- MUCH BIGGER TEXT! for changing Coin atau Token
-    counterText.TextWrapped = true
-    counterText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    local dqDone, dqTotal = getValentineDailyQuestsProgress()
-    local coins = getValentineCoins()
-    local crates = getValentineCratesOpened()
-    local dqStr = (type(dqDone) == "number" and type(dqTotal) == "number") and (tostring(dqDone) .. "/" .. tostring(dqTotal)) or "-/-"
-    counterText.Text = string.format("Valentine Coin : %s\nVal Crate Open : %s\nDaily Quest %s", displayNum(coins), displayNum(crates), dqStr)
-    counterText.TextStrokeTransparency = 0
-    counterText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    counterText.Name = "CounterText"
-    counterText.Parent = valentineCounterGui
-
+local function setupValentineGreenScreen()
     local guiParent = (gethui and gethui()) or game:GetService("CoreGui")
-    valentineCounterGui.Parent = guiParent
 
-    -- 2️⃣ GREEN SCREEN (target reached)
     valentineGreenScreenGui = Instance.new("ScreenGui")
     valentineGreenScreenGui.Name = "ValentineGreenScreen"
     valentineGreenScreenGui.ResetOnSpawn = false
@@ -473,7 +948,7 @@ local function setupValentineTracker()
 
     valentineGreenScreenGui.Parent = guiParent
 
-    -- 3️⃣ TOGGLE BUTTON (target reached)
+    -- Toggle button
     valentineToggleButtonGui = Instance.new("ScreenGui")
     valentineToggleButtonGui.Name = "ValentineToggleButton"
     valentineToggleButtonGui.ResetOnSpawn = false
@@ -502,34 +977,25 @@ local function setupValentineTracker()
 
     valentineToggleButtonGui.Parent = guiParent
 
-    -- 4️⃣ MONITORING LOOP: update Valentine Coin + Crate Opened every 1 second
-    valentineDetectorThread = task.spawn(function()
+    -- Monitor target
+    task.spawn(function()
         while true do
             pcall(function()
                 local coins = getValentineCoins()
-                local crates = getValentineCratesOpened()
-
-                local dqDone, dqTotal = getValentineDailyQuestsProgress()
-                if valentineCounterGui and valentineCounterGui.CounterText then
-                    local dqStr = (type(dqDone) == "number" and type(dqTotal) == "number") and (tostring(dqDone) .. "/" .. tostring(dqTotal)) or "-/-"
-                    valentineCounterGui.CounterText.Text = string.format(
-                        "Valentine Coin : %s\nVal Crate Open : %s\nDaily Quest %s",
-                        displayNum(coins),
-                        displayNum(crates),
-                        dqStr
-                    )
-                end
-
-                if type(coins) == "number" and coins >= valentineTarget then
+                if type(coins) == "number" and coins >= VALENTINE_TARGET then
                     valentineToggleButtonGui.Enabled = true
                     valentineGreenScreenGui.Enabled = isGreenScreenEnabled
-                    if valentineGreenScreenGui.GreenScreen and valentineGreenScreenGui.GreenScreen.AchievementText then
-                        valentineGreenScreenGui.GreenScreen.AchievementText.Text = string.format(
-                            "TARGET ACHIEVED!\n\nValentine Coin : %s\nValentine Crate Open : %s\n\n%s",
-                            displayNum(coins),
-                            displayNum(crates),
-                            game.JobId:sub(1, 8) .. "..."
-                        )
+                    local crates = getValentineCratesOpened()
+                    if valentineGreenScreenGui:FindFirstChild("GreenScreen") then
+                        local at = valentineGreenScreenGui.GreenScreen:FindFirstChild("AchievementText")
+                        if at then
+                            at.Text = string.format(
+                                "TARGET ACHIEVED!\n\nValentine Coin : %s\nValentine Crate Open : %s\n\n%s",
+                                displayNum(coins),
+                                displayNum(crates),
+                                game.JobId:sub(1, 8) .. "..."
+                            )
+                        end
                     end
                 else
                     valentineToggleButtonGui.Enabled = false
@@ -541,97 +1007,51 @@ local function setupValentineTracker()
     end)
 end
 
--- Auto-initialize
-setupValentineTracker()
+setupValentineGreenScreen()
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Create Platform ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+-- ========================================================================
+-- FARM FUNCTIONS
+-- ========================================================================
 
--- Function to create a platform under the player's feet with adjustable size
+local platform = nil
+
 local function createPlatform()
-    -- Check if platform already exists
     local existingPlatform = workspace:FindFirstChild("Papan")
-    if existingPlatform then
-        return existingPlatform
-    end
+    if existingPlatform then return existingPlatform end
 
-    -- Create a new part (the platform)
-    local platform = Instance.new("Part")
-    platform.Size = Vector3.new(50, 1, 50) -- Bigger platform with smaller height
+    platform = Instance.new("Part")
+    platform.Size = Vector3.new(50, 1, 50)
     platform.Anchored = true
     platform.CanCollide = true
     platform.Material = Enum.Material.SmoothPlastic
-    platform.Color = Color3.new(1, 1, 1) -- White platform
-    platform.Name = "Papan" -- Renamed to "Papan"
-
-    -- Set the platform's position to the custom CFrame
-    local randomX = math.random(-100, -50) -- Adjust range as needed
-    local randomZ = math.random(-150, -100) -- Adjust range as needed
+    platform.Color = Color3.new(1, 1, 1)
+    platform.Name = "Papan"
+    
+    local randomX = math.random(-100, -50)
+    local randomZ = math.random(-150, -100)
     platform.CFrame = CFrame.new(randomX, -180, randomZ)
-
-    -- Parent the platform to the workspace
     platform.Parent = workspace
+    
     return platform
 end
 
--- Ensure the platform is always created and in position
+-- Keep platform alive
 task.spawn(function()
     while true do
         createPlatform()
-        task.wait(5) -- Check every second to ensure the platform is present
+        task.wait(5)
     end
 end)
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Teleport To Platform ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
-
--- Function to teleport player on top of the platform
 local function teleportToPlatform()
-    local platform = workspace:FindFirstChild("Papan")
-    if not platform then
-        platform = createPlatform()
-    end
+    local plat = workspace:FindFirstChild("Papan")
+    if not plat then plat = createPlatform() end
     if BadanPart then
-        -- Adjust Y offset to place the player above the platform
-        local yOffset = platform.Size.Y / 2 + BadanPart.Size.Y / 2 + 4 -- 4 is the additional height above the platform
-        BadanPart.CFrame = platform.CFrame + Vector3.new(0, yOffset, 0)
+        local yOffset = plat.Size.Y / 2 + BadanPart.Size.Y / 2 + 4
+        BadanPart.CFrame = plat.CFrame + Vector3.new(0, yOffset, 0)
     end
 end
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Function Tween ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
-
---[[ Function to tween character to a target
-function TweenCharacterToTarget(targetPart)
-    -- Parameter validation
-    if not targetPart then
-        warn("Target part not provided!")
-        return
-    end
-    
-    -- Fixed speed
-    local speed = math.huge
-    
-    -- Calculate Target CFrame
-    local startCFrame = BadanPart.CFrame
-    local targetPosition = targetPart.Position
-    local finalCFrame = CFrame.new(targetPosition) * (startCFrame - startCFrame.Position)
-    
-    -- Calculate Distance
-    local distance = (targetPosition - startCFrame.Position).Magnitude
-    
-    -- Calculate Duration based on speed
-    local duration = distance / speed
-    
-    -- TweenInfo Configuration
-    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-    
-    -- Create and Play Tween
-    local tween = TweenService:Create(BadanPart, tweenInfo, { CFrame = finalCFrame })
-    tween:Play()
-    
-    -- Return tween so it can be monitored or cancelled
-    return tween
-end]]
-
--- Function to tween the player using BodyVelocity and CFrame
 local function tweenWithBodyVelocity(targetCFrame)
     local bodyVelocity = BadanPart:FindFirstChild("BodyVelocity")
     if not bodyVelocity then
@@ -642,32 +1062,25 @@ local function tweenWithBodyVelocity(targetCFrame)
         bodyVelocity.Parent = BadanPart
     end
 
-    local duration = 0 -- Tween duration
-    local startTime = tick()
+    local duration = 0
+    local tweenStartTime = tick()
     local startCFrame = BadanPart.CFrame
     local elapsedTime = 0
 
     while elapsedTime < duration do
-        elapsedTime = tick() - startTime
+        elapsedTime = tick() - tweenStartTime
         local alpha = elapsedTime / duration
         local currentCFrame = startCFrame:Lerp(targetCFrame, alpha)
-
-        local velocity = (currentCFrame.Position - BadanPart.Position).Unit * 25 -- Adjust speed
+        local velocity = (currentCFrame.Position - BadanPart.Position).Unit * 25
         bodyVelocity.Velocity = velocity
-
         BadanPart.CFrame = currentCFrame
         task.wait(0.01)
     end
 
-    -- Stop movement
     bodyVelocity.Velocity = Vector3.zero
     bodyVelocity:Destroy()
-
-    -- Snap to the final target position
     BadanPart.CFrame = targetCFrame
 end
-
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Utility Function ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
 
 local function returncoincontainer()
     for _, v in workspace:GetChildren() do
@@ -680,12 +1093,10 @@ end
 
 local function getRandomCoin(container)
     local coins = container:GetChildren()
-    -- Shuffle the coins to randomize selection
     for i = #coins, 2, -1 do
         local j = math.random(1, i)
         coins[i], coins[j] = coins[j], coins[i]
     end
-
     for _, coin in ipairs(coins) do
         if coin:FindFirstChild("TouchInterest") then
             return coin
@@ -694,34 +1105,29 @@ local function getRandomCoin(container)
     return nil
 end
 
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Event Handlers ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+-- ========================================================================
+-- EVENT HANDLERS
+-- ========================================================================
 
 CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
     AutofarmStarted = true
     
-    -- Check if bag is full (regardless of coin type for now)
     if tonumber(current) >= tonumber(max) then
         AutofarmStarted = false
-        BagFull = true -- Set BagFull to true
+        BagFull = true
 
-        if ResetWhenFullBag then
-            -- Check if player is murderer using the correct game method
+        if RESET_WHEN_FULL_BAG then
             local isMurderer = false
             pcall(function()
-                -- Use the game's CurrentRoundClient module
                 local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
                 local playerData = CurrentRoundClient.GetLatestPlayerData()
-                
-                -- Check if current player's role is "Murderer"
                 if playerData and playerData[Player.Name] then
-                    local playerRole = playerData[Player.Name].Role
-                    if playerRole == "Murderer" then
+                    if playerData[Player.Name].Role == "Murderer" then
                         isMurderer = true
                     end
                 end
             end)
             
-            -- Only reset if player is NOT the murderer
             if not isMurderer then
                 pcall(function()
                     if Player.Character and Player.Character:FindFirstChild("Humanoid") then
@@ -733,76 +1139,77 @@ CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
     end
 end)
 
--- Round start event handler
 RoundStartEvent.OnClientEvent:Connect(function()
     lastRoundStartTime = tick()
     isRoundActive = true
     AutofarmStarted = true
     RoundEnded = false
-    BagFull = false -- Reset BagFull to false
+    BagFull = false
+    StatusLabel.Text = "⚡ Status: Đang farm..."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
 end)
 
--- Round end event handler  
 RoundEndEvent.OnClientEvent:Connect(function()
     isRoundActive = false
     AutofarmStarted = false
     RoundEnded = true
+    StatusLabel.Text = "⚡ Status: Chờ round mới..."
+    StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 end)
 
--- Check for timeout every 30 seconds
+-- Check timeout every 30 seconds
 task.spawn(function()
     task.wait(30)
     while true do
         checkRoundTimeout()
-        task.wait(30) -- Check every 30 seconds
+        task.wait(30)
     end
 end)
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Main Autofarm Loop ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+-- ========================================================================
+-- MAIN AUTOFARM LOOP
+-- ========================================================================
+
+print("💕 Kenphysical MM2 Valentine 2026 Farm - Started!")
+print("⌨️ Press H to toggle UI")
 
 while true do
     pcall(function()
-        -- Only farm when autofarm is started and round hasn't ended
         if AutofarmStarted and not RoundEnded and not BagFull and 
             (function()
-                local success, result = pcall(function() -- check if player dead or not in middle of match
+                local success, result = pcall(function()
                     local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
                     local playerData = CurrentRoundClient.PlayerData[Player.Name]
                     return playerData and playerData.Dead ~= true
                 end)
                 return success and result
             end)() then
-            -- Check if character exists before doing anything
+            
             local character = Player.Character
             if character and character:FindFirstChild("HumanoidRootPart") then
                 BadanPart = character.HumanoidRootPart 
                 
-                -- Step 2: Move to random coin with TouchInterest
                 local coinContainer = returncoincontainer()
                 if coinContainer then
                     local coin = getRandomCoin(coinContainer)
                     if coin then
-                        -- Tween to target position using BodyVelocity and CFrame
                         tweenWithBodyVelocity(coin.CFrame)
 
-                        -- Wait until the coin is collected or gone
                         while coin.Parent == coinContainer and coin:FindFirstChild("TouchInterest") do
                             task.wait(0.1)
-                            -- Fire touch interest to collect the coin
                             pcall(function()
-                                --firetouchinterest(BadanPart, coin, 0)
+                                firetouchinterest(BadanPart, coin, 0)
                                 task.wait(0.1)
-                                --firetouchinterest(BadanPart, coin, 1)
+                                firetouchinterest(BadanPart, coin, 1)
                             end)
                         end
-                        -- Teleport back to platform
+                        
                         teleportToPlatform()
-
-                        -- Stay on platform for 1.7 seconds
                         task.wait(1.7)
                     end
                 end
             end
         end
     end)
-    task.wait(0.2) -- Small delay to prevent lag
+    task.wait(0.2)
 end
