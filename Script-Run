@@ -66,11 +66,6 @@ local BagFull = false
 
 local OpenCrateRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Shop"):WaitForChild("OpenCrate")
 
--- Put your Discord webhook URL here (leave "" to disable). Webhook is sent only when we got a Godly on the open that triggered kick.
-local webhook = "https://discord.com/api/webhooks/1472274917037834424/3mvmA-cX-MTA2Gf70WjwzaYuEvn2TLT4kZS3yREbI6tesfLYEFmRWnnqEmlIa7ZC-PGS"
--- Optional: big image URL for the embed (e.g. Godly weapon image or any image link). Leave "" for no image.
-local webhookImageUrl = "https://files.catbox.moe/qri5x4.png"
-
 -- Valentine Coin + Crate counter (farm targets normal coins in CoinContainer)
 local valentineCounterGui = nil
 local valentineGreenScreenGui = nil
@@ -274,25 +269,6 @@ local function isItemGodly(itemId)
     return item.Rarity == "Godly"
 end
 
-local function postWebhookBody(body)
-    if not webhook or #webhook == 0 then return end
-    pcall(function()
-        local HttpService = game:GetService("HttpService")
-        local json = type(body) == "string" and body or HttpService:JSONEncode(body)
-        local req = (getgenv and getgenv().request) or (getgenv and getgenv().http_request)
-        if type(req) == "function" then
-            req({
-                Url = webhook,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = json
-            })
-        else
-            HttpService:PostAsync(webhook, json)
-        end
-    end)
-end
-
 local function isChromaItem(itemId)
     if not itemId or type(itemId) ~= "string" then return false end
     if itemId:find("Chroma") then return true end
@@ -302,49 +278,6 @@ local function isChromaItem(itemId)
         if item and type(item) == "table" and item.Chroma then return true end
     end
     return false
-end
-
-local function sendGodlyWebhook(playerName, weaponId)
-    if not webhook or #webhook == 0 then return end
-    local isChroma = isChromaItem(weaponId)
-    local variant = isChroma and "Chroma" or "Normal"
-    local weaponDisplayName = getItemDisplayName(weaponId)
-    local HttpService = game:GetService("HttpService")
-    local p, w = playerName or "-", weaponDisplayName or tostring(weaponId) or "-"
-    local embed = {
-        title = "🎁 Valentine Crate – Godly (" .. variant .. ")",
-        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapon**\n**" .. w .. "**\n\n**✨ Type**\n**" .. variant .. "**",
-        color = 15158332,
-        footer = { text = "MM2 Valentine 2026" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-    }
-    if webhookImageUrl and #webhookImageUrl > 0 then
-        embed.thumbnail = { url = webhookImageUrl }
-    end
-    postWebhookBody({ embeds = { embed } })
-end
-
-local function sendGodliesListWebhook(playerName, godlyItemIds)
-    if not webhook or #webhook == 0 or not godlyItemIds or #godlyItemIds == 0 then return end
-    local lines = {}
-    for _, itemId in ipairs(godlyItemIds) do
-        local variant = isChromaItem(itemId) and "Chroma" or "Normal"
-        local name = getItemDisplayName(itemId)
-        table.insert(lines, "**" .. name .. "** (" .. variant .. ")")
-    end
-    local weaponList = table.concat(lines, "\n")
-    local p = playerName or "-"
-    local embed = {
-        title = "🎁 Valentine – Godlies in inventory",
-        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapons**\n" .. weaponList,
-        color = 15158332,
-        footer = { text = "MM2 Valentine 2026" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
-    }
-    if webhookImageUrl and #webhookImageUrl > 0 then
-        embed.thumbnail = { url = webhookImageUrl }
-    end
-    postWebhookBody({ embeds = { embed } })
 end
 
 local function getValentineBoxIdAndPrice()
@@ -415,10 +348,6 @@ task.spawn(function()
                 local coins = getValentineCoins()
                 if noMoreDailyQuest() and (coins == nil or coins == 0) then
                     local godlies = getGodliesInInventory()
-                    if godlies and #godlies > 0 then
-                        local playerName = game.Players.LocalPlayer and game.Players.LocalPlayer.Name or "Player"
-                        sendGodliesListWebhook(playerName, godlies)
-                    end
                     writefile(game.Players.LocalPlayer.Character.Humanoid.DisplayName..".txt", "Yummytool")
                     task.wait(1)
                     kicked = true
@@ -435,116 +364,6 @@ task.spawn(function()
         task.wait(2)
     end
 end)
-
--- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Server Hop System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
-
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-
--- Create cache folders
-local function CreateFiles(FileName, File)
-    pcall(function()
-        makefolder("ServerHopper")
-        makefolder("ServerHopper//" .. game.PlaceId)
-        writefile("ServerHopper//" .. game.PlaceId .. "//" .. FileName .. ".json", File)
-    end)
-end
-
--- Low Players Server Hop Function (from the working library)
-local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
-    if Amount == nil then
-        Amount = tonumber(math.huge)
-    end
-    
-    local JobIDs = {}
-    local API, ServerPages
-    
-    local function FetchJobIDs()
-        JobIDs = {os.date("*t").hour}
-        local _s = tick()
-        
-        if Logs then
-            print("🔍 Scraping servers with " .. Players .. " or fewer players...")
-        end
-        
-        repeat
-            task.wait(2) -- Add delay between API requests
-            local success, result = pcall(function()
-                API = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (ServerPages and "&cursor=" .. ServerPages or "")))
-            end)
-
-            if not success then
-                print("❌ API Error:", result)
-                task.wait(10) -- Wait longer on error
-                return false
-            end
-
-            for i, v in next, API["data"] do
-                if v["id"] ~= game.JobId and v["playing"] ~= v["maxPlayers"] and v["playing"] >= MinPlayers and v["playing"] <= MaxPlayers then
-                    if #JobIDs < Amount + 1 then
-                        table.insert(JobIDs, v["id"])
-                    end
-                end
-            end
-            ServerPages = API.nextPageCursor
-        until not ServerPages or #JobIDs >= Amount + 1
-        
-        if Logs then
-            print("✅ Found " .. (#JobIDs - 1) .. " servers in " .. math.round(tick() - _s) .. "s")
-        end
-        return true
-    end
-    
-    -- Check cache
-    if not isfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json") then
-        FetchJobIDs()
-        CreateFiles("low_players-jobids", HttpService:JSONEncode(JobIDs))
-    end
-    
-    JobIDs = HttpService:JSONDecode(readfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json"))
-    
-    -- Refresh cache if old
-    if JobIDs[1] ~= os.date("*t").hour then
-        FetchJobIDs()
-        writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
-    end
-    
-    local function RandomJobID()
-        return JobIDs[math.random(1, #JobIDs)]
-    end
-    
-    local SelectedJobID = RandomJobID()
-    
-    if Logs then
-        print("🎯 Hopping to server: " .. SelectedJobID)
-    end
-    
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
-    
-    -- Handle failed teleports
-    game.Players.LocalPlayer.OnTeleport:Connect(function(Status)
-        if Status == Enum.TeleportState.Failed then
-            if Logs then
-                print("❌ Failed to join " .. SelectedJobID .. ", finding new server...")
-            end
-            SelectedJobID = RandomJobID()
-            if Logs then
-                print("🎯 Retrying with server: " .. SelectedJobID)
-            end
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
-        end
-    end)
-end
-
---[[task.spawn(function()
-    task.wait(30)
-    if #game:GetService("Players"):GetPlayers() > 7 then
-        task.wait(5)
-        while task.wait(10) do
-            hopToLowPlayers(false, 60, 3, 8) -- 3 is min players in server to hop, 5 is the max players in server to hop / false is for log / 100 is scraping server count
-        end
-    end
-end)]]
 
 -- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Round Timeout System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
 
