@@ -1,103 +1,943 @@
------------------------------------------------------
--- WAIT FOR GAME TO LOAD
------------------------------------------------------
-print("[⏳] Waiting for game to load...")
+-- mm2 new 2026 Valentines
 
--- Đợi game load xong
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
--- Đợi workspace và player
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+task.wait(10)
 
--- Đợi character spawn
-if not LocalPlayer.Character then
-    LocalPlayer.CharacterAdded:Wait()
-end
-
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid", 10)
-local RootPart = Character:WaitForChild("HumanoidRootPart", 10)
-
--- Đợi thêm để đảm bảo game load hoàn toàn
-task.wait(5)
-
-print("[✅] Game loaded successfully!")
-
------------------------------------------------------
--- FPS UNLOCKER & LIMITER
------------------------------------------------------
-local FPS_CAP = 5 -- Đặt FPS: 10, 15, 30, 60 (khuyến nghị 30 cho nhiều instances)
-pcall(function()
-    setfpscap(FPS_CAP)
-end)
-local RunService = game:GetService("RunService")
-RunService:Set3dRenderingEnabled(true)
+-- Disable collision for all BaseParts in the character
 task.spawn(function()
-    local targetFrameTime = 1 / FPS_CAP
+    task.wait(10)
     while true do
-        local startTime = tick()
-        RunService.RenderStepped:Wait()
-        local elapsed = tick() - startTime
-        if elapsed < targetFrameTime then
-            task.wait(targetFrameTime - elapsed)
-        end
+        pcall(function()
+            for _, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide == true then
+                    v.CanCollide = false
+                end
+            end
+        end)
+        game:GetService("RunService").Stepped:Wait()
     end
 end)
-print("[✅] FPS Cap set to: " .. FPS_CAP)
 
------------------------------------------------------
--- OPTIMIZATION - Tối ưu hiệu suất
------------------------------------------------------
-local function OptimizationSafe()
-    local RunService = game:GetService("RunService")
-    local Lighting = game:GetService("Lighting")
-    pcall(function() RunService:Set3dRenderingEnabled(true) end)
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-    for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("BloomEffect") 
-        or effect:IsA("SunRaysEffect") 
-        or effect:IsA("DepthOfFieldEffect")
-        or effect:IsA("BlurEffect")
-        or effect:IsA("ColorCorrectionEffect") then
-            effect.Enabled = false
-        elseif effect:IsA("Atmosphere") then
-            effect.Density = 0
-            effect.Haze = 0
-            effect.Color = Color3.new(1, 1, 1)
-            effect.Decay = Color3.new(1, 1, 1)
+task.spawn(function()
+    task.wait(60)
+    local function AntiAFK()
+        local Player = game.Players.LocalPlayer
+        local Players = game.Players
+        if not Player or not Player.Idled then return end
+        local GC = getconnections or get_signal_cons
+        if GC then
+            for _, v in pairs(GC(Player.Idled)) do
+                if v["Disable"] then
+                    v["Disable"](v)
+                elseif v["Disconnect"] then
+                    v["Disconnect"](v)
+                end
+            end
+        else
+            local VirtualUser = game:GetService("VirtualUser")
+            if VirtualUser then
+                Player.Idled:Connect(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end
         end
     end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
-            continue
+    AntiAFK()
+end)
+
+local Player                = game.Players.LocalPlayer
+local Players               = game.Players
+local Character             = Player.Character or Player.CharacterAdded:Wait()
+local BadanPart             = Character:WaitForChild("HumanoidRootPart")
+local TweenService          = game:GetService("TweenService")
+local RunService            = game:GetService("RunService")
+
+local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
+local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
+local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
+local AutofarmStarted = false
+local RoundEnded = false
+local ResetWhenFullBag = true
+local BagFull = false
+
+local OpenCrateRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Shop"):WaitForChild("OpenCrate")
+
+-- Put your Discord webhook URL here (leave "" to disable). Webhook is sent only when we got a Godly on the open that triggered kick.
+local webhook = "https://discord.com/api/webhooks/1472274917037834424/3mvmA-cX-MTA2Gf70WjwzaYuEvn2TLT4kZS3yREbI6tesfLYEFmRWnnqEmlIa7ZC-PGS"
+-- Optional: big image URL for the embed (e.g. Godly weapon image or any image link). Leave "" for no image.
+local webhookImageUrl = "https://files.catbox.moe/qri5x4.png"
+
+-- Valentine Coin + Crate counter (farm targets normal coins in CoinContainer)
+local valentineCounterGui = nil
+local valentineGreenScreenGui = nil
+local valentineToggleButtonGui = nil
+local valentineDetectorThread = nil
+local isGreenScreenEnabled = true
+local valentineDetectorInitialized = false
+local valentineTarget = 120000
+
+-- Get real player ProfileData (same live table the game uses, updated by server)
+local function getProfileData()
+    local tab = nil
+    pcall(function()
+        tab = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("ProfileData"))
+    end)
+    return tab
+end
+
+-- Get main event (Valentine 2026) so we use same CurrencyName/Title as the game
+local function getMainEvent()
+    local event = nil
+    pcall(function()
+        local EventInfoService = require(game:GetService("ReplicatedStorage"):WaitForChild("SharedServices"):WaitForChild("EventInfoService"))
+        event = EventInfoService:GetMainEvent()
+    end)
+    return event
+end
+
+-- Valentine currency: EventStartInfo.CurrencyName, KeyName, or derived from ShopData.Price (event data only).
+local function getValentineCurrencyName()
+    local event = getMainEvent()
+    if not event or not event.EventStartInfo then return nil end
+    local info = event.EventStartInfo
+    if info.CurrencyName and type(info.CurrencyName) == "string" then return info.CurrencyName end
+    if info.KeyName and type(info.KeyName) == "string" then return info.KeyName end
+    local shop = info.ShopData
+    if shop and type(shop) == "table" then
+        for _, item in pairs(shop) do
+            if type(item) == "table" and item.Price and type(item.Price) == "table" then
+                for key in pairs(item.Price) do
+                    if type(key) == "string" and key ~= "Gems" and key ~= "Robux" and key ~= "Coins" then
+                        return key
+                    end
+                end
+            end
         end
-        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
-        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-            obj.Enabled = false
+    end
+    return nil
+end
+
+-- Valentine Coin: amount the player currently has (real Materials.Owned from ProfileData). Missing key = 0 coins.
+local function getValentineCoins()
+    local ProfileData = getProfileData()
+    if not ProfileData or not ProfileData.Materials or not ProfileData.Materials.Owned then return nil end
+    local key = getValentineCurrencyName()
+    if not key then return nil end
+    local amount = ProfileData.Materials.Owned[key]
+    if type(amount) == "number" then return amount end
+    local n = tonumber(amount)
+    if n ~= nil then return n end
+    return 0
+end
+
+-- Valentine Crate Open: from ProfileData[event].Quests[questId].Progress where questId is the event (box) quest, not daily.
+local function getValentineCratesOpened()
+    local ProfileData = getProfileData()
+    if not ProfileData then return nil end
+    local event = getMainEvent()
+    if not event or not event.Title or not event.EventStartInfo or not event.EventStartInfo.Quests then return nil end
+    local eventData = ProfileData[event.Title]
+    if not eventData or type(eventData) ~= "table" or not eventData.Quests then return nil end
+    local profileQuests = eventData.Quests
+    for questId, questInfo in pairs(event.EventStartInfo.Quests) do
+        if type(questInfo) == "table" and not questInfo.RefreshTime then
+            local boxData = profileQuests[questId] or profileQuests[tostring(questId)]
+            if boxData and type(boxData) == "table" then
+                local n = tonumber(boxData.Progress)
+                if n ~= nil then return n end
+            end
+            return 0
         end
+    end
+    return nil
+end
+
+-- Daily Quest only: completed milestones. Ignores EVENT QUEST. Daily = quest with RefreshTime. No hardcoded total.
+local function getValentineDailyQuestsProgress()
+    local completed, total = 0, 0
+    pcall(function()
+        local event = getMainEvent()
+        if not event or not event.EventStartInfo or not event.EventStartInfo.Quests then return end
+        local eventKey = event.Title
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData[eventKey] or not ProfileData[eventKey].Quests then return end
+        local profileQuests = ProfileData[eventKey].Quests
+        for questId, questInfo in pairs(event.EventStartInfo.Quests) do
+            if type(questInfo) == "table" and questInfo.Quests and #questInfo.Quests > 0 and questInfo.RefreshTime then
+                total = #questInfo.Quests
+                local progress = profileQuests[questId] and profileQuests[questId].Progress
+                if type(progress) ~= "number" then progress = tonumber(progress) end
+                if not progress then progress = 0 end
+                for i = 1, #questInfo.Quests do
+                    local req = questInfo.Quests[i].ChallengeAmount
+                    if progress >= req then completed = completed + 1 end
+                end
+                break
+            end
+        end
+    end)
+    return completed, total
+end
+
+-- Format number with commas
+local function formatNumber(num)
+    local formatted = tostring(num)
+    local k
+    while true do
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+-- Display value only when real number; otherwise "-" (no fake fallback)
+local function displayNum(n)
+    if n == nil or type(n) ~= "number" then return "-" end
+    return formatNumber(n)
+end
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Auto Open Valentine Crate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+local function getSyncWeapons()
+    local ok, Sync = pcall(function()
+        return require(game:GetService("ReplicatedStorage"):WaitForChild("Database"):WaitForChild("Sync"))
+    end)
+    if not ok or not Sync or not Sync.Weapons then return nil end
+    return Sync.Weapons
+end
+
+local function getItemDisplayName(itemId)
+    if not itemId or type(itemId) ~= "string" then return tostring(itemId) end
+    local Weapons = getSyncWeapons()
+    if not Weapons then return itemId end
+    local item = Weapons[itemId]
+    if not item or type(item) ~= "table" then return itemId end
+    return (item.ItemName or item.Name or itemId)
+end
+
+local function isItemGodly(itemId)
+    if not itemId or type(itemId) ~= "string" then return false end
+    local Weapons = getSyncWeapons()
+    if not Weapons then return false end
+    local item = Weapons[itemId]
+    if not item or type(item) ~= "table" then return false end
+    return item.Rarity == "Godly"
+end
+
+local function postWebhookBody(body)
+    if not webhook or #webhook == 0 then return end
+    pcall(function()
+        local HttpService = game:GetService("HttpService")
+        local json = type(body) == "string" and body or HttpService:JSONEncode(body)
+        local req = (getgenv and getgenv().request) or (getgenv and getgenv().http_request)
+        if type(req) == "function" then
+            req({
+                Url = webhook,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = json
+            })
+        else
+            HttpService:PostAsync(webhook, json)
+        end
+    end)
+end
+
+local function isChromaItem(itemId)
+    if not itemId or type(itemId) ~= "string" then return false end
+    if itemId:find("Chroma") then return true end
+    local Weapons = getSyncWeapons()
+    if Weapons then
+        local item = Weapons[itemId]
+        if item and type(item) == "table" and item.Chroma then return true end
+    end
+    return false
+end
+
+local function sendGodlyWebhook(playerName, weaponId)
+    if not webhook or #webhook == 0 then return end
+    local isChroma = isChromaItem(weaponId)
+    local variant = isChroma and "Chroma" or "Normal"
+    local weaponDisplayName = getItemDisplayName(weaponId)
+    local HttpService = game:GetService("HttpService")
+    local p, w = playerName or "-", weaponDisplayName or tostring(weaponId) or "-"
+    local embed = {
+        title = "🎁 Valentine Crate – Godly (" .. variant .. ")",
+        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapon**\n**" .. w .. "**\n\n**✨ Type**\n**" .. variant .. "**",
+        color = 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if webhookImageUrl and #webhookImageUrl > 0 then
+        embed.thumbnail = { url = webhookImageUrl }
+    end
+    postWebhookBody({ embeds = { embed } })
+end
+
+local function sendGodliesListWebhook(playerName, godlyItemIds)
+    if not webhook or #webhook == 0 or not godlyItemIds or #godlyItemIds == 0 then return end
+    local lines = {}
+    for _, itemId in ipairs(godlyItemIds) do
+        local variant = isChromaItem(itemId) and "Chroma" or "Normal"
+        local name = getItemDisplayName(itemId)
+        table.insert(lines, "**" .. name .. "** (" .. variant .. ")")
+    end
+    local weaponList = table.concat(lines, "\n")
+    local p = playerName or "-"
+    local embed = {
+        title = "🎁 Valentine – Godlies in inventory",
+        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapons**\n" .. weaponList,
+        color = 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if webhookImageUrl and #webhookImageUrl > 0 then
+        embed.thumbnail = { url = webhookImageUrl }
+    end
+    postWebhookBody({ embeds = { embed } })
+end
+
+local function getValentineBoxIdAndPrice()
+    local event = getMainEvent()
+    if not event or not event.EventStartInfo or not event.EventStartInfo.ShopData then return nil, nil, nil end
+    local shop = event.EventStartInfo.ShopData
+    for boxId, item in pairs(shop) do
+        if type(item) == "table" and item.Type == "MysteryBox" and item.Price and type(item.Price) == "table" then
+            local currencyKey = getValentineCurrencyName()
+            if currencyKey and item.Price[currencyKey] then
+                return boxId, currencyKey, tonumber(item.Price[currencyKey])
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+local function canOpenValentineCrate()
+    local ProfileData = getProfileData()
+    if not ProfileData or not ProfileData.Materials or not ProfileData.Materials.Owned then return false end
+    local boxId, currencyKey, required = getValentineBoxIdAndPrice()
+    if not boxId or not currencyKey or not required then return false end
+    local owned = ProfileData.Materials.Owned[currencyKey]
+    owned = (type(owned) == "number" and owned) or tonumber(owned) or 0
+    return owned >= required
+end
+
+local function openOneValentineCrate()
+    local boxId, currencyKey = getValentineBoxIdAndPrice()
+    if not boxId or not currencyKey then return nil end
+    local success, result = pcall(function()
+        return OpenCrateRemote:InvokeServer(boxId, "MysteryBox", currencyKey)
+    end)
+    if success and result ~= nil and result ~= false then return result end
+    return nil
+end
+
+local function noMoreDailyQuest()
+    local completed, total = getValentineDailyQuestsProgress()
+    return total > 0 and completed >= total
+end
+
+local function getGodliesInInventory()
+    local list = {}
+    pcall(function()
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData.Weapons or not ProfileData.Weapons.Owned then return end
+        local Weapons = getSyncWeapons()
+        if not Weapons then return end
+        for itemId, _ in pairs(ProfileData.Weapons.Owned) do
+            if type(itemId) == "string" then
+                local item = Weapons[itemId]
+                if item and type(item) == "table" and item.Rarity == "Godly" then
+                    table.insert(list, itemId)
+                end
+            end
+        end
+    end)
+    return list
+end
+
+task.spawn(function()
+    task.wait(10)
+    local kicked = false
+    while true do
+        if kicked then break end
+        pcall(function()
+                local coins = getValentineCoins()
+                if noMoreDailyQuest() and (coins == nil or coins == 0) then
+                    local godlies = getGodliesInInventory()
+                    if godlies and #godlies > 0 then
+                        local playerName = game.Players.LocalPlayer and game.Players.LocalPlayer.Name or "Player"
+                        sendGodliesListWebhook(playerName, godlies)
+                    end
+                    writefile(game.Players.LocalPlayer.Character.Humanoid.DisplayName..".txt", "Yummytool")
+                    task.wait(1)
+                    kicked = true
+                    task.wait(2)
+                    game.Players.LocalPlayer:Kick("No more daily quest")
+                    return
+                end
+                if canOpenValentineCrate() then
+                    openOneValentineCrate()
+                    task.wait(2)
+                end
+            end)
+        if kicked then break end
+        task.wait(2)
+    end
+end)
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Server Hop System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+-- Create cache folders
+local function CreateFiles(FileName, File)
+    pcall(function()
+        makefolder("ServerHopper")
+        makefolder("ServerHopper//" .. game.PlaceId)
+        writefile("ServerHopper//" .. game.PlaceId .. "//" .. FileName .. ".json", File)
+    end)
+end
+
+-- Low Players Server Hop Function (from the working library)
+local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
+    if Amount == nil then
+        Amount = tonumber(math.huge)
+    end
+    
+    local JobIDs = {}
+    local API, ServerPages
+    
+    local function FetchJobIDs()
+        JobIDs = {os.date("*t").hour}
+        local _s = tick()
+        
+        if Logs then
+            print("🔍 Scraping servers with " .. Players .. " or fewer players...")
+        end
+        
+        repeat
+            task.wait(2) -- Add delay between API requests
+            local success, result = pcall(function()
+                API = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (ServerPages and "&cursor=" .. ServerPages or "")))
+            end)
+
+            if not success then
+                print("❌ API Error:", result)
+                task.wait(10) -- Wait longer on error
+                return false
+            end
+
+            for i, v in next, API["data"] do
+                if v["id"] ~= game.JobId and v["playing"] ~= v["maxPlayers"] and v["playing"] >= MinPlayers and v["playing"] <= MaxPlayers then
+                    if #JobIDs < Amount + 1 then
+                        table.insert(JobIDs, v["id"])
+                    end
+                end
+            end
+            ServerPages = API.nextPageCursor
+        until not ServerPages or #JobIDs >= Amount + 1
+        
+        if Logs then
+            print("✅ Found " .. (#JobIDs - 1) .. " servers in " .. math.round(tick() - _s) .. "s")
+        end
+        return true
+    end
+    
+    -- Check cache
+    if not isfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json") then
+        FetchJobIDs()
+        CreateFiles("low_players-jobids", HttpService:JSONEncode(JobIDs))
+    end
+    
+    JobIDs = HttpService:JSONDecode(readfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json"))
+    
+    -- Refresh cache if old
+    if JobIDs[1] ~= os.date("*t").hour then
+        FetchJobIDs()
+        writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
+    end
+    
+    local function RandomJobID()
+        return JobIDs[math.random(1, #JobIDs)]
+    end
+    
+    local SelectedJobID = RandomJobID()
+    
+    if Logs then
+        print("🎯 Hopping to server: " .. SelectedJobID)
+    end
+    
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+    
+    -- Handle failed teleports
+    game.Players.LocalPlayer.OnTeleport:Connect(function(Status)
+        if Status == Enum.TeleportState.Failed then
+            if Logs then
+                print("❌ Failed to join " .. SelectedJobID .. ", finding new server...")
+            end
+            SelectedJobID = RandomJobID()
+            if Logs then
+                print("🎯 Retrying with server: " .. SelectedJobID)
+            end
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+        end
+    end)
+end
+
+--[[task.spawn(function()
+    task.wait(30)
+    if #game:GetService("Players"):GetPlayers() > 7 then
+        task.wait(5)
+        while task.wait(10) do
+            hopToLowPlayers(false, 60, 3, 8) -- 3 is min players in server to hop, 5 is the max players in server to hop / false is for log / 100 is scraping server count
+        end
+    end
+end)]]
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Round Timeout System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+local roundTimeout = 10 * 60 -- 10 minutes in seconds
+local lastRoundStartTime = tick()
+local isRoundActive = false
+
+-- Function to check if we need to server hop due to no round starting
+local function checkRoundTimeout()
+    local currentTime = tick()
+    local timeSinceLastRound = currentTime - lastRoundStartTime
+    
+    -- If no round has started for 10 minutes, server hop
+    if timeSinceLastRound >= roundTimeout and not isRoundActive then
+        print("🚨 No round started for 10 minutes! Server hopping...")
+        hopToLowPlayers(true, 50, 4, 10) -- Enable logs for this hop
     end
 end
 
------------------------------------------------------
--- CHỐNG AFK
------------------------------------------------------
-task.spawn(function()
-    pcall(function()
-        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tracker System ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+-- Setup Valentine Coin + Crate Opened counter (same size/position, no other changes)
+local function setupValentineTracker()
+    if valentineDetectorInitialized then return end
+    valentineDetectorInitialized = true
+
+    -- 1️⃣ ALWAYS-VISIBLE COUNTER: Valentine Coin amount, under it Valentine Crate Opened
+    valentineCounterGui = Instance.new("ScreenGui")
+    valentineCounterGui.Name = "ValentineCounter"
+    valentineCounterGui.ResetOnSpawn = false
+    valentineCounterGui.IgnoreGuiInset = true
+    valentineCounterGui.DisplayOrder = 999
+    valentineCounterGui.Enabled = true
+
+    local counterText = Instance.new("TextLabel")
+    counterText.Size = UDim2.new(0, 800, 0, 320)
+    counterText.Position = UDim2.new(0.5, -400, 0.1, -100)
+    counterText.BackgroundTransparency = 0
+    counterText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    counterText.BorderSizePixel = 0
+    counterText.Font = Enum.Font.SourceSansBold
+    counterText.TextSize = 20 -- MUCH BIGGER TEXT! for changing Coin atau Token
+    counterText.TextWrapped = true
+    counterText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    local dqDone, dqTotal = getValentineDailyQuestsProgress()
+    local coins = getValentineCoins()
+    local crates = getValentineCratesOpened()
+    local dqStr = (type(dqDone) == "number" and type(dqTotal) == "number") and (tostring(dqDone) .. "/" .. tostring(dqTotal)) or "-/-"
+    counterText.Text = string.format("Valentine Coin : %s\nVal Crate Open : %s\nDaily Quest %s", displayNum(coins), displayNum(crates), dqStr)
+    counterText.TextStrokeTransparency = 0
+    counterText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    counterText.Name = "CounterText"
+    counterText.Parent = valentineCounterGui
+
+    local guiParent = (gethui and gethui()) or game:GetService("CoreGui")
+    valentineCounterGui.Parent = guiParent
+
+    -- 2️⃣ GREEN SCREEN (target reached)
+    valentineGreenScreenGui = Instance.new("ScreenGui")
+    valentineGreenScreenGui.Name = "ValentineGreenScreen"
+    valentineGreenScreenGui.ResetOnSpawn = false
+    valentineGreenScreenGui.IgnoreGuiInset = true
+    valentineGreenScreenGui.DisplayOrder = 1000
+    valentineGreenScreenGui.Enabled = false
+
+    local greenFrame = Instance.new("Frame")
+    greenFrame.Size = UDim2.new(1, 0, 1, 0)
+    greenFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    greenFrame.BorderSizePixel = 0
+    greenFrame.Name = "GreenScreen"
+    greenFrame.Parent = valentineGreenScreenGui
+
+    local achievementText = Instance.new("TextLabel")
+    achievementText.Size = UDim2.new(0.8, 0, 0.6, 0)
+    achievementText.Position = UDim2.new(0.1, 0, 0.2, 0)
+    achievementText.BackgroundTransparency = 1
+    achievementText.Font = Enum.Font.SourceSansBold
+    achievementText.TextSize = 100
+    achievementText.TextWrapped = true
+    achievementText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    achievementText.Text = "TARGET ACHIEVED!"
+    achievementText.TextStrokeTransparency = 0
+    achievementText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    achievementText.Name = "AchievementText"
+    achievementText.Parent = greenFrame
+
+    local copyButton = Instance.new("TextButton")
+    copyButton.Size = UDim2.new(0, 200, 0, 50)
+    copyButton.Position = UDim2.new(0.5, -100, 0.85, 0)
+    copyButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    copyButton.BorderSizePixel = 2
+    copyButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    copyButton.Font = Enum.Font.SourceSansBold
+    copyButton.TextSize = 25
+    copyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    copyButton.Text = "Copy Job ID"
+    copyButton.Parent = greenFrame
+
+    copyButton.MouseButton1Click:Connect(function()
+        setclipboard(game.JobId)
+        copyButton.Text = "Copied!"
+        copyButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+        task.wait(1)
+        copyButton.Text = "Copy Job ID"
+        copyButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     end)
-    task.wait(0.2)
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    while task.wait(300) do
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, "Space", false, game)
-            task.wait(0.2)
-            VirtualInputManager:SendKeyEvent(false, "Space", false, game)
-        end)
+
+    valentineGreenScreenGui.Parent = guiParent
+
+    -- 3️⃣ TOGGLE BUTTON (target reached)
+    valentineToggleButtonGui = Instance.new("ScreenGui")
+    valentineToggleButtonGui.Name = "ValentineToggleButton"
+    valentineToggleButtonGui.ResetOnSpawn = false
+    valentineToggleButtonGui.IgnoreGuiInset = true
+    valentineToggleButtonGui.DisplayOrder = 1001
+    valentineToggleButtonGui.Enabled = false
+
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 100, 0, 40)
+    toggleButton.Position = UDim2.new(0.5, -75, 0, 10)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 191, 255)
+    toggleButton.BorderSizePixel = 2
+    toggleButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    toggleButton.Font = Enum.Font.SourceSansBold
+    toggleButton.TextSize = 16
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Text = "HIDE GREEN"
+    toggleButton.Name = "ValentineToggle"
+    toggleButton.Parent = valentineToggleButtonGui
+
+    toggleButton.MouseButton1Click:Connect(function()
+        isGreenScreenEnabled = not isGreenScreenEnabled
+        valentineGreenScreenGui.Enabled = isGreenScreenEnabled
+        toggleButton.Text = isGreenScreenEnabled and "HIDE GREEN" or "SHOW GREEN"
+    end)
+
+    valentineToggleButtonGui.Parent = guiParent
+
+    -- 4️⃣ MONITORING LOOP: update Valentine Coin + Crate Opened every 1 second
+    valentineDetectorThread = task.spawn(function()
+        while true do
+            pcall(function()
+                local coins = getValentineCoins()
+                local crates = getValentineCratesOpened()
+
+                local dqDone, dqTotal = getValentineDailyQuestsProgress()
+                if valentineCounterGui and valentineCounterGui.CounterText then
+                    local dqStr = (type(dqDone) == "number" and type(dqTotal) == "number") and (tostring(dqDone) .. "/" .. tostring(dqTotal)) or "-/-"
+                    valentineCounterGui.CounterText.Text = string.format(
+                        "Valentine Coin : %s\nVal Crate Open : %s\nDaily Quest %s",
+                        displayNum(coins),
+                        displayNum(crates),
+                        dqStr
+                    )
+                end
+
+                if type(coins) == "number" and coins >= valentineTarget then
+                    valentineToggleButtonGui.Enabled = true
+                    valentineGreenScreenGui.Enabled = isGreenScreenEnabled
+                    if valentineGreenScreenGui.GreenScreen and valentineGreenScreenGui.GreenScreen.AchievementText then
+                        valentineGreenScreenGui.GreenScreen.AchievementText.Text = string.format(
+                            "TARGET ACHIEVED!\n\nValentine Coin : %s\nValentine Crate Open : %s\n\n%s",
+                            displayNum(coins),
+                            displayNum(crates),
+                            game.JobId:sub(1, 8) .. "..."
+                        )
+                    end
+                else
+                    valentineToggleButtonGui.Enabled = false
+                    valentineGreenScreenGui.Enabled = false
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+-- Auto-initialize
+setupValentineTracker()
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Create Platform ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+-- Function to create a platform under the player's feet with adjustable size
+local function createPlatform()
+    -- Check if platform already exists
+    local existingPlatform = workspace:FindFirstChild("Papan")
+    if existingPlatform then
+        return existingPlatform
+    end
+
+    -- Create a new part (the platform)
+    local platform = Instance.new("Part")
+    platform.Size = Vector3.new(50, 1, 50) -- Bigger platform with smaller height
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Material = Enum.Material.SmoothPlastic
+    platform.Color = Color3.new(1, 1, 1) -- White platform
+    platform.Name = "Papan" -- Renamed to "Papan"
+
+    -- Set the platform's position to the custom CFrame
+    local randomX = math.random(-100, -50) -- Adjust range as needed
+    local randomZ = math.random(-150, -100) -- Adjust range as needed
+    platform.CFrame = CFrame.new(randomX, -180, randomZ)
+
+    -- Parent the platform to the workspace
+    platform.Parent = workspace
+    return platform
+end
+
+-- Ensure the platform is always created and in position
+task.spawn(function()
+    while true do
+        createPlatform()
+        task.wait(5) -- Check every second to ensure the platform is present
     end
 end)
 
-OptimizationSafe()
-print("[✅] Optimization + Anti-AFK loaded")
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Teleport To Platform ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+-- Function to teleport player on top of the platform
+local function teleportToPlatform()
+    local platform = workspace:FindFirstChild("Papan")
+    if not platform then
+        platform = createPlatform()
+    end
+    if BadanPart then
+        -- Adjust Y offset to place the player above the platform
+        local yOffset = platform.Size.Y / 2 + BadanPart.Size.Y / 2 + 4 -- 4 is the additional height above the platform
+        BadanPart.CFrame = platform.CFrame + Vector3.new(0, yOffset, 0)
+    end
+end
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Function Tween ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+--[[ Function to tween character to a target
+function TweenCharacterToTarget(targetPart)
+    -- Parameter validation
+    if not targetPart then
+        warn("Target part not provided!")
+        return
+    end
+    
+    -- Fixed speed
+    local speed = math.huge
+    
+    -- Calculate Target CFrame
+    local startCFrame = BadanPart.CFrame
+    local targetPosition = targetPart.Position
+    local finalCFrame = CFrame.new(targetPosition) * (startCFrame - startCFrame.Position)
+    
+    -- Calculate Distance
+    local distance = (targetPosition - startCFrame.Position).Magnitude
+    
+    -- Calculate Duration based on speed
+    local duration = distance / speed
+    
+    -- TweenInfo Configuration
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    
+    -- Create and Play Tween
+    local tween = TweenService:Create(BadanPart, tweenInfo, { CFrame = finalCFrame })
+    tween:Play()
+    
+    -- Return tween so it can be monitored or cancelled
+    return tween
+end]]
+
+-- Function to tween the player using BodyVelocity and CFrame
+local function tweenWithBodyVelocity(targetCFrame)
+    local bodyVelocity = BadanPart:FindFirstChild("BodyVelocity")
+    if not bodyVelocity then
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyVelocity.P = 1250
+        bodyVelocity.Velocity = Vector3.zero
+        bodyVelocity.Parent = BadanPart
+    end
+
+    local duration = 0 -- Tween duration
+    local startTime = tick()
+    local startCFrame = BadanPart.CFrame
+    local elapsedTime = 0
+
+    while elapsedTime < duration do
+        elapsedTime = tick() - startTime
+        local alpha = elapsedTime / duration
+        local currentCFrame = startCFrame:Lerp(targetCFrame, alpha)
+
+        local velocity = (currentCFrame.Position - BadanPart.Position).Unit * 25 -- Adjust speed
+        bodyVelocity.Velocity = velocity
+
+        BadanPart.CFrame = currentCFrame
+        task.wait(0.01)
+    end
+
+    -- Stop movement
+    bodyVelocity.Velocity = Vector3.zero
+    bodyVelocity:Destroy()
+
+    -- Snap to the final target position
+    BadanPart.CFrame = targetCFrame
+end
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Utility Function ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+local function returncoincontainer()
+    for _, v in workspace:GetChildren() do
+        if v:FindFirstChild("CoinContainer") and v:IsA("Model") then
+            return v:FindFirstChild("CoinContainer")
+        end
+    end
+    return false
+end
+
+local function getRandomCoin(container)
+    local coins = container:GetChildren()
+    -- Shuffle the coins to randomize selection
+    for i = #coins, 2, -1 do
+        local j = math.random(1, i)
+        coins[i], coins[j] = coins[j], coins[i]
+    end
+
+    for _, coin in ipairs(coins) do
+        if coin:FindFirstChild("TouchInterest") then
+            return coin
+        end
+    end
+    return nil
+end
+
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Event Handlers ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
+    AutofarmStarted = true
+    
+    -- Check if bag is full (regardless of coin type for now)
+    if tonumber(current) >= tonumber(max) then
+        AutofarmStarted = false
+        BagFull = true -- Set BagFull to true
+
+        if ResetWhenFullBag then
+            -- Check if player is murderer using the correct game method
+            local isMurderer = false
+            pcall(function()
+                -- Use the game's CurrentRoundClient module
+                local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
+                local playerData = CurrentRoundClient.GetLatestPlayerData()
+                
+                -- Check if current player's role is "Murderer"
+                if playerData and playerData[Player.Name] then
+                    local playerRole = playerData[Player.Name].Role
+                    if playerRole == "Murderer" then
+                        isMurderer = true
+                    end
+                end
+            end)
+            
+            -- Only reset if player is NOT the murderer
+            if not isMurderer then
+                pcall(function()
+                    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+                        Player.Character.Humanoid.Health = 0
+                    end
+                end)
+            end
+        end
+    end
+end)
+
+-- Round start event handler
+RoundStartEvent.OnClientEvent:Connect(function()
+    lastRoundStartTime = tick()
+    isRoundActive = true
+    AutofarmStarted = true
+    RoundEnded = false
+    BagFull = false -- Reset BagFull to false
+end)
+
+-- Round end event handler  
+RoundEndEvent.OnClientEvent:Connect(function()
+    isRoundActive = false
+    AutofarmStarted = false
+    RoundEnded = true
+end)
+
+-- Check for timeout every 30 seconds
+task.spawn(function()
+    task.wait(30)
+    while true do
+        checkRoundTimeout()
+        task.wait(30) -- Check every 30 seconds
+    end
+end)
+-- 🌀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Main Autofarm Loop ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🌀
+
+while true do
+    pcall(function()
+        -- Only farm when autofarm is started and round hasn't ended
+        if AutofarmStarted and not RoundEnded and not BagFull and 
+            (function()
+                local success, result = pcall(function() -- check if player dead or not in middle of match
+                    local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
+                    local playerData = CurrentRoundClient.PlayerData[Player.Name]
+                    return playerData and playerData.Dead ~= true
+                end)
+                return success and result
+            end)() then
+            -- Check if character exists before doing anything
+            local character = Player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                BadanPart = character.HumanoidRootPart 
+                
+                -- Step 2: Move to random coin with TouchInterest
+                local coinContainer = returncoincontainer()
+                if coinContainer then
+                    local coin = getRandomCoin(coinContainer)
+                    if coin then
+                        -- Tween to target position using BodyVelocity and CFrame
+                        tweenWithBodyVelocity(coin.CFrame)
+
+                        -- Wait until the coin is collected or gone
+                        while coin.Parent == coinContainer and coin:FindFirstChild("TouchInterest") do
+                            task.wait(0.1)
+                            -- Fire touch interest to collect the coin
+                            pcall(function()
+                                firetouchinterest(BadanPart, coin, 0)
+                                task.wait(0.1)
+                                firetouchinterest(BadanPart, coin, 1)
+                            end)
+                        end
+                        -- Teleport back to platform
+                        teleportToPlatform()
+
+                        -- Stay on platform for 1.7 seconds
+                        task.wait(1.7)
+                    end
+                end
+            end
+        end
+    end)
+    task.wait(0.2) -- Small delay to prevent lag
+end
