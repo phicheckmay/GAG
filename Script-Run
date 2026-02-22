@@ -924,9 +924,9 @@ while true do
                             task.wait(0.1)
                             -- Fire touch interest to collect the coin
                             pcall(function()
-                                firetouchinterest(BadanPart, coin, 0)
+                                --firetouchinterest(BadanPart, coin, 0)
                                 task.wait(0.1)
-                                firetouchinterest(BadanPart, coin, 1)
+                                --firetouchinterest(BadanPart, coin, 1)
                             end)
                         end
                         -- Teleport back to platform
