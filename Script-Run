@@ -671,13 +671,99 @@ TargetLabel.Font = Enum.Font.GothamSemibold
 TargetLabel.TextScaled = true
 createNeon(TargetLabel, Color3.fromRGB(255, 150, 50))
 
--- Toggle UI with H key
+-- Toggle UI Button (dùng cho LDPlayer / mobile) + phím H cho PC
 local UIS = game:GetService("UserInputService")
 local uiVisible = true
+
+-- Tạo nút toggle riêng biệt (nằm ngoài bg, luôn hiện)
+local ToggleBtnGui = Instance.new("ScreenGui", game.CoreGui)
+ToggleBtnGui.Name = "KenPhysicalToggle"
+ToggleBtnGui.IgnoreGuiInset = true
+ToggleBtnGui.ResetOnSpawn = false
+ToggleBtnGui.DisplayOrder = 9999
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(0, 10, 0.5, -22)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+ToggleBtn.BackgroundTransparency = 0.2
+ToggleBtn.Text = "💕"
+ToggleBtn.TextSize = 22
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = ToggleBtnGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = Color3.fromRGB(255, 150, 200)
+ToggleStroke.Parent = ToggleBtn
+
+-- Cho phép kéo nút toggle đến vị trí khác trên màn hình
+local dragging, dragInput, dragStart, startPos
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ToggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        ToggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Click toggle
+local lastClickTime = 0
+ToggleBtn.MouseButton1Click:Connect(function()
+    -- Chỉ toggle nếu không phải đang kéo (kéo > 5px thì bỏ qua)
+    local now = tick()
+    if now - lastClickTime < 0.3 then return end
+    lastClickTime = now
+    
+    uiVisible = not uiVisible
+    bg.Visible = uiVisible
+    
+    if uiVisible then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+        ToggleBtn.Text = "💕"
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        ToggleBtn.Text = "👁"
+    end
+end)
+
+-- Vẫn giữ phím H cho PC
 UIS.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.H then
         uiVisible = not uiVisible
         bg.Visible = uiVisible
+        
+        if uiVisible then
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+            ToggleBtn.Text = "💕"
+        else
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            ToggleBtn.Text = "👁"
+        end
     end
 end)
 
