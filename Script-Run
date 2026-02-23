@@ -62,14 +62,24 @@ end
 -- Auto Kick (Decode)
 local AUTOKICK_ENABLED = false
 local AUTOKICK_CONDITION = "DailyQuest"
-local AUTOKICK_FROM_FOLDER = "a3ae89635476a513d771e2576f7e1c9680e4ba728032adfd40f486a54ed229ef"
-local AUTOKICK_TO_FOLDER = "8f98f45f2ae2cf7c416392dbbaec26c02675acd5f08660827ca4828bb7d22ac1"
+local AUTOKICK_FROM_FOLDER = ""
+local AUTOKICK_TO_FOLDER = ""
 if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_ENABLED = Config.AutoKick.Enabled == true
     AUTOKICK_CONDITION = Config.AutoKick.Condition or "DailyQuest"
-    AUTOKICK_FROM_FOLDER = Config.AutoKick.FromFolder or AUTOKICK_FROM_FOLDER
-    AUTOKICK_TO_FOLDER = Config.AutoKick.ToFolder or AUTOKICK_TO_FOLDER
 end
+
+-- Đọc folder ID từ ChangeAccConfig
+pcall(function()
+    local acc = getgenv().ChangeAccConfig
+    if acc and acc["Change Mode"] and acc["Change Mode"]["Decode"] and acc["Change Mode"]["Decode"]["Folder"] then
+        local folder = acc["Change Mode"]["Decode"]["Folder"]["Done Quest"]
+        if folder then
+            AUTOKICK_FROM_FOLDER = folder["Folder 1"] or ""
+            AUTOKICK_TO_FOLDER = folder["Folder 2"] or ""
+        end
+    end
+end)
 
 print("💕 Config loaded!")
 print("  AutoFarm: " .. tostring(AUTO_FARM))
