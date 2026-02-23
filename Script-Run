@@ -69,6 +69,9 @@ if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_CONDITION = Config.AutoKick.Condition or "DailyQuest"
 end
 
+-- Batch Open Threshold
+local BATCH_OPEN_THRESHOLD = Config.BatchOpenThreshold or 0
+
 -- Đọc folder ID từ ChangeAccConfig
 pcall(function()
     local acc = getgenv().ChangeAccConfig
@@ -904,26 +907,59 @@ local function openOneValentineCrate()
     return nil
 end
 
--- Auto Open Crate Loop (with webhook by rarity)
+-- Auto Open Crate Loop (with webhook by rarity + batch threshold support)
 task.spawn(function()
     task.wait(10)
     while true do
         pcall(function()
-            if canOpenValentineCrate() then
-                StatusLabel.Text = "⚡ Status: Đang mở crate..."
-                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-                local result = openOneValentineCrate()
-                -- Gửi webhook nếu mở được item đúng rarity
-                if result and type(result) == "string" then
-                    sendItemWebhook(Player.Name, result)
-                elseif result and type(result) == "table" then
-                    for _, itemId in pairs(result) do
-                        if type(itemId) == "string" then
-                            sendItemWebhook(Player.Name, itemId)
+            -- Kiểm tra ngưỡng tim trước khi mở
+            local readyToOpen = false
+            if BATCH_OPEN_THRESHOLD > 0 then
+                -- Chế độ batch: đợi đủ ngưỡng mới mở
+                local boxId, currencyKey, price = getValentineBoxIdAndPrice()
+                if boxId and currencyKey then
+                    local ProfileData = getProfileData()
+                    if ProfileData and ProfileData.Materials and ProfileData.Materials.Owned then
+                        local owned = ProfileData.Materials.Owned[currencyKey]
+                        owned = (type(owned) == "number" and owned) or tonumber(owned) or 0
+                        if owned >= BATCH_OPEN_THRESHOLD then
+                            readyToOpen = true
+                            StatusLabel.Text = "⚡ Status: Đủ " .. BATCH_OPEN_THRESHOLD .. " tim - Đang mở crate..."
+                        else
+                            StatusLabel.Text = "⚡ Status: Đang tích tim... (" .. owned .. "/" .. BATCH_OPEN_THRESHOLD .. ")"
+                            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
                         end
                     end
                 end
-                task.wait(OPEN_CRATE_DELAY)
+            else
+                -- Chế độ thường: mở ngay khi đủ 1 hộp
+                readyToOpen = canOpenValentineCrate()
+                if readyToOpen then
+                    StatusLabel.Text = "⚡ Status: Đang mở crate..."
+                end
+            end
+
+            if readyToOpen then
+                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                -- Mở liên tục cho đến khi hết tim
+                while canOpenValentineCrate() do
+                    local result = openOneValentineCrate()
+                    -- Gửi webhook nếu mở được item đúng rarity
+                    if result and type(result) == "string" then
+                        sendItemWebhook(Player.Name, result)
+                    elseif result and type(result) == "table" then
+                        for _, itemId in pairs(result) do
+                            if type(itemId) == "string" then
+                                sendItemWebhook(Player.Name, itemId)
+                            end
+                        end
+                    end
+                    task.wait(OPEN_CRATE_DELAY)
+                end
+                if BATCH_OPEN_THRESHOLD > 0 then
+                    StatusLabel.Text = "⚡ Status: Đã mở xong, tiếp tục farm..."
+                    StatusLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
+                end
             end
         end)
         task.wait(2)
