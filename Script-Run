@@ -62,9 +62,13 @@ end
 -- Auto Kick (Decode)
 local AUTOKICK_ENABLED = false
 local AUTOKICK_CONDITION = "DailyQuest"
+local AUTOKICK_FROM_FOLDER = "MM2 (Original)"
+local AUTOKICK_TO_FOLDER = "MM2 (Completed)"
 if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_ENABLED = Config.AutoKick.Enabled == true
     AUTOKICK_CONDITION = Config.AutoKick.Condition or "DailyQuest"
+    AUTOKICK_FROM_FOLDER = Config.AutoKick.FromFolder or AUTOKICK_FROM_FOLDER
+    AUTOKICK_TO_FOLDER = Config.AutoKick.ToFolder or AUTOKICK_TO_FOLDER
 end
 
 print("💕 Config loaded!")
@@ -943,12 +947,25 @@ if AUTOKICK_ENABLED then
                         StatusLabel.Text = "⚡ Status: Xong Daily Quest - Chuyển acc..."
                         StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
                         
-                        -- Gửi signal cho Decode
+                        -- Gửi signal cho Decode (writefile)
                         pcall(function()
                             writefile(Player.Name .. ".txt", "Done Quest")
                         end)
                         
-                        task.wait(2)
+                        -- Gọi Decode API chuyển acc sang folder khác
+                        pcall(function()
+                            if getgenv().client and getgenv().client.ChangeToFolder then
+                                getgenv().client:ChangeToFolder(
+                                    AUTOKICK_FROM_FOLDER,
+                                    AUTOKICK_TO_FOLDER,
+                                    false,
+                                    nil
+                                )
+                                print("✅ Decode: Chuyển acc từ [" .. AUTOKICK_FROM_FOLDER .. "] → [" .. AUTOKICK_TO_FOLDER .. "]")
+                            end
+                        end)
+                        
+                        task.wait(3)
                         alreadyKicked = true
                         Player:Kick("Done Quest")
                     end
