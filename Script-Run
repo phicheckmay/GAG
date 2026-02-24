@@ -71,9 +71,6 @@ if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_MIN_LEVEL = Config.AutoKick.MinLevel or 0
 end
 
--- Batch Open Threshold
-local BATCH_OPEN_THRESHOLD = Config.BatchOpenThreshold or 0
-
 -- Đọc folder ID từ ChangeAccConfig
 pcall(function()
     local acc = getgenv().ChangeAccConfig
@@ -354,6 +351,18 @@ local function getProfileData()
     return tab
 end
 
+local function getPlayerLevel()
+    local level = nil
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData.NewXP then return end
+        local LevelModule = require(RS:WaitForChild("Modules"):WaitForChild("LevelModule"))
+        level = LevelModule.GetLevel(ProfileData.NewXP)
+    end)
+    return level
+end
+
 local function getMainEvent()
     local event = nil
     pcall(function()
@@ -394,17 +403,6 @@ local function getValentineCoins()
     local n = tonumber(amount)
     if n ~= nil then return n end
     return 0
-end
-
-local function getPlayerLevel()
-    local level = nil
-    pcall(function()
-        local ProfileData = getProfileData()
-        if not ProfileData or not ProfileData.NewXP then return end
-        local LevelModule = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("LevelModule"))
-        level = LevelModule.GetLevel(ProfileData.NewXP)
-    end)
-    return level
 end
 
 local function getValentineCratesOpened()
@@ -920,59 +918,26 @@ local function openOneValentineCrate()
     return nil
 end
 
--- Auto Open Crate Loop (with webhook by rarity + batch threshold support)
+-- Auto Open Crate Loop (with webhook by rarity)
 task.spawn(function()
     task.wait(10)
     while true do
         pcall(function()
-            -- Kiểm tra ngưỡng tim trước khi mở
-            local readyToOpen = false
-            if BATCH_OPEN_THRESHOLD > 0 then
-                -- Chế độ batch: đợi đủ ngưỡng mới mở
-                local boxId, currencyKey, price = getValentineBoxIdAndPrice()
-                if boxId and currencyKey then
-                    local ProfileData = getProfileData()
-                    if ProfileData and ProfileData.Materials and ProfileData.Materials.Owned then
-                        local owned = ProfileData.Materials.Owned[currencyKey]
-                        owned = (type(owned) == "number" and owned) or tonumber(owned) or 0
-                        if owned >= BATCH_OPEN_THRESHOLD then
-                            readyToOpen = true
-                            StatusLabel.Text = "⚡ Status: Đủ " .. BATCH_OPEN_THRESHOLD .. " tim - Đang mở crate..."
-                        else
-                            StatusLabel.Text = "⚡ Status: Đang tích tim... (" .. owned .. "/" .. BATCH_OPEN_THRESHOLD .. ")"
-                            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-                        end
-                    end
-                end
-            else
-                -- Chế độ thường: mở ngay khi đủ 1 hộp
-                readyToOpen = canOpenValentineCrate()
-                if readyToOpen then
-                    StatusLabel.Text = "⚡ Status: Đang mở crate..."
-                end
-            end
-
-            if readyToOpen then
+            if canOpenValentineCrate() then
+                StatusLabel.Text = "⚡ Status: Đang mở crate..."
                 StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-                -- Mở liên tục cho đến khi hết tim
-                while canOpenValentineCrate() do
-                    local result = openOneValentineCrate()
-                    -- Gửi webhook nếu mở được item đúng rarity
-                    if result and type(result) == "string" then
-                        sendItemWebhook(Player.Name, result)
-                    elseif result and type(result) == "table" then
-                        for _, itemId in pairs(result) do
-                            if type(itemId) == "string" then
-                                sendItemWebhook(Player.Name, itemId)
-                            end
+                local result = openOneValentineCrate()
+                -- Gửi webhook nếu mở được item đúng rarity
+                if result and type(result) == "string" then
+                    sendItemWebhook(Player.Name, result)
+                elseif result and type(result) == "table" then
+                    for _, itemId in pairs(result) do
+                        if type(itemId) == "string" then
+                            sendItemWebhook(Player.Name, itemId)
                         end
                     end
-                    task.wait(OPEN_CRATE_DELAY)
                 end
-                if BATCH_OPEN_THRESHOLD > 0 then
-                    StatusLabel.Text = "⚡ Status: Đã mở xong, tiếp tục farm..."
-                    StatusLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
-                end
+                task.wait(OPEN_CRATE_DELAY)
             end
         end)
         task.wait(2)
@@ -995,12 +960,18 @@ if AUTOKICK_ENABLED then
                     local levelOk = (AUTOKICK_MIN_LEVEL <= 0) or (currentLevel >= AUTOKICK_MIN_LEVEL)
                     local questOk = maxChallenge > 0 and rawProgress >= maxChallenge
 
-                    -- Cập nhật status cho biết đang chờ điều kiện gì
+                    -- Debug log mỗi lần check
+                    print(string.format("[AutoKick] questOk=%s (%s/%s) | levelOk=%s (lv%s >= %s)",
+                        tostring(questOk), tostring(rawProgress), tostring(maxChallenge),
+                        tostring(levelOk), tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL)
+                    ))
+
+                    -- Update status
                     if not questOk then
-                        StatusLabel.Text = "⚡ Status: Chờ Daily Quest (" .. rawProgress .. "/" .. maxChallenge .. ")"
+                        StatusLabel.Text = "⚡ Status: Chờ Daily Quest (" .. tostring(rawProgress) .. "/" .. tostring(maxChallenge) .. ")"
                         StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
                     elseif not levelOk then
-                        StatusLabel.Text = "⚡ Status: Chờ Level " .. AUTOKICK_MIN_LEVEL .. " (hiện: " .. currentLevel .. ")"
+                        StatusLabel.Text = "⚡ Status: Chờ Level " .. AUTOKICK_MIN_LEVEL .. " (hiện: lv" .. currentLevel .. ")"
                         StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
                     end
 
