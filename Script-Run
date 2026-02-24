@@ -766,11 +766,6 @@ createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
 -- Toggle UI Button (dùng cho LDPlayer / mobile) + phím H cho PC
 local UIS = game:GetService("UserInputService")
 local uiVisible = SHOW_UI
-bg.Visible = uiVisible
-if not uiVisible then
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    ToggleBtn.Text = "👁"
-end
 
 -- Tạo nút toggle riêng biệt (nằm ngoài bg, luôn hiện)
 local ToggleBtnGui = Instance.new("ScreenGui")
@@ -800,6 +795,13 @@ local ToggleStroke = Instance.new("UIStroke")
 ToggleStroke.Thickness = 2
 ToggleStroke.Color = Color3.fromRGB(255, 150, 200)
 ToggleStroke.Parent = ToggleBtn
+
+-- Áp dụng ShowUI config
+bg.Visible = uiVisible
+if not uiVisible then
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    ToggleBtn.Text = "👁"
+end
 
 -- Cho phép kéo nút toggle đến vị trí khác trên màn hình
 local dragging, dragInput, dragStart, startPos
