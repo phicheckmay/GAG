@@ -1,59 +1,60 @@
--- ========================================================================
--- AUTO SELECT TABLET - MM2 (Standalone, không dùng firesignal)
--- ========================================================================
+-- AUTO SELECT TABLET - Ronix (dùng simulateclick)
 
-local function clickButton(btn)
-    pcall(function() btn.MouseButton1Click:Fire() end)
-    pcall(function() btn.Activated:Fire() end)
+task.wait(2)
+
+local playerGui = game.Players.LocalPlayer.PlayerGui
+local found = false
+
+for i = 1, 120 do
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        local name = obj.Name:lower()
+        if (obj:IsA("TextButton") or obj:IsA("ImageButton")) and (name:find("tablet") or name:find("tabletperk")) then
+            warn("Found: " .. obj:GetFullName())
+            -- Ronix dùng simulateclick
+            local ok, err = pcall(function()
+                simulateclick(obj)
+            end)
+            if ok then
+                warn("simulateclick OK")
+                found = true
+                break
+            else
+                warn("simulateclick fail: " .. tostring(err))
+            end
+
+            -- Thử firebutton
+            local ok2, err2 = pcall(function()
+                firebutton(obj)
+            end)
+            if ok2 then
+                warn("firebutton OK")
+                found = true
+                break
+            else
+                warn("firebutton fail: " .. tostring(err2))
+            end
+
+            -- Thử click2d
+            local ok3, err3 = pcall(function()
+                local pos = obj.AbsolutePosition + obj.AbsoluteSize / 2
+                click2d(pos.X, pos.Y)
+            end)
+            if ok3 then
+                warn("click2d OK")
+                found = true
+                break
+            else
+                warn("click2d fail: " .. tostring(err3))
+            end
+
+            found = true -- dù sao cũng break để xem log
+            break
+        end
+    end
+    if found then break end
+    task.wait(0.5)
 end
 
-task.spawn(function()
-    task.wait(1)
-    local maxWaitTime = 60
-    local startTime = tick()
-    local clicked = false
-
-    print("[TabletSelect] Đang tìm màn hình chọn device...")
-
-    while tick() - startTime < maxWaitTime and not clicked do
-        pcall(function()
-            local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-            if not playerGui then return end
-
-            -- Scan toàn bộ PlayerGui tìm button Tablet
-            for _, obj in pairs(playerGui:GetDescendants()) do
-                if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-                    local name = obj.Name:lower()
-                    local text = (obj:IsA("TextButton") and obj.Text or ""):lower()
-                    if name:find("tablet") or text:find("tablet") then
-                        print("[TabletSelect] Found: " .. obj:GetFullName())
-                        clickButton(obj)
-                        task.wait(0.1)
-                        clickButton(obj)
-                        clicked = true
-                        return
-                    end
-                end
-            end
-        end)
-
-        if not clicked then task.wait(0.3) end
-    end
-
-    if clicked then
-        warn("[TabletSelect] Done!")
-    else
-        warn("[TabletSelect] Không tìm thấy sau " .. maxWaitTime .. "s, in toàn bộ buttons:")
-        pcall(function()
-            local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-            for _, gui in pairs(playerGui:GetChildren()) do
-                print("GUI: " .. gui.Name)
-                for _, v in pairs(gui:GetDescendants()) do
-                    if v:IsA("TextButton") or v:IsA("ImageButton") then
-                        print("  Button: " .. v.Name .. " | Text: " .. tostring(v:IsA("TextButton") and v.Text or "-"))
-                    end
-                end
-            end
-        end)
-    end
-end)
+if not found then
+    warn("Không tìm thấy button!")
+end
