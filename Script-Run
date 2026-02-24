@@ -22,6 +22,7 @@ local Config = (getgenv and getgenv().KenConfig) or {}
 local AUTO_FARM = Config.AutoFarm ~= false
 local RESET_WHEN_FULL_BAG = Config.ResetWhenFullBag ~= false
 local OPEN_CRATE_DELAY = Config.OpenCrateDelay or 2
+local SHOW_UI = Config.ShowUI ~= false  -- mặc định true nếu không set
 
 -- FPS Lock
 local FPS_LOCK_ENABLED = false
@@ -786,7 +787,13 @@ createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
 
 -- Toggle UI Button (dùng cho LDPlayer / mobile) + phím H cho PC
 local UIS = game:GetService("UserInputService")
-local uiVisible = true
+local uiVisible = SHOW_UI
+bg.Visible = uiVisible
+
+if not uiVisible then
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    ToggleBtn.Text = "👁"
+end
 
 -- Tạo nút toggle riêng biệt (nằm ngoài bg, luôn hiện)
 local ToggleBtnGui = Instance.new("ScreenGui")
