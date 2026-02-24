@@ -22,7 +22,6 @@ local Config = (getgenv and getgenv().KenConfig) or {}
 local AUTO_FARM = Config.AutoFarm ~= false
 local RESET_WHEN_FULL_BAG = Config.ResetWhenFullBag ~= false
 local OPEN_CRATE_DELAY = Config.OpenCrateDelay or 2
-local SHOW_UI = Config.ShowUI ~= false  -- mặc định true nếu không set
 
 -- FPS Lock
 local FPS_LOCK_ENABLED = false
@@ -64,14 +63,12 @@ end
 local AUTOKICK_ENABLED = false
 local AUTOKICK_CONDITION = "DailyQuest"
 local AUTOKICK_MIN_LEVEL = 0
-local AUTOKICK_MAX_ONLINE = 0  -- phút, 0 = tắt
 local AUTOKICK_FROM_FOLDER = ""
 local AUTOKICK_TO_FOLDER = ""
 if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_ENABLED = Config.AutoKick.Enabled == true
     AUTOKICK_CONDITION = Config.AutoKick.Condition or "DailyQuest"
     AUTOKICK_MIN_LEVEL = Config.AutoKick.MinLevel or 0
-    AUTOKICK_MAX_ONLINE = Config.AutoKick.MaxOnlineMinutes or 0
 end
 
 -- Đọc folder ID từ ChangeAccConfig
@@ -765,7 +762,7 @@ createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
 
 -- Toggle UI Button (dùng cho LDPlayer / mobile) + phím H cho PC
 local UIS = game:GetService("UserInputService")
-local uiVisible = SHOW_UI
+local uiVisible = true
 
 -- Tạo nút toggle riêng biệt (nằm ngoài bg, luôn hiện)
 local ToggleBtnGui = Instance.new("ScreenGui")
@@ -795,13 +792,6 @@ local ToggleStroke = Instance.new("UIStroke")
 ToggleStroke.Thickness = 2
 ToggleStroke.Color = Color3.fromRGB(255, 150, 200)
 ToggleStroke.Parent = ToggleBtn
-
--- Áp dụng ShowUI config
-bg.Visible = uiVisible
-if not uiVisible then
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    ToggleBtn.Text = "👁"
-end
 
 -- Cho phép kéo nút toggle đến vị trí khác trên màn hình
 local dragging, dragInput, dragStart, startPos
@@ -1029,18 +1019,8 @@ if AUTOKICK_ENABLED then
     end)
 end
 
--- Kick sau X phút online (độc lập với quest/level)
-if AUTOKICK_ENABLED and AUTOKICK_MAX_ONLINE > 0 then
-    task.spawn(function()
-        local limitSeconds = AUTOKICK_MAX_ONLINE * 60
-        task.wait(limitSeconds)
-        warn("[AutoKick] Đã online " .. AUTOKICK_MAX_ONLINE .. " phút - Đang kick...")
-        StatusLabel.Text = "⚡ Status: Hết " .. AUTOKICK_MAX_ONLINE .. " phút - Kick..."
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
-        task.wait(2)
-        Player:Kick("Max online reached")
-    end)
-end
+-- ========================================================================
+-- SERVER HOP SYSTEM
 -- ========================================================================
 
 local function CreateFiles(FileName, File)
