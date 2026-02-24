@@ -32,20 +32,6 @@ if Config.FpsLock and type(Config.FpsLock) == "table" then
     FPS_CAP = Config.FpsLock[2] or 15
 end
 
--- Webhook
-local WEBHOOK_ENABLED = false
-local WEBHOOK_URL = ""
-local WEBHOOK_IMAGE_URL = "https://files.catbox.moe/qri5x4.png"
-local WEBHOOK_RARITY = { Common = false, Uncommon = false, Rare = false, Legendary = false, Godly = true }
-if Config.Webhook and type(Config.Webhook) == "table" then
-    WEBHOOK_ENABLED = Config.Webhook.Enabled ~= false
-    WEBHOOK_URL = Config.Webhook.URL or ""
-    WEBHOOK_IMAGE_URL = Config.Webhook.ImageURL or WEBHOOK_IMAGE_URL
-    if Config.Webhook.Rarity and type(Config.Webhook.Rarity) == "table" then
-        WEBHOOK_RARITY = Config.Webhook.Rarity
-    end
-end
-
 -- Server Hop
 local HOP_ENABLED = true
 local ROUND_TIMEOUT = 10 * 60
