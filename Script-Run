@@ -32,6 +32,20 @@ if Config.FpsLock and type(Config.FpsLock) == "table" then
     FPS_CAP = Config.FpsLock[2] or 15
 end
 
+-- Webhook
+local WEBHOOK_ENABLED = false
+local WEBHOOK_URL = ""
+local WEBHOOK_IMAGE_URL = "https://files.catbox.moe/qri5x4.png"
+local WEBHOOK_RARITY = { Common = false, Uncommon = false, Rare = false, Legendary = false, Godly = true }
+if Config.Webhook and type(Config.Webhook) == "table" then
+    WEBHOOK_ENABLED = Config.Webhook.Enabled ~= false
+    WEBHOOK_URL = Config.Webhook.URL or ""
+    WEBHOOK_IMAGE_URL = Config.Webhook.ImageURL or WEBHOOK_IMAGE_URL
+    if Config.Webhook.Rarity and type(Config.Webhook.Rarity) == "table" then
+        WEBHOOK_RARITY = Config.Webhook.Rarity
+    end
+end
+
 -- Server Hop
 local HOP_ENABLED = true
 local ROUND_TIMEOUT = 10 * 60
@@ -50,7 +64,7 @@ end
 local AUTOKICK_ENABLED = false
 local AUTOKICK_CONDITION = "DailyQuest"
 local AUTOKICK_MIN_LEVEL = 0
-local AUTOKICK_MAX_ONLINE = 0  -- phút, 0 = không giới hạn
+local AUTOKICK_MAX_ONLINE = 0  -- phút, 0 = tắt
 local AUTOKICK_FROM_FOLDER = ""
 local AUTOKICK_TO_FOLDER = ""
 if Config.AutoKick and type(Config.AutoKick) == "table" then
@@ -194,53 +208,32 @@ end)
 
 task.spawn(function()
     task.wait(2)
-    local maxWaitTime = 60
+    local maxWaitTime = 30
     local startTime = tick()
     local clicked = false
     
     while tick() - startTime < maxWaitTime and not clicked do
         pcall(function()
             local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-            if not playerGui then return end
-
-            -- Cách 1: tìm theo path cũ
-            local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
-            if deviceSelect then
-                local container = deviceSelect:FindFirstChild("Container")
-                if container then
-                    local tablet = container:FindFirstChild("Tablet")
-                    if tablet then
-                        local button = tablet:FindFirstChild("Button")
-                        if button then
-                            firesignal(button.MouseButton1Click)
-                            clicked = true
-                            print("✅ Tablet selected (path cũ)")
-                            return
+            if playerGui then
+                local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
+                if deviceSelect then
+                    local container = deviceSelect:FindFirstChild("Container")
+                    if container then
+                        local tablet = container:FindFirstChild("Tablet")
+                        if tablet then
+                            local button = tablet:FindFirstChild("Button")
+                            if button then
+                                firesignal(button.MouseButton1Click)
+                                clicked = true
+                            end
                         end
-                    end
-                end
-            end
-
-            -- Cách 2: scan toàn bộ PlayerGui tìm button text "Tablet"
-            for _, obj in pairs(playerGui:GetDescendants()) do
-                if (obj:IsA("TextButton") or obj:IsA("ImageButton")) then
-                    local txt = obj.Name .. (obj:IsA("TextButton") and obj.Text or "")
-                    if txt:lower():find("tablet") then
-                        firesignal(obj.MouseButton1Click)
-                        clicked = true
-                        print("✅ Tablet selected (scan): " .. obj:GetFullName())
-                        return
                     end
                 end
             end
         end)
         if not clicked then task.wait(0.5) end
     end
-
-    if not clicked then
-        print("⚠️ Không tìm thấy Tablet button sau " .. maxWaitTime .. "s")
-    end
-end)
 end)
 
 -- ========================================================================
@@ -367,8 +360,7 @@ local function getPlayerLevel()
         local RS = game:GetService("ReplicatedStorage")
         local ProfileData = getProfileData()
         if not ProfileData or not ProfileData.NewXP then return end
-        local LevelModule = require(RS:WaitForChild("Modules", 10):WaitForChild("LevelModule", 10))
-        if not LevelModule then return end
+        local LevelModule = require(RS:WaitForChild("Modules"):WaitForChild("LevelModule"))
         level = LevelModule.GetLevel(ProfileData.NewXP)
     end)
     return level
@@ -775,7 +767,6 @@ createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
 local UIS = game:GetService("UserInputService")
 local uiVisible = SHOW_UI
 bg.Visible = uiVisible
-
 if not uiVisible then
     ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     ToggleBtn.Text = "👁"
@@ -1048,9 +1039,6 @@ if AUTOKICK_ENABLED and AUTOKICK_MAX_ONLINE > 0 then
         Player:Kick("Max online reached")
     end)
 end
-
--- ========================================================================
--- SERVER HOP SYSTEM
 -- ========================================================================
 
 local function CreateFiles(FileName, File)
