@@ -1,47 +1,85 @@
-script_key = "ReucNqwMEhCvHLfIpBtqVqbsdacvOgNf"
-getgenv().Config = {
-    LOCK_FPS = 3, -- Only work in Web Version
-    FARM_MODE = "Crate", -- Crate Only
-    AUTO_RESTART_WHEN_UPDATE = true,
-    HOP_WHEN_COIN_EARNED_LOWER = 250,
-    TIME_TO_CHECK_COIN_EARNED = 1800,
-    DISPLAY_UI = true,
-    WEBHOOK_URL = "",
-    WEBHOOK_NOTE = "",
-    AUTO_CHANGE = { -- Auto change when account cant farm valentines coins
-        WAIT_UNTIL_LEVEL_10_WHEN_HAVE_GODLY_ITEMS = true, -- If account have godly items, wait until level 10 to change [because level 10 is required to trade items]
-        TIME_TO_CHANGE = 60, -- Time to change after meet condition
-        YUMMY_TOOL = {
-            ENABLED = false
-        },
-        FARM_SYNC = {
-            ENABLED = false,
-            HAVE_GODLY = { -- folder change when have godly items
-                FOLDER_FROM = "have_godly_folder_id_from",
-                FOLDER_TO = "have_godly_folder_id_to",
-            },
-            NO_GODLY = { -- folder change when no godly items
-                FOLDER_FROM = "no_godly_folder_id_from",
-                FOLDER_TO = "no_godly_folder_id_to",
-            },
-            CHANGE_WITHOUT_REPLACE = false -- true / false
-        }
-    }
-}
+-- ========================================================================
+-- AUTO SELECT TABLET - MM2 (Standalone)
+-- ========================================================================
 
-task.spawn(function()
-    local LastCheck = tick()
-    while task.wait() do
-        if getgenv().ScriptLoaded then
-            break
-        end
+local function clickButton(btn)
+    -- Thử nhiều cách click khác nhau
+    pcall(function() firesignal(btn.MouseButton1Click) end)
+    pcall(function() btn.MouseButton1Click:Fire() end)
+    pcall(function()
+        local pos = btn.AbsolutePosition + btn.AbsoluteSize / 2
+        local inputObj = Instance.new("InputObject")
+        inputObj.UserInputType = Enum.UserInputType.Touch
+        inputObj.Position = Vector3.new(pos.X, pos.Y, 0)
+        btn:SimulateMouseMovement(pos.X, pos.Y)
+    end)
+end
+    local startTime = tick()
+    local clicked = false
 
+    print("[TabletSelect] Đang tìm màn hình chọn device...")
+
+    while tick() - startTime < maxWaitTime and not clicked do
         pcall(function()
-            if LastCheck + 180 <= tick() then
-                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+            local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+            if not playerGui then return end
+
+            -- Cách 1: path cũ
+            local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
+            if deviceSelect then
+                print("[TabletSelect] Tìm thấy DeviceSelect, children:")
+                for _, v in pairs(deviceSelect:GetDescendants()) do
+                    if v:IsA("TextButton") or v:IsA("ImageButton") then
+                        print("  Button: " .. v:GetFullName() .. " | Text: " .. tostring(v:IsA("TextButton") and v.Text or "-"))
+                    end
+                end
+
+                local container = deviceSelect:FindFirstChild("Container")
+                if container then
+                    local tablet = container:FindFirstChild("Tablet")
+                    if tablet then
+                        local button = tablet:FindFirstChild("Button")
+                        if button then
+                            clickButton(button)
+                            clicked = true
+                            print("[TabletSelect] ✅ Clicked via path cũ")
+                            return
+                        end
+                    end
+                end
+            end
+
+            -- Cách 2: scan toàn bộ PlayerGui
+            for _, obj in pairs(playerGui:GetDescendants()) do
+                if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+                    local name = obj.Name:lower()
+                    local text = (obj:IsA("TextButton") and obj.Text or ""):lower()
+                    if name:find("tablet") or text:find("tablet") then
+                        print("[TabletSelect] ✅ Found: " .. obj:GetFullName() .. " | Text: " .. text)
+                        clickButton(obj)
+                        clicked = true
+                        return
+                    end
+                end
+            end
+        end)
+
+        if not clicked then task.wait(0.5) end
+    end
+
+    if clicked then
+        warn("[TabletSelect] ✅ Tablet đã được chọn!")
+    else
+        warn("[TabletSelect] ❌ Không tìm thấy Tablet button sau " .. maxWaitTime .. "s")
+        -- In toàn bộ GUI để debug
+        pcall(function()
+            local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+            if playerGui then
+                print("[TabletSelect] Toàn bộ ScreenGui trong PlayerGui:")
+                for _, gui in pairs(playerGui:GetChildren()) do
+                    print("  " .. gui.Name .. " (" .. gui.ClassName .. ")")
+                end
             end
         end)
     end
 end)
-
-loadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/0e38c9f962f6e016372a764db6595b22.lua"))()
