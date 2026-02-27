@@ -195,6 +195,85 @@ task.spawn(function()
     AntiAFK()
 end)
 
+-- Human-like movement Anti-AFK
+task.spawn(function()
+    task.wait(30)
+    local VIM = game:GetService("VirtualInputManager")
+    local UIS = game:GetService("UserInputService")
+
+    local keys = {
+        Enum.KeyCode.A, Enum.KeyCode.D,
+        Enum.KeyCode.W, Enum.KeyCode.S,
+        Enum.KeyCode.Space
+    }
+
+    local function pressKey(key, duration)
+        pcall(function()
+            VIM:SendKeyEvent(true, key, false, game)
+            task.wait(duration)
+            VIM:SendKeyEvent(false, key, false, game)
+        end)
+    end
+
+    local function randomMouseMove()
+        pcall(function()
+            local x = math.random(-80, 80)
+            local y = math.random(-40, 40)
+            VIM:SendMouseMoveEvent(x, y, game)
+        end)
+    end
+
+    local function randomClick()
+        pcall(function()
+            local screenSize = workspace.CurrentCamera.ViewportSize
+            local x = math.random(screenSize.X * 0.3, screenSize.X * 0.7)
+            local y = math.random(screenSize.Y * 0.3, screenSize.Y * 0.7)
+            -- Click trái
+            VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait(math.random(5, 15) / 100)
+            VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        end)
+    end
+
+    while true do
+        -- Chờ ngẫu nhiên 45-90 giây giữa các lần
+        task.wait(math.random(45, 90))
+
+        pcall(function()
+            -- Chỉ thực hiện khi không đang farm (tránh conflict)
+            if AutofarmStarted then return end
+
+            local actions = math.random(2, 4)
+            for i = 1, actions do
+                local action = math.random(1, 4)
+
+                if action == 1 then
+                    -- Di chuyển ngẫu nhiên
+                    local key = keys[math.random(1, #keys)]
+                    pressKey(key, math.random(3, 8) / 10)
+
+                elseif action == 2 then
+                    -- Xoay camera
+                    for j = 1, math.random(3, 8) do
+                        randomMouseMove()
+                        task.wait(math.random(5, 15) / 100)
+                    end
+
+                elseif action == 3 then
+                    -- Nhảy
+                    pressKey(Enum.KeyCode.Space, 0.1)
+
+                elseif action == 4 then
+                    -- Click chuột
+                    randomClick()
+                end
+
+                task.wait(math.random(2, 6) / 10)
+            end
+        end)
+    end
+end)
+
 -- Backup Anti-AFK (Idle Tracking)
 task.spawn(function()
     pcall(function()
