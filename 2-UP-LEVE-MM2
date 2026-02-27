@@ -1,375 +1,1350 @@
-getgenv().SimplePlazaSellerRunning = true
+-- ========================================================================
+-- 💕 KENPHYSICAL MM2 VALENTINE 2026 FARM & AUTO BOX OPENER
+-- ========================================================================
+-- ✅ Auto farm Valentine Tokens
+-- ✅ Auto detect event currency/box (không hardcode)
+-- ✅ Auto open crate khi đủ coin
+-- ✅ Full optimization để giảm lag
+-- ✅ Anti-AFK system
+-- ✅ Beautiful full-screen UI (nhấn H / nút 💕 để ẩn/hiện)
+-- ✅ Discord Webhook thông báo theo Rarity
+-- ✅ Server Hop khi không có round
+-- ✅ Valentine Tracker (Coin, Crate, Daily Quest)
+-- ========================================================================
 
---// ================== CONFIG ================== \\--
+-- ========================================================================
+-- ⚙️ ĐỌC CONFIG TỪ LOADER
+-- ========================================================================
 
-local CONFIG = {
-    LOOP_DELAY       = 3,        -- Delay giữa mỗi vòng list (giây)
+local Config = (getgenv and getgenv().KenConfig) or {}
 
-    AUTO_CLAIM_BOOTH = true,     -- true = dùng ClaimOptimalBooth auto claim 1 lần; false = bạn tự claim booth
-    MAX_BOOTH_ID     = 50,       -- (hiện không dùng nữa, giữ cho đẹp config)
+-- Farm
+local AUTO_FARM = Config.AutoFarm ~= false
+local RESET_WHEN_FULL_BAG = Config.ResetWhenFullBag ~= false
+local OPEN_CRATE_DELAY = Config.OpenCrateDelay or 2
+local SHOW_UI = Config.ShowUI ~= false  -- mặc định true nếu không set
 
-    -- Danh sách các pet cần treo:
-    PETS = {
-        {
-            Name    = "Huge Blue Lucky Block",
-            Class   = "Pet",
-            Price   = 15_000_000,  -- 15m
-            PerList = 1,           -- mỗi listing bán 1 con
-        },
-        {
-            Name    = "Golden Mossy Lamb",
-            Class   = "Pet",
-            Price   = 10_000_000,  -- 10m
-            PerList = 1,
-        },
-        -- thêm pet khác ở đây:
-        -- {
-        --     Name    = "Tên Pet 3",
-        --     Class   = "Pet",
-        --     Price   = 123_456_789,
-        --     PerList = 1,
-        -- },
-    }
-}
-
---// ============= KHÔNG SỬA DƯỚI NẾU KHÔNG RÕ ============= \\--
-
-if not game:IsLoaded() then game.Loaded:Wait() end
-
-local Players           = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService   = game:GetService("TeleportService")
-
-local LocalPlayer       = Players.LocalPlayer
-
--- ================== PLACE CHECK + TELEPORT ================== --
-
-local PS99 = {Pro = 15588442388, Normal = 15502339080}
-
-local function IsInPlaza()
-    return game.PlaceId == PS99.Normal or game.PlaceId == PS99.Pro
+-- FPS Lock
+local FPS_LOCK_ENABLED = false
+local FPS_CAP = 15
+if Config.FpsLock and type(Config.FpsLock) == "table" then
+    FPS_LOCK_ENABLED = Config.FpsLock[1] ~= false
+    FPS_CAP = Config.FpsLock[2] or 15
 end
 
-if not IsInPlaza() then
-    warn("[Simple Seller]: Không ở Trading Plaza -> Teleport vào Plaza Normal...")
-    TeleportService:Teleport(PS99.Normal, LocalPlayer)
-    -- Khi sang Plaza Normal, autoexec sẽ chạy lại script này.
-    return
+-- Webhook
+local WEBHOOK_ENABLED = false
+local WEBHOOK_URL = ""
+local WEBHOOK_IMAGE_URL = "https://files.catbox.moe/qri5x4.png"
+local WEBHOOK_RARITY = { Common = false, Uncommon = false, Rare = false, Legendary = false, Godly = true }
+if Config.Webhook and type(Config.Webhook) == "table" then
+    WEBHOOK_ENABLED = Config.Webhook.Enabled ~= false
+    WEBHOOK_URL = Config.Webhook.URL or ""
+    WEBHOOK_IMAGE_URL = Config.Webhook.ImageURL or WEBHOOK_IMAGE_URL
+    if Config.Webhook.Rarity and type(Config.Webhook.Rarity) == "table" then
+        WEBHOOK_RARITY = Config.Webhook.Rarity
+    end
 end
 
--- Đảm bảo client đã load xong mấy thứ của game
-repeat task.wait() until LocalPlayer and LocalPlayer.GetAttribute and LocalPlayer:GetAttribute("__LOADED")
-if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
-
-local LOOP_DELAY   = CONFIG.LOOP_DELAY
-local AUTO_CLAIM   = CONFIG.AUTO_CLAIM_BOOTH
-local MAX_BOOTH_ID = CONFIG.MAX_BOOTH_ID
-local PETS_CONFIG  = CONFIG.PETS
-
--- Lấy Library gốc
-local NLibrary = ReplicatedStorage:WaitForChild("Library")
-
--- Require module cần thiết (rất nhẹ)
-local okInv, InventoryCmds = pcall(require, NLibrary.Client.InventoryCmds)
-if not okInv then
-    warn("[Simple Seller]: Không require được InventoryCmds:", InventoryCmds)
-    return
+-- Server Hop
+local HOP_ENABLED = true
+local ROUND_TIMEOUT = 10 * 60
+local HOP_MIN_PLAYERS = 4
+local HOP_MAX_PLAYERS = 10
+local HOP_SCRAPE_AMOUNT = 50
+if Config.ServerHop and type(Config.ServerHop) == "table" then
+    HOP_ENABLED = Config.ServerHop.Enabled ~= false
+    ROUND_TIMEOUT = Config.ServerHop.RoundTimeout or ROUND_TIMEOUT
+    HOP_MIN_PLAYERS = Config.ServerHop.MinPlayers or HOP_MIN_PLAYERS
+    HOP_MAX_PLAYERS = Config.ServerHop.MaxPlayers or HOP_MAX_PLAYERS
+    HOP_SCRAPE_AMOUNT = Config.ServerHop.ScrapeAmount or HOP_SCRAPE_AMOUNT
 end
 
-local okNet, Network = pcall(require, NLibrary.Client.Network)
-if not okNet then
-    warn("[Simple Seller]: Không require được Network:", Network)
-    return
+-- Auto Kick (Decode)
+local AUTOKICK_ENABLED = false
+local AUTOKICK_CONDITION = "DailyQuest"
+local AUTOKICK_MIN_LEVEL = 0
+local AUTOKICK_MAX_ONLINE = 0  -- phút, 0 = tắt
+local AUTOKICK_FROM_FOLDER = ""
+local AUTOKICK_TO_FOLDER = ""
+if Config.AutoKick and type(Config.AutoKick) == "table" then
+    AUTOKICK_ENABLED = Config.AutoKick.Enabled == true
+    AUTOKICK_CONDITION = Config.AutoKick.Condition or "DailyQuest"
+    AUTOKICK_MIN_LEVEL = Config.AutoKick.MinLevel or 0
+    AUTOKICK_MAX_ONLINE = Config.AutoKick.MaxOnlineMinutes or 0
 end
 
--- ================== BIẾN DÙNG CHO BOOTH ================== --
-
-local Booths, ClaimedBooths, BoothsInteractive
-local HumanoidRootPart
-
-local function WaitForCharacter()
-    local char = LocalPlayer.Character
-    if not char then
-        char = LocalPlayer.CharacterAdded:Wait()
-    end
-    while not char:FindFirstChild("HumanoidRootPart") do
-        char.ChildAdded:Wait()
-    end
-    HumanoidRootPart = char.HumanoidRootPart
-    return char
-end
-
-WaitForCharacter()
-
--- ================== INIT BOOTHS ================== --
-
-local function InitBooths()
-    -- lấy script BoothCmds hoặc Booths Frontend
-    local boothScript = NLibrary.Client:FindFirstChild("BoothCmds")
-        or (LocalPlayer.PlayerScripts.Scripts
-            and LocalPlayer.PlayerScripts.Scripts.Game
-            and LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]
-            and LocalPlayer.PlayerScripts.Scripts.Game["Trading Plaza"]["Booths Frontend"])
-
-    if not boothScript then
-        warn("[Simple Seller]: Không tìm thấy BoothCmds / Booths Frontend.")
-        return false
-    end
-
-    local env = getsenv(boothScript)
-    if not env then
-        warn("[Simple Seller]: getsenv(boothScript) trả nil.")
-        return false
-    end
-
-    local getState = env.getState
-    local updateAllInteracts = env.updateAllInteracts
-
-    if not getState or not updateAllInteracts then
-        warn("[Simple Seller]: Không lấy được getState / updateAllInteracts.")
-        return false
-    end
-
-    local boothsUp     = getupvalues(getState)
-    local interactsUp  = getupvalues(updateAllInteracts)
-
-    Booths            = boothsUp[1]         -- state booths
-    ClaimedBooths     = interactsUp[1]      -- map player -> booth info
-    BoothsInteractive = interactsUp[3]      -- BoothID -> model
-
-    if not Booths or not ClaimedBooths or not BoothsInteractive then
-        warn("[Simple Seller]: Upvalues Booths/ClaimedBooths/BoothsInteractive bị nil.")
-        return false
-    end
-
-    warn("[Simple Seller]: InitBooths OK.")
-    return true
-end
-
--- ================== BOOTH HELPERS ================== --
-
-local function IsBoothAvailable(BoothID)
-    for _, boothData in pairs(ClaimedBooths) do
-        if boothData.BoothID == BoothID then
-            return false
+-- Đọc folder ID từ ChangeAccConfig
+pcall(function()
+    local acc = getgenv().ChangeAccConfig
+    if acc and acc["Change Mode"] and acc["Change Mode"]["Decode"] and acc["Change Mode"]["Decode"]["Folder"] then
+        local folder = acc["Change Mode"]["Decode"]["Folder"]["Done Quest"]
+        if folder then
+            AUTOKICK_FROM_FOLDER = folder["Folder 1"] or ""
+            AUTOKICK_TO_FOLDER = folder["Folder 2"] or ""
         end
     end
-    return true
+end)
+
+print("💕 Config loaded!")
+print("  AutoFarm: " .. tostring(AUTO_FARM))
+print("  FPS Lock: " .. tostring(FPS_LOCK_ENABLED) .. " (" .. FPS_CAP .. ")")
+print("  Webhook: " .. tostring(WEBHOOK_ENABLED))
+print("  Server Hop: " .. tostring(HOP_ENABLED))
+print("  Auto Kick: " .. tostring(AUTOKICK_ENABLED) .. " (" .. AUTOKICK_CONDITION .. ")")
+
+-- ========================================================================
+-- 🚀 KHỞI ĐỘNG
+-- ========================================================================
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
 
-local function GetCenterX()
-    local minX, maxX = math.huge, -math.huge
-    for _, BoothModel in pairs(BoothsInteractive) do
-        local x = BoothModel.Pets.Position.X
-        if x < minX then minX = x end
-        if x > maxX then maxX = x end
-    end
-    return (minX + maxX) / 2
+task.wait(10)
+
+-- ========================================================================
+-- OPTIMIZATION - Chạy ngay từ đầu
+-- ========================================================================
+
+if FPS_LOCK_ENABLED then
+    pcall(function() setfpscap(FPS_CAP) end)
 end
 
-local function GetBoothPriority(BoothModel, CenterX)
-    local yPriority = BoothModel.Pets.Position.Y
-    local xDistance = math.abs(BoothModel.Pets.Position.X - CenterX)
-    return yPriority, xDistance
-end
+local function OptimizationSafe()
+    local RunService = game:GetService("RunService")
+    local Lighting = game:GetService("Lighting")
 
-local function ClaimOptimalBooth()
-    if ClaimedBooths[LocalPlayer] then
-        warn("[Simple Seller]: Đã có booth sẵn rồi.")
-        return true
-    end
+    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
 
-    local BoothCandidates = {}
-    local CenterX = GetCenterX()
-
-    for BoothID, BoothModel in next, BoothsInteractive do
-        if ClaimedBooths[LocalPlayer] then
-            return true
-        end
-        if IsBoothAvailable(BoothID) then
-            local yPriority, xDistance = GetBoothPriority(BoothModel, CenterX)
-            table.insert(BoothCandidates, {
-                BoothID   = BoothID,
-                Model     = BoothModel,
-                Y         = yPriority,
-                xDistance = xDistance,
-            })
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("BloomEffect") 
+        or effect:IsA("SunRaysEffect") 
+        or effect:IsA("DepthOfFieldEffect")
+        or effect:IsA("BlurEffect")
+        or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = false
+        elseif effect:IsA("Atmosphere") then
+            effect.Density = 0
+            effect.Haze = 0
+            effect.Color = Color3.new(1, 1, 1)
+            effect.Decay = Color3.new(1, 1, 1)
         end
     end
 
-    table.sort(BoothCandidates, function(a, b)
-        if a.Y == b.Y then
-            return a.xDistance < b.xDistance
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if workspace:FindFirstChild("__THINGS") and obj:IsDescendantOf(workspace.__THINGS) then
+            continue
         end
-        return a.Y < b.Y
-    end)
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") 
+        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+            obj.Enabled = false
+        end
+    end
+end
 
-    for _, Booth in ipairs(BoothCandidates) do
-        local ok, success = pcall(function()
-            return Network.Invoke("Booths_ClaimBooth", Booth.BoothID)
-        end)
+OptimizationSafe()
 
-        if ok and success then
-            warn("[Simple Seller]: Claim booth thành công, ID:", Booth.BoothID)
+-- ========================================================================
+-- DISABLE COLLISION
+-- ========================================================================
 
-            local Interact = Booth.Model:WaitForChild("Interact", 5)
-            if Interact and HumanoidRootPart then
-                pcall(function()
-                    Network.Fire("Hoverboard_RequestUnequip")
-                end)
-                task.wait(0.5)
-                HumanoidRootPart.CFrame =
-                    Interact.CFrame * CFrame.new(0,-2,-6) * CFrame.Angles(0, math.rad(180), 0)
+task.spawn(function()
+    task.wait(10)
+    while true do
+        pcall(function()
+            for _, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide == true then
+                    v.CanCollide = false
+                end
             end
+        end)
+        game:GetService("RunService").Stepped:Wait()
+    end
+end)
 
-            return true
+-- ========================================================================
+-- ANTI-AFK SYSTEM
+-- ========================================================================
+
+task.spawn(function()
+    task.wait(60)
+    local function AntiAFK()
+        local Player = game.Players.LocalPlayer
+        if not Player or not Player.Idled then return end
+        local GC = getconnections or get_signal_cons
+        if GC then
+            for _, v in pairs(GC(Player.Idled)) do
+                if v["Disable"] then
+                    v["Disable"](v)
+                elseif v["Disconnect"] then
+                    v["Disconnect"](v)
+                end
+            end
+        else
+            local VirtualUser = game:GetService("VirtualUser")
+            if VirtualUser then
+                Player.Idled:Connect(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end
         end
     end
+    AntiAFK()
+end)
 
-    warn("[Simple Seller]: Không claim được booth nào.")
+-- Backup Anti-AFK (Idle Tracking)
+task.spawn(function()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Network["Idle Tracking: Stop Timer"]:FireServer()
+    end)
+end)
+
+-- ========================================================================
+-- AUTO SELECT TABLET DEVICE
+-- ========================================================================
+
+task.spawn(function()
+    task.wait(2)
+    local maxWaitTime = 30
+    local startTime = tick()
+    local clicked = false
+    
+    while tick() - startTime < maxWaitTime and not clicked do
+        pcall(function()
+            local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+            if playerGui then
+                local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
+                if deviceSelect then
+                    local container = deviceSelect:FindFirstChild("Container")
+                    if container then
+                        local tablet = container:FindFirstChild("Tablet")
+                        if tablet then
+                            local button = tablet:FindFirstChild("Button")
+                            if button then
+                                firesignal(button.MouseButton1Click)
+                                clicked = true
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        if not clicked then task.wait(0.5) end
+    end
+end)
+
+-- ========================================================================
+-- GUI TOGGLE SYSTEM (Ẩn GUI game để giảm lag)
+-- ========================================================================
+
+coroutine.wrap(function()
+    task.wait(60)
+
+    local function setupGUIToggle()
+        local guiObjects = {}
+        
+        local success = pcall(function()
+            for _, gui in pairs(gethui():GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    if gui.Name == "KenPhysicalMM2UI" then
+                        continue
+                    end
+                    
+                    for _, obj in pairs(gui:GetDescendants()) do
+                        if obj:IsA("GuiObject") and obj.Visible ~= nil then
+                            obj.Visible = false
+                            table.insert(guiObjects, obj)
+                        end
+                    end
+                end
+            end
+        end)
+        
+        if not success then return end
+        
+        local btnGui = Instance.new("ScreenGui")
+        btnGui.Name = "ToggleGuiButton"
+        btnGui.ResetOnSpawn = false
+        btnGui.IgnoreGuiInset = true
+        pcall(function() btnGui.Parent = gethui() end)
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 100, 0, 30)
+        btn.Position = UDim2.new(1, -110, 1, -40)
+        btn.Text = "Show GUIs"
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextStrokeTransparency = 0
+        btn.TextStrokeColor3 = Color3.new(0, 0, 0)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 12
+        btn.Parent = btnGui
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 5)
+        corner.Parent = btn
+        
+        local visible = false
+        btn.MouseButton1Click:Connect(function()
+            visible = not visible
+            
+            if visible then
+                btn.Text = "Hide GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+            else
+                btn.Text = "Show GUIs"
+                btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end
+            
+            for _, obj in ipairs(guiObjects) do
+                if obj and obj:IsA("GuiObject") and obj.Parent then
+                    obj.Visible = visible
+                end
+            end
+        end)
+    end
+
+    setupGUIToggle()
+end)()
+
+-- ========================================================================
+-- VARIABLES & SERVICES
+-- ========================================================================
+
+local Player = game.Players.LocalPlayer
+local Players = game.Players
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local BadanPart = Character:WaitForChild("HumanoidRootPart")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
+local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
+local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
+local OpenCrateRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Shop"):WaitForChild("OpenCrate")
+
+local AutofarmStarted = false
+local RoundEnded = false
+local BagFull = false
+
+-- Stats tracking
+local totalBoxesOpened = 0
+local startTime = tick()
+local lastRoundStartTime = tick()
+local isRoundActive = false
+
+-- Valentine tracker variables
+local valentineDetectorInitialized = false
+
+-- ========================================================================
+-- PROFILE DATA & EVENT DETECTION (Auto detect - không hardcode)
+-- ========================================================================
+
+local function getProfileData()
+    local tab = nil
+    pcall(function()
+        tab = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("ProfileData"))
+    end)
+    return tab
+end
+
+local function getPlayerLevel()
+    local level = nil
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData.NewXP then return end
+        local LevelModule = require(RS:WaitForChild("Modules"):WaitForChild("LevelModule"))
+        level = LevelModule.GetLevel(ProfileData.NewXP)
+    end)
+    return level
+end
+
+local function getMainEvent()
+    local event = nil
+    pcall(function()
+        local EventInfoService = require(game:GetService("ReplicatedStorage"):WaitForChild("SharedServices"):WaitForChild("EventInfoService"))
+        event = EventInfoService:GetMainEvent()
+    end)
+    return event
+end
+
+local function getValentineCurrencyName()
+    local event = getMainEvent()
+    if not event or not event.EventStartInfo then return nil end
+    local info = event.EventStartInfo
+    if info.CurrencyName and type(info.CurrencyName) == "string" then return info.CurrencyName end
+    if info.KeyName and type(info.KeyName) == "string" then return info.KeyName end
+    local shop = info.ShopData
+    if shop and type(shop) == "table" then
+        for _, item in pairs(shop) do
+            if type(item) == "table" and item.Price and type(item.Price) == "table" then
+                for key in pairs(item.Price) do
+                    if type(key) == "string" and key ~= "Gems" and key ~= "Robux" and key ~= "Coins" then
+                        return key
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function getValentineCoins()
+    local ProfileData = getProfileData()
+    if not ProfileData or not ProfileData.Materials or not ProfileData.Materials.Owned then return nil end
+    local key = getValentineCurrencyName()
+    if not key then return nil end
+    local amount = ProfileData.Materials.Owned[key]
+    if type(amount) == "number" then return amount end
+    local n = tonumber(amount)
+    if n ~= nil then return n end
+    return 0
+end
+
+local function getValentineCratesOpened()
+    local ProfileData = getProfileData()
+    if not ProfileData then return nil end
+    local event = getMainEvent()
+    if not event or not event.Title or not event.EventStartInfo or not event.EventStartInfo.Quests then return nil end
+    local eventData = ProfileData[event.Title]
+    if not eventData or type(eventData) ~= "table" or not eventData.Quests then return nil end
+    local profileQuests = eventData.Quests
+    for questId, questInfo in pairs(event.EventStartInfo.Quests) do
+        if type(questInfo) == "table" and not questInfo.RefreshTime then
+            local boxData = profileQuests[questId] or profileQuests[tostring(questId)]
+            if boxData and type(boxData) == "table" then
+                local n = tonumber(boxData.Progress)
+                if n ~= nil then return n end
+            end
+            return 0
+        end
+    end
+    return nil
+end
+
+local function getValentineDailyQuestsProgress()
+    local completed, total = 0, 0
+    local rawProgress, maxChallenge = 0, 0
+    pcall(function()
+        local event = getMainEvent()
+        if not event or not event.EventStartInfo or not event.EventStartInfo.Quests then return end
+        local eventKey = event.Title
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData[eventKey] or not ProfileData[eventKey].Quests then return end
+        local profileQuests = ProfileData[eventKey].Quests
+        for questId, questInfo in pairs(event.EventStartInfo.Quests) do
+            if type(questInfo) == "table" and questInfo.Quests and #questInfo.Quests > 0 and questInfo.RefreshTime then
+                total = #questInfo.Quests
+                local progress = profileQuests[questId] and profileQuests[questId].Progress
+                if type(progress) ~= "number" then progress = tonumber(progress) end
+                if not progress then progress = 0 end
+                rawProgress = progress
+                -- Lấy max challenge (mốc cao nhất, vd: 240)
+                for i = 1, #questInfo.Quests do
+                    local req = questInfo.Quests[i].ChallengeAmount
+                    if req and req > maxChallenge then maxChallenge = req end
+                    if progress >= req then completed = completed + 1 end
+                end
+                break
+            end
+        end
+    end)
+    return completed, total, rawProgress, maxChallenge
+end
+
+local function getValentineBoxIdAndPrice()
+    local event = getMainEvent()
+    if not event or not event.EventStartInfo or not event.EventStartInfo.ShopData then return nil, nil, nil end
+    local shop = event.EventStartInfo.ShopData
+    for boxId, item in pairs(shop) do
+        if type(item) == "table" and item.Type == "MysteryBox" and item.Price and type(item.Price) == "table" then
+            local currencyKey = getValentineCurrencyName()
+            if currencyKey and item.Price[currencyKey] then
+                return boxId, currencyKey, tonumber(item.Price[currencyKey])
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+-- ========================================================================
+-- UTILITY FUNCTIONS
+-- ========================================================================
+
+local function formatNumber(num)
+    local formatted = tostring(num)
+    local k
+    while true do
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+local function displayNum(n)
+    if n == nil or type(n) ~= "number" then return "-" end
+    return formatNumber(n)
+end
+
+-- ========================================================================
+-- DISCORD WEBHOOK SYSTEM
+-- ========================================================================
+
+local function getSyncWeapons()
+    local ok, Sync = pcall(function()
+        return require(game:GetService("ReplicatedStorage"):WaitForChild("Database"):WaitForChild("Sync"))
+    end)
+    if not ok or not Sync or not Sync.Weapons then return nil end
+    return Sync.Weapons
+end
+
+local function getItemDisplayName(itemId)
+    if not itemId or type(itemId) ~= "string" then return tostring(itemId) end
+    local Weapons = getSyncWeapons()
+    if not Weapons then return itemId end
+    local item = Weapons[itemId]
+    if not item or type(item) ~= "table" then return itemId end
+    return (item.ItemName or item.Name or itemId)
+end
+
+local function getItemRarity(itemId)
+    if not itemId or type(itemId) ~= "string" then return "Unknown" end
+    local Weapons = getSyncWeapons()
+    if not Weapons then return "Unknown" end
+    local item = Weapons[itemId]
+    if not item or type(item) ~= "table" then return "Unknown" end
+    return item.Rarity or "Unknown"
+end
+
+local function isItemGodly(itemId)
+    return getItemRarity(itemId) == "Godly"
+end
+
+local function isChromaItem(itemId)
+    if not itemId or type(itemId) ~= "string" then return false end
+    if itemId:find("Chroma") then return true end
+    local Weapons = getSyncWeapons()
+    if Weapons then
+        local item = Weapons[itemId]
+        if item and type(item) == "table" and item.Chroma then return true end
+    end
     return false
 end
 
--- Lấy danh sách UID đang nằm trong booth của mình + số slot
-local function GetMyBoothListings()
-    local slotCount = 0
-    local uidOnBooth = {}
-
-    if not Booths or not ClaimedBooths or not ClaimedBooths[LocalPlayer] then
-        return 0, uidOnBooth
-    end
-
-    for _, Users in next, Booths do
-        for Username, Booth in next, Users do
-            for BoothInfo, InfoValues in next, Booth do
-                if BoothInfo == "Listings" and tostring(Username):find(LocalPlayer.Name) then
-                    for uid, info in next, InfoValues do
-                        slotCount += 1
-                        uidOnBooth[uid] = true
-                    end
-                    return slotCount, uidOnBooth
-                end
-            end
-        end
-    end
-
-    return slotCount, uidOnBooth
+-- Kiểm tra xem có nên gửi webhook cho rarity này không
+local function shouldWebhookRarity(rarity)
+    if not WEBHOOK_ENABLED or not WEBHOOK_URL or #WEBHOOK_URL == 0 then return false end
+    if not rarity or not WEBHOOK_RARITY then return false end
+    return WEBHOOK_RARITY[rarity] == true
 end
 
--- ================== TRACK UID ĐÃ LIST ================== --
--- 1 UID list được 1 lần; nếu muốn list tiếp phải là UID khác (bản khác của pet)
-
-local ListedUIDs = {}   -- uid -> true
-
--- Tìm pet phù hợp cho 1 cấu hình petCfg, bỏ qua UID đã list
-local function FindNextPet(petCfg)
-    local targetName  = petCfg.Name
-    local targetClass = petCfg.Class or "Pet"
-
-    local ok, result = pcall(function()
-        local state = InventoryCmds.State()
-        if not state or not state.container or not state.container._store then
-            return nil
+local function postWebhookBody(body)
+    if not WEBHOOK_ENABLED or not WEBHOOK_URL or #WEBHOOK_URL == 0 then return end
+    pcall(function()
+        local json = type(body) == "string" and body or HttpService:JSONEncode(body)
+        local req = (getgenv and getgenv().request) or (getgenv and getgenv().http_request)
+        if type(req) == "function" then
+            req({
+                Url = WEBHOOK_URL,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = json
+            })
+        else
+            HttpService:PostAsync(WEBHOOK_URL, json)
         end
-
-        local store  = state.container._store
-        local byType = store._byType
-        if not byType then return nil end
-
-        local classTable = byType[targetClass]
-        if not classTable or not classTable._byUID then
-            return nil
-        end
-
-        for uid, item in pairs(classTable._byUID) do
-            if ListedUIDs[uid] then
-                continue
-            end
-
-            local data   = item._data
-            local id     = item.GetId and item:GetId() or data and data.id
-            local locked = data and data._lk
-            local amount = data and (data._am or 1) or 1
-
-            if id == targetName and not locked and amount > 0 then
-                return {uid = uid, amount = amount}
-            end
-        end
-
-        return nil
     end)
-
-    if not ok then
-        warn("[Simple Seller]: Lỗi đọc inventory:", result)
-        return nil
-    end
-
-    return result
 end
 
--- ======================= MAIN LOOP ======================= --
-
-task.spawn(function()
-    warn("[Simple Seller]: BẮT ĐẦU.")
-
-    -- Init info Booth từ client
-    local boothInitOk = InitBooths()
-
-    if boothInitOk and AUTO_CLAIM then
-        ClaimOptimalBooth()
-    elseif boothInitOk and not AUTO_CLAIM then
-        warn("[Simple Seller]: AUTO_CLAIM_BOOTH = false -> bạn tự claim booth, script chỉ list pet.")
+-- Gửi webhook khi mở được item (check rarity)
+local function sendItemWebhook(playerName, weaponId)
+    local rarity = getItemRarity(weaponId)
+    if not shouldWebhookRarity(rarity) then return end
+    local isChroma = isChromaItem(weaponId)
+    local variant = isChroma and "Chroma" or "Normal"
+    local weaponDisplayName = getItemDisplayName(weaponId)
+    local p = playerName or "-"
+    local w = weaponDisplayName or tostring(weaponId) or "-"
+    
+    local rarityColors = {
+        Common = 8421504, Uncommon = 3066993, Rare = 3447003,
+        Legendary = 15844367, Godly = 15158332
+    }
+    
+    local embed = {
+        title = "🎁 Valentine Crate – " .. rarity .. " (" .. variant .. ")",
+        description = "**👤 Player:** " .. p .. "\n**⚔️ Weapon:** " .. w .. "\n**✨ Rarity:** " .. rarity .. " (" .. variant .. ")",
+        color = rarityColors[rarity] or 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if WEBHOOK_IMAGE_URL and #WEBHOOK_IMAGE_URL > 0 then
+        embed.thumbnail = { url = WEBHOOK_IMAGE_URL }
     end
+    postWebhookBody({ embeds = { embed } })
+end
 
-    -- Sau khi init booth, quét các UID đang nằm sẵn trên booth để khỏi list lại
-    if boothInitOk then
-        local slotCount, uidOnBooth = GetMyBoothListings()
-        for uid, _ in pairs(uidOnBooth) do
-            ListedUIDs[uid] = true
-        end
-        warn(string.format("[Simple Seller]: Đang có %d slot đã list sẵn trên booth.", slotCount))
+-- Backward compatible alias
+local function sendGodlyWebhook(playerName, weaponId)
+    sendItemWebhook(playerName, weaponId)
+end
+
+local function sendGodliesListWebhook(playerName, godlyItemIds)
+    if not WEBHOOK_ENABLED or not WEBHOOK_URL or #WEBHOOK_URL == 0 or not godlyItemIds or #godlyItemIds == 0 then return end
+    local lines = {}
+    for _, itemId in ipairs(godlyItemIds) do
+        local variant = isChromaItem(itemId) and "Chroma" or "Normal"
+        local name = getItemDisplayName(itemId)
+        table.insert(lines, "**" .. name .. "** (" .. variant .. ")")
     end
+    local weaponList = table.concat(lines, "\n")
+    local p = playerName or "-"
+    local embed = {
+        title = "🎁 Valentine – Godlies in inventory",
+        description = "**👤 Player Name**\n**" .. p .. "**\n\n**⚔️ Weapons**\n" .. weaponList,
+        color = 15158332,
+        footer = { text = "MM2 Valentine 2026" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    if WEBHOOK_IMAGE_URL and #WEBHOOK_IMAGE_URL > 0 then
+        embed.thumbnail = { url = WEBHOOK_IMAGE_URL }
+    end
+    postWebhookBody({ embeds = { embed } })
+end
 
-    while true do
-        -- Mỗi vòng: thử list từng pet trong danh sách
-        for _, petCfg in ipairs(PETS_CONFIG) do
-            local info = FindNextPet(petCfg)
-
-            if info and info.uid then
-                local toSell = math.min(petCfg.PerList or 1, info.amount)
-                local price  = petCfg.Price
-
-                warn(string.format(
-                    "[Simple Seller]: Thử list '%s' x%d @ %d",
-                    petCfg.Name, toSell, price
-                ))
-
-                local ok, res = pcall(function()
-                    return Network.Invoke("Booths_CreateListing", info.uid, price, toSell)
-                end)
-
-                if not ok then
-                    warn("[Simple Seller]: Lỗi Booths_CreateListing:", res)
-                elseif not res then
-                    -- thường là full slot / chưa mở booth / limit
-                    warn("[Simple Seller]: Booths_CreateListing trả về FALSE (có thể full slot / chưa claim booth / full slot / limit).")
-                else
-                    ListedUIDs[info.uid] = true
-                    warn(string.format(
-                        "[Simple Seller]: List thành công UID %s (%s).",
-                        tostring(info.uid), petCfg.Name
-                    ))
+local function getGodliesInInventory()
+    local list = {}
+    pcall(function()
+        local ProfileData = getProfileData()
+        if not ProfileData or not ProfileData.Weapons or not ProfileData.Weapons.Owned then return end
+        local Weapons = getSyncWeapons()
+        if not Weapons then return end
+        for itemId, _ in pairs(ProfileData.Weapons.Owned) do
+            if type(itemId) == "string" then
+                local item = Weapons[itemId]
+                if item and type(item) == "table" and item.Rarity == "Godly" then
+                    table.insert(list, itemId)
                 end
-            else
-                -- Không tìm được pet loại này, thôi kệ, sang loại khác
-                --warn("[Simple Seller]: Không còn pet '"..petCfg.Name.."' chưa list.")
             end
-
-            -- nghỉ tí giữa các pet cho đỡ spam
-            task.wait(0.1)
         end
+    end)
+    return list
+end
 
-        -- Vòng xong 1 lượt tất cả pet -> chờ rồi làm lại
-        task.wait(LOOP_DELAY)
+-- ========================================================================
+-- BEAUTIFUL FULL-SCREEN UI (Bản cũ - Neon style)
+-- ========================================================================
+
+-- Safe GUI parent: thử gethui → CoreGui → PlayerGui
+local function getGuiParent()
+    local parent
+    pcall(function() parent = gethui() end)
+    if parent then return parent end
+    pcall(function() parent = game:GetService("CoreGui") end)
+    if parent then return parent end
+    pcall(function() parent = game.Players.LocalPlayer:WaitForChild("PlayerGui") end)
+    return parent
+end
+
+local guiParent = getGuiParent()
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KenPhysicalMM2UI"
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+pcall(function() ScreenGui.Parent = guiParent end)
+
+local bg = Instance.new("Frame", ScreenGui)
+bg.Size = UDim2.new(1, 0, 1, 0)
+bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+bg.BorderSizePixel = 0
+bg.BackgroundTransparency = 0
+
+local function createNeon(label, color)
+    local stroke = Instance.new("UIStroke", label)
+    stroke.Thickness = 2
+    stroke.Color = color
+    stroke.Transparency = 0.3
+    
+    local glow = Instance.new("UIGradient", label)
+    glow.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, color)
+    }
+    glow.Rotation = 45
+end
+
+-- Title
+local Title = Instance.new("TextLabel", bg)
+Title.Size = UDim2.new(1, 0, 0, 100)
+Title.Position = UDim2.new(0, 0, 0.08, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "💕 Kenphysical Farm MM2"
+Title.TextColor3 = Color3.fromRGB(255, 100, 150)
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+createNeon(Title, Color3.fromRGB(255, 100, 150))
+
+-- Username Label
+local UsernameLabel = Instance.new("TextLabel", bg)
+UsernameLabel.Size = UDim2.new(1, 0, 0, 60)
+UsernameLabel.Position = UDim2.new(0, 0, 0.20, 0)
+UsernameLabel.BackgroundTransparency = 1
+UsernameLabel.Text = "👤 Tên: " .. Player.Name
+UsernameLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
+UsernameLabel.Font = Enum.Font.GothamSemibold
+UsernameLabel.TextScaled = true
+createNeon(UsernameLabel, Color3.fromRGB(255, 150, 200))
+
+-- Valentine Tokens Label
+local TokensLabel = Instance.new("TextLabel", bg)
+TokensLabel.Name = "TokensLabel"
+TokensLabel.Size = UDim2.new(1, 0, 0, 80)
+TokensLabel.Position = UDim2.new(0, 0, 0.30, 0)
+TokensLabel.BackgroundTransparency = 1
+TokensLabel.Text = "💝 Valentine Coin: -"
+TokensLabel.TextColor3 = Color3.fromRGB(255, 80, 120)
+TokensLabel.Font = Enum.Font.GothamBold
+TokensLabel.TextScaled = true
+createNeon(TokensLabel, Color3.fromRGB(255, 80, 120))
+
+-- Crates Opened Label
+local CratesLabel = Instance.new("TextLabel", bg)
+CratesLabel.Name = "CratesLabel"
+CratesLabel.Size = UDim2.new(1, 0, 0, 70)
+CratesLabel.Position = UDim2.new(0, 0, 0.42, 0)
+CratesLabel.BackgroundTransparency = 1
+CratesLabel.Text = "🎁 Crate Opened: -"
+CratesLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+CratesLabel.Font = Enum.Font.GothamBold
+CratesLabel.TextScaled = true
+createNeon(CratesLabel, Color3.fromRGB(255, 200, 0))
+
+-- Daily Quest Label
+local DailyLabel = Instance.new("TextLabel", bg)
+DailyLabel.Name = "DailyLabel"
+DailyLabel.Size = UDim2.new(1, 0, 0, 60)
+DailyLabel.Position = UDim2.new(0, 0, 0.53, 0)
+DailyLabel.BackgroundTransparency = 1
+DailyLabel.Text = "📋 Daily Quest: -/-"
+DailyLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+DailyLabel.Font = Enum.Font.GothamSemibold
+DailyLabel.TextScaled = true
+createNeon(DailyLabel, Color3.fromRGB(150, 255, 150))
+
+-- Online Time Label
+local OnlineLabel = Instance.new("TextLabel", bg)
+OnlineLabel.Name = "OnlineLabel"
+OnlineLabel.Size = UDim2.new(1, 0, 0, 60)
+OnlineLabel.Position = UDim2.new(0, 0, 0.64, 0)
+OnlineLabel.BackgroundTransparency = 1
+OnlineLabel.Text = "🕐 Online: 00:00:00"
+OnlineLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+OnlineLabel.Font = Enum.Font.GothamSemibold
+OnlineLabel.TextScaled = true
+createNeon(OnlineLabel, Color3.fromRGB(150, 150, 150))
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel", bg)
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Size = UDim2.new(1, 0, 0, 50)
+StatusLabel.Position = UDim2.new(0, 0, 0.75, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "⚡ Status: Đang khởi động..."
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextScaled = true
+createNeon(StatusLabel, Color3.fromRGB(255, 255, 255))
+
+-- Toggle UI Button (dùng cho LDPlayer / mobile) + phím H cho PC
+local UIS = game:GetService("UserInputService")
+local uiVisible = SHOW_UI
+
+-- Tạo nút toggle riêng biệt (nằm ngoài bg, luôn hiện)
+local ToggleBtnGui = Instance.new("ScreenGui")
+ToggleBtnGui.Name = "KenPhysicalToggle"
+ToggleBtnGui.IgnoreGuiInset = true
+ToggleBtnGui.ResetOnSpawn = false
+ToggleBtnGui.DisplayOrder = 9999
+pcall(function() ToggleBtnGui.Parent = guiParent end)
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(0, 10, 0.5, -22)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+ToggleBtn.BackgroundTransparency = 0.2
+ToggleBtn.Text = "💕"
+ToggleBtn.TextSize = 22
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = ToggleBtnGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = Color3.fromRGB(255, 150, 200)
+ToggleStroke.Parent = ToggleBtn
+
+-- Áp dụng ShowUI config
+bg.Visible = uiVisible
+if not uiVisible then
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    ToggleBtn.Text = "👁"
+end
+
+-- Cho phép kéo nút toggle đến vị trí khác trên màn hình
+local dragging, dragInput, dragStart, startPos
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ToggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
+
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        ToggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Click toggle
+local lastClickTime = 0
+ToggleBtn.MouseButton1Click:Connect(function()
+    -- Chỉ toggle nếu không phải đang kéo (kéo > 5px thì bỏ qua)
+    local now = tick()
+    if now - lastClickTime < 0.3 then return end
+    lastClickTime = now
+    
+    uiVisible = not uiVisible
+    bg.Visible = uiVisible
+    
+    if uiVisible then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+        ToggleBtn.Text = "💕"
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        ToggleBtn.Text = "👁"
+    end
+end)
+
+-- Vẫn giữ phím H cho PC
+UIS.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.H then
+        uiVisible = not uiVisible
+        bg.Visible = uiVisible
+        
+        if uiVisible then
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 120)
+            ToggleBtn.Text = "💕"
+        else
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            ToggleBtn.Text = "👁"
+        end
+    end
+end)
+
+-- ========================================================================
+-- UI UPDATE SYSTEM
+-- ========================================================================
+
+task.spawn(function()
+    task.wait(5)
+    while task.wait(1) do
+        pcall(function()
+            -- Update Valentine Coins
+            local coins = getValentineCoins()
+            TokensLabel.Text = "💝 Valentine Coin: " .. displayNum(coins)
+            
+            -- Update Crates Opened
+            local crates = getValentineCratesOpened()
+            CratesLabel.Text = "🎁 Crate Opened: " .. displayNum(crates)
+            
+            -- Update Daily Quest (hiện progress thực tế, vd: 40/240)
+            local dqDone, dqTotal, dqRaw, dqMax = getValentineDailyQuestsProgress()
+            local dqStr = (dqMax > 0) and (formatNumber(dqRaw) .. "/" .. formatNumber(dqMax)) or "-/-"
+            DailyLabel.Text = "📋 Daily Quest: " .. dqStr
+            
+            -- Update online time
+            local elapsed = math.floor(tick() - startTime)
+            local days = math.floor(elapsed / 86400)
+            local hours = math.floor((elapsed % 86400) / 3600)
+            local mins = math.floor((elapsed % 3600) / 60)
+            local secs = elapsed % 60
+            
+            if days > 0 then
+                OnlineLabel.Text = string.format("🕐 Online: %d ngày %02d:%02d:%02d", days, hours, mins, secs)
+            else
+                OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d", hours, mins, secs)
+            end
+        end)
+    end
+end)
+
+-- ========================================================================
+-- AUTO OPEN VALENTINE CRATE
+-- ========================================================================
+
+local function canOpenValentineCrate()
+    local ProfileData = getProfileData()
+    if not ProfileData or not ProfileData.Materials or not ProfileData.Materials.Owned then return false end
+    local boxId, currencyKey, required = getValentineBoxIdAndPrice()
+    if not boxId or not currencyKey or not required then return false end
+    local owned = ProfileData.Materials.Owned[currencyKey]
+    owned = (type(owned) == "number" and owned) or tonumber(owned) or 0
+    return owned >= required
+end
+
+local function openOneValentineCrate()
+    local boxId, currencyKey = getValentineBoxIdAndPrice()
+    if not boxId or not currencyKey then return nil end
+    local success, result = pcall(function()
+        return OpenCrateRemote:InvokeServer(boxId, "MysteryBox", currencyKey)
+    end)
+    if success and result ~= nil and result ~= false then return result end
+    return nil
+end
+
+-- Auto Open Crate Loop (with webhook by rarity)
+task.spawn(function()
+    task.wait(10)
+    while true do
+        pcall(function()
+            if canOpenValentineCrate() then
+                StatusLabel.Text = "⚡ Status: Đang mở crate..."
+                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                local result = openOneValentineCrate()
+                -- Gửi webhook nếu mở được item đúng rarity
+                if result and type(result) == "string" then
+                    sendItemWebhook(Player.Name, result)
+                elseif result and type(result) == "table" then
+                    for _, itemId in pairs(result) do
+                        if type(itemId) == "string" then
+                            sendItemWebhook(Player.Name, itemId)
+                        end
+                    end
+                end
+                task.wait(OPEN_CRATE_DELAY)
+            end
+        end)
+        task.wait(2)
+    end
+end)
+
+-- ========================================================================
+-- AUTO KICK (Decode - chuyển acc khi xong Daily Quest 240/240)
+-- ========================================================================
+
+if AUTOKICK_ENABLED then
+    task.spawn(function()
+        task.wait(30) -- Chờ game load đầy đủ
+        local alreadyKicked = false
+        while not alreadyKicked do
+            pcall(function()
+                if AUTOKICK_CONDITION == "DailyQuest" then
+                    local _, _, rawProgress, maxChallenge = getValentineDailyQuestsProgress()
+                    local currentLevel = getPlayerLevel() or 0
+                    local levelOk = (AUTOKICK_MIN_LEVEL <= 0) or (currentLevel >= AUTOKICK_MIN_LEVEL)
+                    local questOk = maxChallenge > 0 and rawProgress >= maxChallenge
+
+                    -- Debug log mỗi lần check
+                    print(string.format("[AutoKick] questOk=%s (%s/%s) | levelOk=%s (lv%s >= %s)",
+                        tostring(questOk), tostring(rawProgress), tostring(maxChallenge),
+                        tostring(levelOk), tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL)
+                    ))
+
+                    -- Update status
+                    if not questOk then
+                        StatusLabel.Text = "⚡ Status: Chờ Daily Quest (" .. tostring(rawProgress) .. "/" .. tostring(maxChallenge) .. ")"
+                        StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+                    elseif not levelOk then
+                        StatusLabel.Text = "⚡ Status: Chờ Level " .. AUTOKICK_MIN_LEVEL .. " (hiện: lv" .. currentLevel .. ")"
+                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+                    end
+
+                    -- Chỉ kick khi ĐỦ CẢ 2 điều kiện
+                    if questOk and levelOk then
+                        -- Chờ mở hết crate trước khi kick
+                        local waitCrate = 0
+                        while canOpenValentineCrate() and waitCrate < 60 do
+                            task.wait(3)
+                            waitCrate = waitCrate + 3
+                        end
+                        
+                        print("✅ Daily Quest hoàn thành! (" .. rawProgress .. "/" .. maxChallenge .. ")")
+                        StatusLabel.Text = "⚡ Status: Xong Daily Quest - Chuyển acc..."
+                        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                        
+                        -- Gửi signal cho Decode (writefile)
+                        pcall(function()
+                            writefile(Player.Name .. ".txt", "Done Quest")
+                        end)
+                        
+                        -- Gọi Decode API chuyển acc sang folder khác
+                        pcall(function()
+                            if getgenv().client and getgenv().client.ChangeToFolder then
+                                getgenv().client:ChangeToFolder(
+                                    AUTOKICK_FROM_FOLDER,
+                                    AUTOKICK_TO_FOLDER,
+                                    false,
+                                    nil
+                                )
+                                print("✅ Decode: Chuyển acc từ [" .. AUTOKICK_FROM_FOLDER .. "] → [" .. AUTOKICK_TO_FOLDER .. "]")
+                            end
+                        end)
+                        
+                        task.wait(3)
+                        alreadyKicked = true
+                        Player:Kick("Done Quest")
+                    end
+                end
+            end)
+            if not alreadyKicked then
+                task.wait(10) -- Check mỗi 10 giây
+            end
+        end
+    end)
+end
+
+-- Kick sau X phút online (độc lập với quest/level)
+if AUTOKICK_ENABLED and AUTOKICK_MAX_ONLINE > 0 then
+    task.spawn(function()
+        local limitSeconds = AUTOKICK_MAX_ONLINE * 60
+        task.wait(limitSeconds)
+        warn("[AutoKick] Đã online " .. AUTOKICK_MAX_ONLINE .. " phút - Đang kick...")
+        StatusLabel.Text = "⚡ Status: Hết " .. AUTOKICK_MAX_ONLINE .. " phút - Kick..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        task.wait(2)
+        Player:Kick("Max online reached")
+    end)
+end
+-- ========================================================================
+
+local function CreateFiles(FileName, File)
+    pcall(function()
+        makefolder("ServerHopper")
+        makefolder("ServerHopper//" .. game.PlaceId)
+        writefile("ServerHopper//" .. game.PlaceId .. "//" .. FileName .. ".json", File)
+    end)
+end
+
+local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
+    if Amount == nil then Amount = tonumber(math.huge) end
+    
+    local JobIDs = {}
+    local API, ServerPages
+    
+    local function FetchJobIDs()
+        JobIDs = {os.date("*t").hour}
+        local _s = tick()
+        
+        if Logs then print("🔍 Scraping servers...") end
+        
+        repeat
+            task.wait(2)
+            local success, result = pcall(function()
+                API = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100" .. (ServerPages and "&cursor=" .. ServerPages or "")))
+            end)
+
+            if not success then
+                if Logs then print("❌ API Error:", result) end
+                task.wait(10)
+                return false
+            end
+
+            for i, v in next, API["data"] do
+                if v["id"] ~= game.JobId and v["playing"] ~= v["maxPlayers"] and v["playing"] >= MinPlayers and v["playing"] <= MaxPlayers then
+                    if #JobIDs < Amount + 1 then
+                        table.insert(JobIDs, v["id"])
+                    end
+                end
+            end
+            ServerPages = API.nextPageCursor
+        until not ServerPages or #JobIDs >= Amount + 1
+        
+        if Logs then print("✅ Found " .. (#JobIDs - 1) .. " servers in " .. math.round(tick() - _s) .. "s") end
+        return true
+    end
+    
+    if not isfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json") then
+        FetchJobIDs()
+        CreateFiles("low_players-jobids", HttpService:JSONEncode(JobIDs))
+    end
+    
+    JobIDs = HttpService:JSONDecode(readfile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json"))
+    
+    if JobIDs[1] ~= os.date("*t").hour then
+        FetchJobIDs()
+        writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
+    end
+    
+    local function RandomJobID()
+        return JobIDs[math.random(1, #JobIDs)]
+    end
+    
+    local SelectedJobID = RandomJobID()
+    
+    if Logs then print("🎯 Hopping to server: " .. SelectedJobID) end
+    
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+    
+    Player.OnTeleport:Connect(function(Status)
+        if Status == Enum.TeleportState.Failed then
+            if Logs then print("❌ Failed, retrying...") end
+            SelectedJobID = RandomJobID()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
+        end
+    end)
+end
+
+-- ========================================================================
+-- ROUND TIMEOUT → SERVER HOP
+-- ========================================================================
+
+local function checkRoundTimeout()
+    if not HOP_ENABLED then return end
+    local currentTime = tick()
+    local timeSinceLastRound = currentTime - lastRoundStartTime
+    
+    if timeSinceLastRound >= ROUND_TIMEOUT and not isRoundActive then
+        print("🚨 No round started for " .. math.floor(ROUND_TIMEOUT / 60) .. " minutes! Server hopping...")
+        StatusLabel.Text = "⚡ Status: Server hop (no round)..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        hopToLowPlayers(true, HOP_SCRAPE_AMOUNT, HOP_MIN_PLAYERS, HOP_MAX_PLAYERS)
+    end
+end
+
+-- ========================================================================
+-- FARM FUNCTIONS
+-- ========================================================================
+
+local platform = nil
+
+local function createPlatform()
+    local existingPlatform = workspace:FindFirstChild("Papan")
+    if existingPlatform then return existingPlatform end
+
+    platform = Instance.new("Part")
+    platform.Size = Vector3.new(50, 1, 50)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Material = Enum.Material.SmoothPlastic
+    platform.Color = Color3.new(1, 1, 1)
+    platform.Name = "Papan"
+    
+    local randomX = math.random(-100, -50)
+    local randomZ = math.random(-150, -100)
+    platform.CFrame = CFrame.new(randomX, -180, randomZ)
+    platform.Parent = workspace
+    
+    return platform
+end
+
+-- Keep platform alive
+task.spawn(function()
+    while true do
+        createPlatform()
+        task.wait(5)
+    end
+end)
+
+local function teleportToPlatform()
+    local plat = workspace:FindFirstChild("Papan")
+    if not plat then plat = createPlatform() end
+    if BadanPart then
+        local yOffset = plat.Size.Y / 2 + BadanPart.Size.Y / 2 + 4
+        BadanPart.CFrame = plat.CFrame + Vector3.new(0, yOffset, 0)
+    end
+end
+
+local function tweenWithBodyVelocity(targetCFrame)
+    local bodyVelocity = BadanPart:FindFirstChild("BodyVelocity")
+    if not bodyVelocity then
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyVelocity.P = 1250
+        bodyVelocity.Velocity = Vector3.zero
+        bodyVelocity.Parent = BadanPart
+    end
+
+    local duration = 0
+    local tweenStartTime = tick()
+    local startCFrame = BadanPart.CFrame
+    local elapsedTime = 0
+
+    while elapsedTime < duration do
+        elapsedTime = tick() - tweenStartTime
+        local alpha = elapsedTime / duration
+        local currentCFrame = startCFrame:Lerp(targetCFrame, alpha)
+        local velocity = (currentCFrame.Position - BadanPart.Position).Unit * 25
+        bodyVelocity.Velocity = velocity
+        BadanPart.CFrame = currentCFrame
+        task.wait(0.01)
+    end
+
+    bodyVelocity.Velocity = Vector3.zero
+    bodyVelocity:Destroy()
+    BadanPart.CFrame = targetCFrame
+end
+
+local function returncoincontainer()
+    for _, v in workspace:GetChildren() do
+        if v:FindFirstChild("CoinContainer") and v:IsA("Model") then
+            return v:FindFirstChild("CoinContainer")
+        end
+    end
+    return false
+end
+
+local function getRandomCoin(container)
+    local coins = container:GetChildren()
+    for i = #coins, 2, -1 do
+        local j = math.random(1, i)
+        coins[i], coins[j] = coins[j], coins[i]
+    end
+    for _, coin in ipairs(coins) do
+        if coin:FindFirstChild("TouchInterest") then
+            return coin
+        end
+    end
+    return nil
+end
+
+-- ========================================================================
+-- EVENT HANDLERS
+-- ========================================================================
+
+CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
+    AutofarmStarted = true
+    
+    if tonumber(current) >= tonumber(max) then
+        AutofarmStarted = false
+        BagFull = true
+
+        if RESET_WHEN_FULL_BAG then
+            local isMurderer = false
+            pcall(function()
+                local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
+                local playerData = CurrentRoundClient.GetLatestPlayerData()
+                if playerData and playerData[Player.Name] then
+                    if playerData[Player.Name].Role == "Murderer" then
+                        isMurderer = true
+                    end
+                end
+            end)
+            
+            if not isMurderer then
+                pcall(function()
+                    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+                        Player.Character.Humanoid.Health = 0
+                    end
+                end)
+            end
+        end
+    end
+end)
+
+RoundStartEvent.OnClientEvent:Connect(function()
+    lastRoundStartTime = tick()
+    isRoundActive = true
+    AutofarmStarted = true
+    RoundEnded = false
+    BagFull = false
+    StatusLabel.Text = "⚡ Status: Đang farm..."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 150, 200)
+end)
+
+RoundEndEvent.OnClientEvent:Connect(function()
+    isRoundActive = false
+    AutofarmStarted = false
+    RoundEnded = true
+    StatusLabel.Text = "⚡ Status: Chờ round mới..."
+    StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+-- Check timeout every 30 seconds
+task.spawn(function()
+    task.wait(30)
+    while true do
+        checkRoundTimeout()
+        task.wait(30)
+    end
+end)
+
+-- ========================================================================
+-- MAIN AUTOFARM LOOP
+-- ========================================================================
+
+print("💕 Kenphysical MM2 Valentine 2026 Farm - Started!")
+print("⌨️ Press H to toggle UI")
+
+while true do
+    pcall(function()
+        if AUTO_FARM and AutofarmStarted and not RoundEnded and not BagFull and 
+            (function()
+                local success, result = pcall(function()
+                    local CurrentRoundClient = require(game.ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
+                    local playerData = CurrentRoundClient.PlayerData[Player.Name]
+                    return playerData and playerData.Dead ~= true
+                end)
+                return success and result
+            end)() then
+            
+            local character = Player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                BadanPart = character.HumanoidRootPart 
+                
+                local coinContainer = returncoincontainer()
+                if coinContainer then
+                    local coin = getRandomCoin(coinContainer)
+                    if coin then
+                        tweenWithBodyVelocity(coin.CFrame)
+
+                        local collectStart = tick()
+                        while coin.Parent == coinContainer and coin:FindFirstChild("TouchInterest") and (tick() - collectStart < 5) do
+                            -- Giữ character tại vị trí coin (CFrame overlap)
+                            pcall(function()
+                                BadanPart.CFrame = coin.CFrame
+                            end)
+                            task.wait(0.1)
+                            -- Fire touch interest (hoặc fallback CFrame overlap)
+                            pcall(function()
+                                firetouchinterest(BadanPart, coin, 0)
+                                task.wait(0.1)
+                                firetouchinterest(BadanPart, coin, 1)
+                            end)
+                            task.wait(0.1)
+                        end
+                        
+                        teleportToPlatform()
+                        task.wait(1.7)
+                    end
+                end
+            end
+        end
+    end)
+    task.wait(0.2)
+end
