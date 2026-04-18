@@ -144,7 +144,7 @@ print("[✅] KenPhysical Mail UI loaded (Toggle = H)")
 -- MAIL SCRIPT (Gửi luân phiên + Giữ lại gems)
 -----------------------------------------------------
 -- 🔥 DANH SÁCH NGƯỜI NHẬN (Thêm nhiều người vào đây)
-local PlayerToSend = {"JackOmegaQueen", "L3vi_Giga75", "Kaylee_Thunder16"}
+local PlayerToSend = {"Kensv2008", "phiphong004", "phiphong005"}
 local GemTreshold = 2000000     -- Bắt đầu gửi khi >= 2M gems
 local KeepGems = 1000000        -- Luôn giữ lại 1M gems
 local SendOnlyGems = false
