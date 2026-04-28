@@ -4,7 +4,7 @@
   "placeid": "8737899170",
   "threads": 2,
   "loops": 100,
-  "delay": 500,
+  "delay": 900,
   "no_proxy": true,
   "use_kiot": false,
   "use_file": false,
