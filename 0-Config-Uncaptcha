@@ -12,5 +12,6 @@
   "open_browser": true,
   "auto_getkey": false,
   "autostart": true,
-  "auto_farmsync": true
+  "auto_farmsync": true,
+  "auto_device_key": true
 }
