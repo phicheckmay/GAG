@@ -1,12 +1,16 @@
-Extenion: Omo-Captcha
-API KEY Captcha: PKG_X8LRMAJIQURSXQUPEGUKROEBYWY0VCKCRUALWLGQXLFOFBJI5V3LL0XFGB69JB1777388687
-PlaceID: Pet-99: 8737899170
-Threads: 2
-Loops: 100
-Delay (s): 500
-Proxy: No
-Check only: flase
-Open browser: true
-Auto GetKey: false
-Start with Windows: true
-Auto get acc FarmSync: true
+{
+  "extension_choice": "Omo-Captcha",
+  "api_key": "PKG_X8LRMAJIQURSXQUPEGUKROEBYWY0VCKCRUALWLGQXLFOFBJI5V3LL0XFGB69JB1777388687",
+  "placeid": "8737899170",
+  "threads": 2,
+  "loops": 100,
+  "delay": 500,
+  "no_proxy": true,
+  "use_kiot": false,
+  "use_file": false,
+  "check_only": false,
+  "open_browser": true,
+  "auto_getkey": false,
+  "autostart": true,
+  "auto_farmsync": true
+}
