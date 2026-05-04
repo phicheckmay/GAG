@@ -1,0 +1,203 @@
+getgenv().Config = {
+    Dashboard = {
+        Enabled = true,
+        SyncConfig = true,
+        GroupName = "ldplayer_farm",
+    },
+    BabyFarm = false,
+    AutoCertificate = true,  -- Auto gia han cert khi con 30 ngay
+    
+    PetFarm = {
+        Enabled = true,
+        FarmEggs = true,         -- Equip egg de farm task age up
+        BuyEggs = true,          -- Tu mua egg khi het (acc fresh khong co egg)
+        EggTypes = {"cracked_egg"},
+        BuyEggType = "cracked_egg",  -- Mua cracked egg - re nhat 600 bucks
+        MaxPets = 1,             -- Free, khong can Robux gamepass
+        FarmUntilFullGrown = true,  -- QUAN TRONG: Neon can pet Full Grown
+        PrioritizeFriendship = false,
+        SelectiveFarm = false,
+        SelectedPetTypes = {},
+    },
+    
+    AutoTrade = { Enabled = false },  -- Bat neu muon trade pet ve acc chinh
+    
+    AutoNeon = {
+        Enabled = true,
+        MakeMega = false,    -- Tat - acc farm khong du pet de mega (can 16 con/loai)
+        NeonAll = true,      -- Neon moi loai co du 4 Full Grown
+        SelectedPets = {},
+        MaxPerType = {},
+    },
+    
+    AutoPotion = { Enabled = false, SelectedPets = {}, PotionVersionFilter = {} },
+    AutoBuy = { Enabled = false, SelectedItems = {}, BuyAmounts = {} },
+    AutoPay = { Enabled = false },
+    AutoOpen = { Enabled = false, Items = {} },
+    
+    AutoRecycle = {
+        Enabled = true,  -- Bat de don pet le khong du 4 con fuse, tranh full inventory
+        RarityFilter = {
+            common = {"regular"},     -- Recycle common le
+            uncommon = {"regular"},   -- Recycle uncommon le
+            -- KHONG recycle rare/legendary - giu de trade
+        },
+        AgeFilter = {1, 2, 3, 4, 5},  -- Chi recycle pet chua Full Grown (giu lai Full Grown cho fuse)
+        ExcludedPets = {},
+    },
+    
+    IdleProgression = {
+        Enabled = true,  -- Bat - pet pen giup age up pet dang cho Neon
+        SelectedPets = {},
+        ExcludedPets = {},
+        PriorityOrder = {"regular"},  -- Uu tien age up regular de fuse Neon
+        PenVersionFilter = {},
+    },
+    
+    AccountManager = {
+        Enabled = true,
+        Tool = "farmsync",
+        Yummy = { Action = "completed", Reason = "Done" },
+        FarmSync = {
+            Action = "swap",
+            FromFolderId = "",   -- Dien folder ID fresh cookies
+            ToFolderId = "",     -- Dien folder ID done cookies
+            ChangeWithoutReplacement = false,
+            ConfigId = nil,
+            ApiKey = "",         -- Dien FarmSync API key
+        },
+        Triggers = {
+            AfterTradeComplete = false,
+            MinBucks = 5000,    -- Doi acc khi dat 5k bucks
+            MinPotions = 3,     -- Hoac khi co 3 potion
+        },
+    },
+    
+    Settings = {
+        AutoShowUI = false,        -- Tat UI de giam RAM
+        ShowOverlay = false,       -- Tat overlay - tat 3D rendering
+        ReduceGraphics = true,     -- Giam graphics toi da
+        FPSCap = 10,               -- Cap 10 FPS - can bang nhe may va on dinh
+        LureId = "ice_dimension_2025_ice_soup_bait",
+        TradeInvites = "Friends",  -- Tranh spam invite tu random
+    },
+    
+    Webhook = {
+        Enabled = false,
+        URL = "getgenv().Config = {
+    Dashboard = {
+        Enabled = true,
+        SyncConfig = true,
+        GroupName = "ldplayer_farm",
+    },
+    BabyFarm = false,
+    AutoCertificate = true,  -- Auto gia han cert khi con 30 ngay
+    
+    PetFarm = {
+        Enabled = true,
+        FarmEggs = true,         -- Equip egg de farm task age up
+        BuyEggs = true,          -- Tu mua egg khi het (acc fresh khong co egg)
+        EggTypes = {"cracked_egg"},
+        BuyEggType = "cracked_egg",  -- Mua cracked egg - re nhat 600 bucks
+        MaxPets = 1,             -- Free, khong can Robux gamepass
+        FarmUntilFullGrown = true,  -- QUAN TRONG: Neon can pet Full Grown
+        PrioritizeFriendship = false,
+        SelectiveFarm = false,
+        SelectedPetTypes = {},
+    },
+    
+    AutoTrade = { Enabled = false },  -- Bat neu muon trade pet ve acc chinh
+    
+    AutoNeon = {
+        Enabled = true,
+        MakeMega = false,    -- Tat - acc farm khong du pet de mega (can 16 con/loai)
+        NeonAll = true,      -- Neon moi loai co du 4 Full Grown
+        SelectedPets = {},
+        MaxPerType = {},
+    },
+    
+    AutoPotion = { Enabled = false, SelectedPets = {}, PotionVersionFilter = {} },
+    AutoBuy = { Enabled = false, SelectedItems = {}, BuyAmounts = {} },
+    AutoPay = { Enabled = false },
+    AutoOpen = { Enabled = false, Items = {} },
+    
+    AutoRecycle = {
+        Enabled = true,  -- Bat de don pet le khong du 4 con fuse, tranh full inventory
+        RarityFilter = {
+            common = {"regular"},     -- Recycle common le
+            uncommon = {"regular"},   -- Recycle uncommon le
+            -- KHONG recycle rare/legendary - giu de trade
+        },
+        AgeFilter = {1, 2, 3, 4, 5},  -- Chi recycle pet chua Full Grown (giu lai Full Grown cho fuse)
+        ExcludedPets = {},
+    },
+    
+    IdleProgression = {
+        Enabled = true,  -- Bat - pet pen giup age up pet dang cho Neon
+        SelectedPets = {},
+        ExcludedPets = {},
+        PriorityOrder = {"regular"},  -- Uu tien age up regular de fuse Neon
+        PenVersionFilter = {},
+    },
+    
+    AccountManager = {
+        Enabled = true,
+        Tool = "farmsync",
+        Yummy = { Action = "completed", Reason = "Done" },
+        FarmSync = {
+            Action = "swap",
+            FromFolderId = "",   -- Dien folder ID fresh cookies
+            ToFolderId = "",     -- Dien folder ID done cookies
+            ChangeWithoutReplacement = false,
+            ConfigId = nil,
+            ApiKey = "",         -- Dien FarmSync API key
+        },
+        Triggers = {
+            AfterTradeComplete = false,
+            MinBucks = 5000,    -- Doi acc khi dat 5k bucks
+            MinPotions = 3,     -- Hoac khi co 3 potion
+        },
+    },
+    
+    Settings = {
+        AutoShowUI = false,        -- Tat UI de giam RAM
+        ShowOverlay = false,       -- Tat overlay - tat 3D rendering
+        ReduceGraphics = true,     -- Giam graphics toi da
+        FPSCap = 3,               -- Cap 10 FPS - can bang nhe may va on dinh
+        LureId = "ice_dimension_2025_ice_soup_bait",
+        TradeInvites = "Friends",  -- Tranh spam invite tu random
+    },
+    
+    Webhook = {
+        Enabled = false,
+        URL = "https://discord.com/api/webhooks/1500882720056934543/jWRSuLKPflTwqlUsY3LnVYhyRUkh75BNgb6QMzlqbNoSWn2iAfPj2xEgNZ-2JVkU_lpg",
+        PetUnlock = {
+            Enabled = true,
+            URL = "https://discord.com/api/webhooks/1500882835576328232/pWS4CLGqtqXsQf7PjOTHr_aiEvmBQFhSwHeInJqUSFhNHC2WfL_xoGOb5qnj6LlG2ci9",  -- Tao lai webhook (token cu da bi expose)
+            FilterRarities = {"legendary", "ultra_rare"},
+        },
+    },
+    
+    TaskExclusion = {
+        Enabled = true,
+        ExcludedTasks = {"salon_manager"},  -- Update 01/05/2026 da remove salon manager job
+    },
+};
+
+getgenv().scriptkey = "NuphSseGzsgXdKAOaBYnaqhQBzHftBhf"
+loadstring(game:HttpGet("https://zekehub.com/scripts/AdoptMe/MassFarm.lua"))()",
+        PetUnlock = {
+            Enabled = true,
+            URL = "WEBHOOK_MOI_SAU_KHI_REVOKE",  -- Tao lai webhook (token cu da bi expose)
+            FilterRarities = {"legendary", "ultra_rare"},
+        },
+    },
+    
+    TaskExclusion = {
+        Enabled = true,
+        ExcludedTasks = {"salon_manager"},  -- Update 01/05/2026 da remove salon manager job
+    },
+};
+
+getgenv().scriptkey = "NuphSseGzsgXdKAOaBYnaqhQBzHftBhf"
+loadstring(game:HttpGet("https://zekehub.com/scripts/AdoptMe/MassFarm.lua"))()
