@@ -1,16 +1,19 @@
-script_key="script_key="VRgrpbnpHCapkttNDSefRnBpaTMQwzlt";
+script_key="VRgrpbnpHCapkttNDSefRnBpaTMQwzlt";
 getgenv().GAG2Config = {
-    AUTO_UPDATE_RESTART = true,
     FPS_CAP = 5,
+    AUTO_UPDATE_RESTART = true,
+
     BUY_PET = {  -- ["Pet Name"] = Amount
+        ["Monkey"] = 99, 
+        ["Bee"] = 99, 
         ["BlackDragon"] = 99, 
         ["GoldenDragonfly"] = 99, 
         ["Unicorn"] = 99, 
         ["Raccoon"] = 99, 
         ["IceSerpent"] = 99,
 
-        ["Robin"] = 3,
-        ["Deer"] = 3,
+        ["Robin"] = 5,
+        ["Deer"] = 5,
     },
 
     EQUIP_PET = {  -- {"Pet Name", Amount to Equip, Priority}
@@ -31,6 +34,7 @@ getgenv().GAG2Config = {
         ["Corn"] = 4,
         ["Cactus"] = 4,
         ["Pineapple"] = 4,
+        ["Mushroom"] = 50,
         ["Green Bean"] = 50,
         ["Banana"] = 50,
         ["Grape"] = 50,
@@ -38,6 +42,11 @@ getgenv().GAG2Config = {
         ["Mango"] = 50,
         ["Dragon Fruit"] = 50,
         ["Acorn"] = 50,
+        ["Cherry"] = 50,
+        ["Sunflower"] = 50,
+        ["Venus Fly Trap"] = 50,
+        ["Pomegranate"] = 50,
+        ["Poison Apple"] = 50,
     },
 
     BUY_SEED = {  -- ["Seed Name"] = Amount
@@ -58,7 +67,12 @@ getgenv().GAG2Config = {
         ["Coconut"] = 999,
         ["Mango"] = 999,
         ["Dragon Fruit"] = 999,
+        ["Acorn"] = 999,
+        ["Cherry"] = 999,
+        ["Sunflower"] = 999,
         ["Venus Fly Trap"] = 999,
+        ["Pomegranate"] = 999,
+        ["Poison Apple"] = 999,
         ["Moon Bloom"] = 999,
         ["Dragon's Breath"] = 999,
     },
@@ -74,7 +88,7 @@ getgenv().GAG2Config = {
 
     -- Auto Mail
     AUTO_MAIL_USERNAME = { "kensv2008", "phiphong004", "phiphong005" },  -- "Username" (Randomized)
-    AUTO_MAIL_ITEM_NAME = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["Black Dragon"] = 1, ["IceSerpent"] = 1, ["Mushroom"] = 20, ["Bamboo"] = 20},  -- ["Item Name"] = Amount
+    AUTO_MAIL_ITEM_NAME = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["Black Dragon"] = 1, ["IceSerpent"] = 1, ["Mushroom"] = 20, ["Bamboo"] = 20}, 
     COLLECT_MAIL = true,
 
     -- Discord
