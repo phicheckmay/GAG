@@ -11,7 +11,6 @@ getgenv().GAG2Config = {
         ["Unicorn"] = 99, 
         ["Raccoon"] = 99, 
         ["IceSerpent"] = 99,
-
         ["Robin"] = 5,
         ["Deer"] = 5,
     },
@@ -34,7 +33,6 @@ getgenv().GAG2Config = {
         ["Corn"] = 4,
         ["Cactus"] = 4,
         ["Pineapple"] = 4,
-        ["Mushroom"] = 50,
         ["Green Bean"] = 50,
         ["Banana"] = 50,
         ["Grape"] = 50,
@@ -43,10 +41,7 @@ getgenv().GAG2Config = {
         ["Dragon Fruit"] = 50,
         ["Acorn"] = 50,
         ["Cherry"] = 50,
-        ["Sunflower"] = 50,
-        ["Venus Fly Trap"] = 50,
-        ["Pomegranate"] = 50,
-        ["Poison Apple"] = 50,
+        ["Sunflower"] = 50,        
     },
 
     BUY_SEED = {  -- ["Seed Name"] = Amount
