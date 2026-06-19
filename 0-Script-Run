@@ -92,14 +92,14 @@ getgenv().GAG2Config = {
     },
 
     -- mailing
-    ["Mail To Username"] = {"kensv2008", "phiphong004", "phiphong005", "missngoc001", "missngoc002", "missngoc003"},
+    ["Mail To Username"] = {"kensv2008", "phiphong004", "phiphong005"},
     ["Mail Items"]       = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["BlackDragon"] = 1, ["IceSerpent"] = 1, ["Gold Seed"] = 20},  -- name = how many to ship
     ["Collect Mail"]     = true,
 
     -- discord
     ["Webhook Pet Names"]      = {},  -- blank = every pet
     ["Webhook Pet Rarities"]   = { "Legendary", "Mythic", "Super", "Secret" },
-    ["Webhook URL"]            = "",
+    ["Webhook URL"]            = "https://discord.com/api/webhooks/1515637362648940616/BzMJbfqlHhFe0kOaViB8-dZtcWoDq39uMrxYCIDRullVuwEQ_iNjT8QxkOFnajdyiW6n",
     ["Discord ID"]             = "",
     ["Webhook Note"]           = "",
     ["Show Public Discord ID"] = true,  -- public ping only (name/JobId never posted publicly)
