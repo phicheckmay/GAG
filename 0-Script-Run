@@ -69,10 +69,10 @@ getgenv().GAG2Config = {
 
     ["Harvest Only If Mutated"] = {"Bamboo", "Mushroom"},
     ["Favourite Fruit"]         = {},
-    ["Sell Delay"]              = 20,
+    ["Sell Delay"]              = 15,
     ["Auto Bargain"]            = true,
     ["Expand Plot"]             = true,
-    ["Plant Cap"]               = 200,  -- 0 = unlimited
+    ["Plant Cap"]               = 300,  -- 0 = unlimited
     ["Stop Money Cap"]          = 40000000,
     ["Gears To Use"] = {
         ["Common Sprinkler"]    = 4,
@@ -92,14 +92,14 @@ getgenv().GAG2Config = {
     },
 
     -- mailing
-    ["Mail To Username"] = {"kensv2008", "phiphong004", "phiphong005"},
+    ["Mail To Username"] = {"kensv2008", "phiphong004", "phiphong005", "missngoc001", "missngoc002", "missngoc003"},
     ["Mail Items"]       = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["BlackDragon"] = 1, ["IceSerpent"] = 1, ["Gold Seed"] = 20},  -- name = how many to ship
     ["Collect Mail"]     = true,
 
     -- discord
     ["Webhook Pet Names"]      = {},  -- blank = every pet
     ["Webhook Pet Rarities"]   = { "Legendary", "Mythic", "Super", "Secret" },
-    ["Webhook URL"]            = "https://discord.com/api/webhooks/1515637362648940616/BzMJbfqlHhFe0kOaViB8-dZtcWoDq39uMrxYCIDRullVuwEQ_iNjT8QxkOFnajdyiW6n",
+    ["Webhook URL"]            = "",
     ["Discord ID"]             = "",
     ["Webhook Note"]           = "",
     ["Show Public Discord ID"] = true,  -- public ping only (name/JobId never posted publicly)
