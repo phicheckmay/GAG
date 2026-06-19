@@ -1,100 +1,109 @@
-script_key="VRgrpbnpHCapkttNDSefRnBpaTMQwzlt";
+script_key = "bVUvFOyJZvKMifyktMuOMXOsDQkhCNSQ";   -- drop your Luarmor key in here
 getgenv().GAG2Config = {
-    FPS_CAP = 5,
-    AUTO_UPDATE_RESTART = true,
+    ["FPS Cap"] = 5,
 
-    BUY_PET = {  -- ["Pet Name"] = Amount
-        ["Monkey"] = 99, 
-        ["Bee"] = 99, 
-        ["BlackDragon"] = 99, 
-        ["GoldenDragonfly"] = 99, 
-        ["Unicorn"] = 99, 
-        ["Raccoon"] = 99, 
-        ["IceSerpent"] = 99,
-        ["Robin"] = 5,
-        ["Deer"] = 5,
+    ["Pets To Buy"] = {  -- name = how many
+        ["Monkey"]          = 0,
+        ["BlackDragon"]     = 0,
+        ["GoldenDragonfly"] = 99,
+        ["Unicorn"]         = 99,
+        ["Raccoon"]         = 99,
+        ["Deer"]            =  5,
+    },
+    ["Pets To Equip"] = {  -- { name, slots, order }
+        { "Unicorn",          5, 1 },
+        { "GoldenDragonfly", 10, 2 },
+        { "Deer",             5, 4 },
     },
 
-    EQUIP_PET = {  -- {"Pet Name", Amount to Equip, Priority}
-        {"Unicorn", 5, 1}, 
-        {"GoldenDragonfly", 10, 2},
-        {"Robin", 5, 3},
-        {"Deer", 5, 4},
+    ["Seeds To Plant"] = {  -- name = how many to grow
+        ["Carrot"]          =  50,
+        ["Strawberry"]      =   20,
+        ["Blueberry"]       =   20,
+        ["Tulip"]           =  50,
+        ["Tomato"]          =   20,
+        ["Apple"]           =   20,
+        ["Bamboo"]          = 999,
+        ["Corn"]            =   20,
+        ["Cactus"]          =   20,
+        ["Pineapple"]       =   20,
+        ["Mushroom"]        = 999,
+        ["Green Bean"]      = 20,
+        ["Banana"]          =  20,
+        ["Grape"]           =  20,
+        ["Coconut"]         =  20,
+        ["Mango"]           =  20,
+        ["Dragon Fruit"]    =  20,
+        ["Acorn"]           =  20,
+        ["Cherry"]          =  20,
+        ["Sunflower"]       =  20,
+        ["Venus Fly Trap"]  =  0,
+        ["Pomegranate"]     =  0,
+        ["Poison Apple"]    =  0,
+        ["Moon Bloom"]      =  0,
+        ["Dragon's Breath"] =  0,
+		
+    },
+    ["Seeds To Buy"] = {  -- name = how many to keep stocked
+        ["Moon Bloom"]      = 9999,
+        ["Dragon's Breath"] = 9999,
+        ["Mushroom"]        = 9999,
+        ["Venus Fly Trap"]  = 5,
+        ["Sunflower"]       = 5,
+        ["Bamboo"]          = 9999,
+        ["Pomegranate"]     = 5,
+        ["Cherry"]          = 5,
+        ["Poison Apple"]    = 0,
+        ["Acorn"]           = 5,
+        ["Dragon Fruit"]    = 5,
+        ["Tulip"]           = 5,
+        ["Mango"]           = 5,
+        ["Cactus"]          = 5,
+        ["Banana"]          = 5,
+        ["Corn"]            = 5,
+        ["Coconut"]         = 5,
+        ["Grape"]           = 5,
+        ["Pineapple"]       = 5,
+        ["Tomato"]          = 5,
+        ["Blueberry"]       = 5,
+        ["Strawberry"]      = 5,
     },
 
-    PLANT_SEED = {  -- ["Seed Name"] = Amount
-        ["Carrot"] = 50, 
-        ["Strawberry"] = 4,
-        ["Blueberry"] = 4,
-        ["Tulip"] = 50,
-        ["Tomato"] = 4,
-        ["Apple"] = 4,
-        ["Bamboo"] = 50,
-        ["Corn"] = 4,
-        ["Cactus"] = 4,
-        ["Pineapple"] = 4,
-        ["Green Bean"] = 50,
-        ["Banana"] = 50,
-        ["Grape"] = 50,
-        ["Coconut"] = 50,
-        ["Mango"] = 50,
-        ["Dragon Fruit"] = 50,
-        ["Acorn"] = 50,
-        ["Cherry"] = 50,
-        ["Sunflower"] = 50,        
+    ["Harvest Only If Mutated"] = {},
+    ["Favourite Fruit"]         = {},
+    ["Sell Delay"]              = 15,
+    ["Auto Bargain"]            = true,
+    ["Expand Plot"]             = false,
+    ["Plant Cap"]               = 400,  -- 0 = unlimited
+    ["Stop Money Cap"]          = 40000000,
+    ["Gears To Use"] = {
+        ["Common Sprinkler"]    = 4,
+        ["Rare Sprinkler"]      = 2,
+        ["Common Watering Can"] = 5,
+    },
+    ["Sprinklers To Use"] = {  -- best-first
+        "Legendary Sprinkler",
+        "Rare Sprinkler",
+        "Common Sprinkler",
+    },
+    ["Watering Cans To Use"] = {  -- best-first; empty to disable
+        "Common Watering Can",
     },
 
-    BUY_SEED = {  -- ["Seed Name"] = Amount
-        ["Carrot"] = 999, 
-        ["Strawberry"] = 999,
-        ["Blueberry"] = 999,
-        ["Tulip"] = 999,
-        ["Tomato"] = 999,
-        ["Apple"] = 999,
-        ["Bamboo"] = 999,
-        ["Corn"] = 999,
-        ["Cactus"] = 999,
-        ["Pineapple"] = 999,
-        ["Mushroom"] = 999,
-        ["Green Bean"] = 999,
-        ["Banana"] = 999,
-        ["Grape"] = 999,
-        ["Coconut"] = 999,
-        ["Mango"] = 999,
-        ["Dragon Fruit"] = 999,
-        ["Acorn"] = 999,
-        ["Cherry"] = 999,
-        ["Sunflower"] = 999,
-        ["Venus Fly Trap"] = 999,
-        ["Pomegranate"] = 999,
-        ["Poison Apple"] = 999,
-        ["Moon Bloom"] = 999,
-        ["Dragon's Breath"] = 999,
-    },
+    -- mailing
+    ["Mail To Username"] = {"kensv2008", "phiphong004", "phiphong005", "missngoc001", "missngoc002", "missngoc003"},
+    ["Mail Items"]       = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["BlackDragon"] = 1, ["IceSerpent"] = 1, ["Gold Seed"] = 20, ["Bee"] = 1},  -- name = how many to ship
+    ["Collect Mail"]     = true,
 
-    COLLECT_PLANT_IF_MUTATED = { "Bamboo", "Mushroom", "Green Bean" },  -- Only collect fruit when have ANY mutation
-    FAVOURITE_FRUIT = {},  -- ["Fruit Name"] = {} ... or ... ["Fruit Name"] = { "Gold", "Rainbow" }
-
-    SELL_ALL_DELAY = 20,
-    EXPAND_PLOT = false,
-    BUY_GEAR = {},  -- ["Gear Name"] = Amount
-    BUY_CRATE = {},  -- ["Crate Name"] = Amount
-    USE_SPRINKLER = {},  -- "Sprinkler Name"
-
-    -- Auto Mail
-    AUTO_MAIL_USERNAME = { "kensv2008", "phiphong004", "phiphong005" },  -- "Username" (Randomized)
-    AUTO_MAIL_ITEM_NAME = {["Rainbow"] = 1, ["Moon Bloom"] = 1, ["Dragon's Breath"] = 1, ["GoldenDragonfly"] = 1, ["Unicorn"] = 1, ["Raccoon"] = 1, ["Black Dragon"] = 1, ["IceSerpent"] = 1, ["Mushroom"] = 20, ["Bamboo"] = 20}, 
-    COLLECT_MAIL = true,
-
-    -- Discord
-    WEBHOOK_PET_NAME = {},
-    WEBHOOK_PET_RARITY = { "Mythic", "Super", "Secret" },
-    WEBHOOK_URL = "https://discord.com/api/webhooks/1515637362648940616/BzMJbfqlHhFe0kOaViB8-dZtcWoDq39uMrxYCIDRullVuwEQ_iNjT8QxkOFnajdyiW6n",
-    DISCORD_ID = "",
-    WEBHOOK_NOTE = "",  -- Private Webhook
-    SHOW_PUBLIC_DISCORD_ID = true,
-    SHOW_WEBHOOK_USERNAME = true,  -- Private Webhook
-    SHOW_WEBHOOK_JOBID = true,  -- Private Webhook
+    -- discord
+    ["Webhook Pet Names"]      = {},  -- blank = every pet
+    ["Webhook Pet Rarities"]   = { "Legendary", "Mythic", "Super", "Secret" },
+    ["Webhook URL"]            = "",
+    ["Discord ID"]             = "",
+    ["Webhook Note"]           = "",
+    ["Show Public Discord ID"] = false,  -- public ping only (name/JobId never posted publicly)
+    ["Show Webhook Username"]  = true,
+    ["Show Webhook JobId"]     = false,
 }
 
-loadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/c9ea3aa6c782de82dee4bcf6b9a9d03e.lua"))()
+loadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/ac1a4db4a5a88c65086dd5891742e237.lua"))()
