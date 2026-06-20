@@ -3,6 +3,7 @@ script_key = "bVUvFOyJZvKMifyktMuOMXOsDQkhCNSQ"   -- drop your Luarmor key in he
 getgenv().GAG2Config = {
 
     ["Limit Plant Seed"] = {
+        ["Venom Spitter"] = 50,
         ["Carrot"]       = 500,
         ["Strawberry"]   = 20,
         ["Blueberry"]    = 20,
@@ -25,6 +26,7 @@ getgenv().GAG2Config = {
     },
 
     ["Limit Buy Seed"] = {
+        ["Venom Spitter"] = 9999,
         ["Carrot"]       = 999,
         ["Strawberry"]   = 20,
         ["Blueberry"]    = 20,
@@ -60,6 +62,7 @@ getgenv().GAG2Config = {
         ["Robin"]            = { Big = 99, Huge = 99, Rainbow = 99 },
         ["Bee"]              = { Big = 99, Huge = 99, Rainbow = 99 },
         ["Monkey"]           = 999,
+        ["Bear"]           = 999,
         ["Golden Dragonfly"] = 999,
         ["Unicorn"]          = 999,
         ["Raccoon"]          = 999,
@@ -81,11 +84,11 @@ getgenv().GAG2Config = {
 
     ["Items To Mail"] = {
 		["Pet"] = {
-		["GoldenDragonfly"] = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-		["Unicorn"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-		["Raccoon"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-		["BlackDragon"]     = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-		["IceSerpent"]      = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["Golden Dragonfly"] = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["Unicorn"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["Raccoon"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["Black Dragon"]     = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["IceSerpent"]      = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
 		},
 		
 		["Seed"] = {
