@@ -80,14 +80,24 @@ getgenv().GAG2Config = {
     ["Gear Buy Min Money"]   = 200000,
 
     ["Items To Mail"] = {
-        ["Pet"] = {
-            ["Bee"] = { Normal = 1, Big = 1, Huge = 1, To = "" },
-        },
-        ["Seed"] = {
-            ["Mushroom"] = { Amount = 1, To = "" },
-        },
-        ["Gear"] = {},
-    },
+		["Pet"] = {
+		["GoldenDragonfly"] = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+		["Unicorn"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+		["Raccoon"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+		["BlackDragon"]     = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+		["IceSerpent"]      = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+		},
+		
+		["Seed"] = {
+			["Rainbow Seed"]    = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
+			["Moon Bloom"]      = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
+			["Dragon's Breath"] = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
+			["Gold Seed"]       = { Amount = 20, To = {"missngoc001", "missngoc002", "missngoc003"} },
+		},
+
+		["Gear"] = {},
+	},
+
 
     ["Collect Mail"]       = false,
     ["Stop Money Cap"]     = 0,
