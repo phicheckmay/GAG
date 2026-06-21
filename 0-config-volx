@@ -1,0 +1,34 @@
+{
+  "auto_update": false,
+  "cpu_cores": 0,
+  "efficiency_mode": true,
+
+  "fps": 5,
+  "fps_cap": true,
+  "task_fps": 8,
+
+  "no_render": true,
+
+  "hide_password": true,
+  "hide_prints": true,
+  "hide_warns": true,
+
+  "optimize_system": true,
+
+  "ram_cap_mb": 1500,
+  "ram_min_mb": 750,
+
+  "virtual_ram_gb": 128,
+  "virtual_ram_drive": "D",
+
+  "volt": {
+    "anti_afk": true,
+    "bit_library": false,
+    "multi_instance": true,
+    "raknet_library": false,
+    "redirect_output": false,
+    "silent_errors": true,
+    "stream_proof_graphics": false,
+    "unlock_window_size": false
+  }
+}
