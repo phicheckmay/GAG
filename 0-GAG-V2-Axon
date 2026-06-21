@@ -61,12 +61,10 @@ getgenv().GAG2Config = {
         ["Deer"]             = { Huge = 99, Rainbow = 99 },
         ["Robin"]            = { Big = 99, Huge = 99, Rainbow = 99 },
         ["Bee"]              = { Big = 99, Huge = 99, Rainbow = 99 },
-        ["Monkey"]           = 999,
         ["Bear"]           = 999,
         ["Golden Dragonfly"] = 999,
         ["Unicorn"]          = 999,
         ["Raccoon"]          = 999,
-        ["Black Dragon"]     = 999,
     },
 
     ["Pets To Equip"] = {
@@ -77,25 +75,25 @@ getgenv().GAG2Config = {
 
     ["Pet Buy Min Money"] = 200000,
 
-    ["Sprinklers To Use"]    = { "Super Sprinkler", "Legendary Sprinkler", "Rare Sprinkler", "Uncommon Sprinkler", "Common Sprinkler" },
-    ["Watering Cans To Use"] = { "Super Watering Can", "Common Watering Can" },
-    ["Gears To Use"]         = { "Super Sprinkler", "Legendary Sprinkler", "Rare Sprinkler", "Uncommon Sprinkler", "Common Sprinkler", "Super Watering Can", "Common Watering Can" },
-    ["Gear Buy Min Money"]   = 200000,
+    ["Sprinklers To Use"]    = { "Legendary Sprinkler", "Rare Sprinkler", "Uncommon Sprinkler", "Common Sprinkler" },
+    ["Watering Cans To Use"] = { "Common Watering Can" },
+    ["Gears To Use"]         = { "Legendary Sprinkler", "Rare Sprinkler", "Uncommon Sprinkler", "Common Sprinkler", "Common Watering Can" },
+    ["Gear Buy Min Money"]   = 5000000,
 
     ["Items To Mail"] = {
 		["Pet"] = {
-			["Golden Dragonfly"] = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-			["Unicorn"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-			["Raccoon"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-			["Black Dragon"]     = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
-			["IceSerpent"]      = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008", "phiphong004", "phiphong005"} },
+			["GoldenDragonfly"] = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008"} },
+			["Unicorn"]         = { Normal = 1, Big = 0, Huge = 0, To = {"phiphong004"} },
+			["Raccoon"]         = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008"} },
+			["BlackDragon"]     = { Normal = 1, Big = 0, Huge = 0, To = {"phiphong005"} },
+			["IceSerpent"]      = { Normal = 1, Big = 0, Huge = 0, To = {"kensv2008"} },
 		},
 		
 		["Seed"] = {
-			["Rainbow Seed"]    = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
-			["Moon Bloom"]      = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
-			["Dragon's Breath"] = { Amount = 1, To = {"missngoc001", "missngoc002", "missngoc003"} },
-			["Gold Seed"]       = { Amount = 20, To = {"missngoc001", "missngoc002", "missngoc003"} },
+			["Rainbow Seed"]    = { Amount = 1, To = { "missngoc001"} },
+			["Moon Bloom"]      = { Amount = 1, To = {"missngoc002"} },
+			["Dragon's Breath"] = { Amount = 1, To = {"missngoc003"} },
+			["Gold Seed"]       = { Amount = 20, To = {"missngoc001"} },
 		},
 
 		["Gear"] = {},
