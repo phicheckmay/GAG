@@ -18,7 +18,7 @@
   "ram_cap_mb": 1500,
   "ram_min_mb": 750,
 
-  "virtual_ram_gb": 128,
+  "virtual_ram_gb": 280,
   "virtual_ram_drive": "D",
 
   "volt": {
