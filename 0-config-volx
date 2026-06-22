@@ -1,26 +1,19 @@
 {
   "auto_update": false,
-  "cpu_cores": 0,
-  "efficiency_mode": true,
-
+  "cpu_cores": 2,
+  "efficiency_mode": false,
   "fps": 5,
   "fps_cap": true,
-  "task_fps": 8,
-
-  "no_render": true,
-
   "hide_password": true,
   "hide_prints": true,
   "hide_warns": true,
-
+  "no_render": true,
   "optimize_system": true,
-
   "ram_cap_mb": 1500,
-  "ram_min_mb": 750,
-
-  "virtual_ram_gb": 280,
-  "virtual_ram_drive": "D",
-
+  "ram_min_mb": 1000,
+  "task_fps": 5,
+  "virtual_ram_drive": "",
+  "virtual_ram_gb": 100,
   "volt": {
     "anti_afk": true,
     "bit_library": false,
