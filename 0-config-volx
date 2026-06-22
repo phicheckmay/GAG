@@ -9,7 +9,7 @@
   "hide_warns": true,
   "no_render": true,
   "optimize_system": true,
-  "ram_cap_mb": 1500,
+  "ram_cap_mb": 2000,
   "ram_min_mb": 1000,
   "task_fps": 5,
   "virtual_ram_drive": "",
@@ -20,7 +20,7 @@
     "multi_instance": true,
     "raknet_library": false,
     "redirect_output": false,
-    "silent_errors": true,
+    "silent_errors": false,
     "stream_proof_graphics": false,
     "unlock_window_size": false
   }
