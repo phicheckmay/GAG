@@ -13,7 +13,7 @@
   "ram_min_mb": 1000,
   "task_fps": 5,
   "virtual_ram_drive": "",
-  "virtual_ram_gb": 100,
+  "virtual_ram_gb": 280,
   "volt": {
     "anti_afk": true,
     "bit_library": false,
