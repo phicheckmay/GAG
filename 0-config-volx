@@ -1,6 +1,6 @@
 {
   "auto_update": false,
-  "cpu_cores": 2,
+  "cpu_cores": 0,
   "efficiency_mode": false,
   "fps": 5,
   "fps_cap": true,
