@@ -1,5 +1,6 @@
 {
-  "auto_update": false,
+  "_help": "cpu_cores: CPU cores per Roblox instance (0 = unlimited). ram_min_mb: guaranteed RAM kept resident per instance, in MB (0 = auto, half the cap; ignored when ram_cap_mb is 0). ram_cap_mb: physical RAM ceiling per instance, in MB (0 = no cap). fps: Roblox FPS cap (0 = uncapped). fps_cap: true caps FPS at the fps value; false removes the FPS-cap autoexec script entirely (uncapped). task_fps: engine task-scheduler target FPS — throttles the whole Roblox engine (physics, networking, scripts) to cut CPU; lower = less CPU but slower farming; 0 = no throttle. Unlike fps, which only caps rendered frames, this slows the engine itself. no_render: true disables Roblox 3D rendering (the client shows a black screen but keeps running) to cut GPU load; false = normal rendering. efficiency_mode: true runs every Roblox instance at below-normal priority to yield CPU to other work (no execution-speed throttle); false = normal scheduling. hide_prints: true hides Roblox script print() output from the volt-headless console; false = show prints. hide_warns: true hides Roblox script warn() output from the volt-headless console; false = show warns. hide_password: true hides the Volt password as you type it at the login prompt; false = show it. auto_update: true makes volt-headless check for a new build every hour while running and restart into it automatically; false = update only on the next manual restart. cpu_cores, ram_min_mb, ram_cap_mb, fps, task_fps, fps_cap, no_render and efficiency_mode apply within ~10 seconds of saving; hide_prints, hide_warns, hide_password and auto_update take effect on the next volt-headless restart. optimize_system: when true AND volt-headless is run as Administrator, it applies farm-reliability tweaks on startup (force IPv4 by disabling IPv6, sync the clock to time.cloudflare.com, disable WerFault crash popups) to prevent 'Volt API unreachable' crashes; full effect after a reboot; ignored when not running as admin; false = skip entirely. virtual_ram_gb: total Windows page file ('virtual RAM') size in GB for running many Roblox instances — each instance reserves ~2-3 GB of commit, so ~40+ tabs need a large page file or new instances fail to launch with out-of-memory even when RAM looks free; 0 = leave Windows-managed (default, untouched); needs admin and a REBOOT to take effect, and consumes that much disk on the target drive. virtual_ram_drive: drive letter to host the page file (e.g. 'D'); empty = auto-pick the fixed drive with the most free space; the request is refused if the drive cannot hold the page file plus ~15 GB headroom. volt: Volt client toggles forwarded to the executor — anti_afk/multi_instance/redirect_output default on, the rest off; volt-headless writes these into Volt's settings.json and sends them in the handshake.",
+  "auto_update": true,
   "cpu_cores": 0,
   "efficiency_mode": false,
   "fps": 5,
@@ -9,8 +10,8 @@
   "hide_warns": true,
   "no_render": true,
   "optimize_system": true,
-  "ram_cap_mb": 1500,
-  "ram_min_mb": 1000,
+  "ram_cap_mb": 1300,
+  "ram_min_mb": 0,
   "task_fps": 5,
   "virtual_ram_drive": "",
   "virtual_ram_gb": 0,
@@ -20,7 +21,7 @@
     "multi_instance": true,
     "raknet_library": false,
     "redirect_output": false,
-    "silent_errors": false,
+    "silent_errors": true,
     "stream_proof_graphics": false,
     "unlock_window_size": false
   }
