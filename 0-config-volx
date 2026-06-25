@@ -3,7 +3,7 @@
   "auto_update": true,
   "cpu_cores": 2,
   "efficiency_mode": false,
-  "fps": 7,
+  "fps": 5,
   "fps_cap": true,
   "hide_password": true,
   "hide_prints": true,
