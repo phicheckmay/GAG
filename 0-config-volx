@@ -11,7 +11,7 @@
   "no_render": true,
   "optimize_system": true,
   "ram_cap_mb": 1300,
-  "ram_min_mb": 0,
+  "ram_min_mb": 800,
   "task_fps": 5,
   "virtual_ram_drive": "",
   "virtual_ram_gb": 300,
