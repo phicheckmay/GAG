@@ -1,0 +1,603 @@
+----------------------------------------------------------------
+-- ====================  CONFIG (SUA O DAY)  ====================
+----------------------------------------------------------------
+local CONFIG = {
+
+    -- Danh sach tai khoan nhan. Moi luot gui se random chon 1 username trong day.
+    USERNAMES = {
+        "kensv2008", "phiphong004", "phiphong005",
+        "missngoc001", "missngoc002", "missngoc003",
+    },
+
+    -- Danh sach vat pham can quet trong tui de gui (co bao nhieu gui bay nhieu).
+    -- Ten khong can dau cach / hoa thuong giong het (vd "GoldenDragonfly" = "Golden Dragonfly").
+    ITEMS = {
+    "Rainbow",
+    "Moon Bloom",
+    "Hypno Bloom",
+    "Dragon's Breath",
+    "GoldenDragonfly",
+    "Unicorn",
+    "Raccoon",
+    "BlackDragon",
+    "IceSerpent",
+    "Super Watering Can",
+    "Super Sprinkler",
+    "Mega",
+    "Mega Moon",
+    "Legendary Sprinkler",    
+    },
+
+    COLLECT_MAIL = false,   -- true = tu dong nhan mail lien tuc
+
+    MAIL_LOOP        = true, -- true = gui lap lai (cu dinh ky quet kho roi gui tiep item moi farm duoc)
+    MAIL_INTERVAL    = 30,   -- moi luot gui cach nhau bao nhieu giay (chi dung khi MAIL_LOOP = true)
+
+    -- Khi cham tran 100 gift/ngay
+    STOP_ON_LIMIT    = false, -- false = nghi roi tu gui tiep khi reset (loop); true = dung han phai chay lai tay
+    LIMIT_WAIT       = 1800,  -- nghi bao nhieu giay roi thu lai khi cham tran (1800 = 30 phut)
+
+    -- Tuy chinh thoi gian (giay)
+    SEND_DELAY       = 1.8, -- nghi giua moi lan gui mail
+    COLLECT_INTERVAL = 5,   -- moi bao lau quet nhan mail 1 lan
+    LOOKUP_DELAY     = 0.6, -- nghi giua moi lan tra userId (tranh bi game chan)
+    STARTUP_RETRY    = 3,   -- neu game/module chua san sang (inject som): doi bao nhieu giay roi thu lai
+    MAX_SEND         = 0,   -- gioi han TONG so mail (gift) ca phien (0 = khong gioi han). Game chi cho 100 gift/ngay
+
+    -- Dong goi mail (gop nhieu mon vao 1 mail cho do ton gift)
+    MAX_PER_ITEM     = 20,  -- so luong toi da MOI MON trong 1 mail (luat game)
+    ITEMS_PER_MAIL   = 8,   -- so MON khac nhau toi da trong 1 mail (giam neu game bao loi gui)
+
+    RESEND_WAIT      = 600, -- khi TAT CA nguoi nhan day hom thu: nghi bao nhieu giay roi check & gui lai (600 = 10 phut)
+}
+
+----------------------------------------------------------------
+-- ========================  ENGINE  ===========================
+-- (khong can sua phan duoi)
+----------------------------------------------------------------
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer        -- gan trong waitUntilReady (sau khi game san sang)
+local PlayerStateClient  -- gan trong waitUntilReady
+local Networking         -- gan trong waitUntilReady
+
+-- CONSTANTS
+local Messages = {
+    "Enjoy this!", "For you", "Gift time", "Take this", "Have fun",
+    "Lucky day", "Happy gift", "Free stuff", "Just because", "One for you",
+}
+local listCategories = { Pets = true, HarvestedFruits = true }
+local COOLDOWN       = 1.8   -- cho khi server bao "wait"
+local MAX_WAIT_RETRY = 8
+local CLAIM_DELAY    = 0.4
+local AFKINTERVAL    = 60
+local AFKKILLLOOP    = 10
+local SEND_DELAY       = tonumber(CONFIG.SEND_DELAY)       or 1.8
+local COLLECT_INTERVAL = tonumber(CONFIG.COLLECT_INTERVAL) or 5
+local MAIL_INTERVAL    = tonumber(CONFIG.MAIL_INTERVAL)    or 30
+local LIMIT_WAIT       = tonumber(CONFIG.LIMIT_WAIT)       or 1800
+local LOOKUP_DELAY     = tonumber(CONFIG.LOOKUP_DELAY)     or 0.6
+local STARTUP_RETRY    = tonumber(CONFIG.STARTUP_RETRY)    or 3
+local MAX_SEND         = tonumber(CONFIG.MAX_SEND)         or 0
+local MAX_PER_ITEM     = tonumber(CONFIG.MAX_PER_ITEM)     or 20
+local ITEMS_PER_MAIL   = tonumber(CONFIG.ITEMS_PER_MAIL)   or 8
+local ENTRIES_PER_MAIL = math.max(20, MAX_PER_ITEM)        -- so entry toi da 1 lan SendBatch (an toan)
+local RESEND_WAIT      = tonumber(CONFIG.RESEND_WAIT)      or 600
+
+-- LOG (in ra console Kaitun)
+local function log(msg, kind)
+    if kind == "danger" or kind == "warn" then
+        warn("[MailGag] "..msg)
+    else
+        print("[MailGag] "..msg)
+    end
+end
+
+----------------------------------------------------------------
+-- ANTI-AFK
+----------------------------------------------------------------
+local function setupAntiAfk() pcall(function()
+    local VU = game:GetService("VirtualInputManager")
+    local RS = ReplicatedStorage
+
+    local function killHop()
+        local ok, Net = pcall(require, RS.SharedModules.Networking)
+        if not ok or type(Net) ~= "table" then return end
+        local rh = Net.AntiAfk and Net.AntiAfk.RequestHop
+        if type(rh) ~= "table" then return end
+        if not rh.__hopKilled then
+            rh.Fire = function() end
+            rh.__hopKilled = true
+        end
+    end
+    local function killFlag()
+        local ok, flags = pcall(require, RS.SharedModules.Flags.AntiAfkFlags)
+        if not ok or type(flags) ~= "table" or type(flags.Enabled) ~= "table" then return end
+        pcall(function() flags.Enabled.Get    = function() return false    end end)
+        pcall(function() flags.IdleSeconds.Get = function() return math.huge end end)
+    end
+    local function fakeInput()
+        pcall(function()
+            VU:SendKeyEvent(true,  Enum.KeyCode.RightControl, false, game)
+            task.wait(0.05)
+            VU:SendKeyEvent(false, Enum.KeyCode.RightControl, false, game)
+        end)
+    end
+    local function clearSignal(signal)
+        local node = signal.Next
+        while node and node ~= signal do node.Function = nil ; node = node.Next end
+        signal.Next = signal ; signal.Previous = signal
+    end
+    pcall(function() clearSignal(Networking.AntiAfk.RequestHop.OnClientEvent) end)
+    pcall(function()
+        if type(getconnections) == "function" then
+            for _, conn in pairs(getconnections(LocalPlayer.Idled)) do conn:Disable() end
+        end
+    end)
+    pcall(function()
+        local VU2 = game:GetService("VirtualUser")
+        LocalPlayer.Idled:Connect(function()
+            VU2:ClickButton2(Vector2.new(math.random(0,1000), math.random(0,1000)))
+        end)
+    end)
+    pcall(function()
+        if type(hookmetamethod) ~= "function" or type(newcclosure) ~= "function" then return end
+        local blocked = {
+            ["Server Closing"]=true, ["Idle Tracking: Update Timer"]=true, ["Move Server"]=true,
+        }
+        local old ; old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            if not checkcaller() and blocked[tostring(self)] then return nil end
+            return old(self, ...)
+        end))
+    end)
+    killFlag()
+    task.spawn(function() while true do pcall(killHop) pcall(killFlag) task.wait(AFKKILLLOOP) end end)
+    task.spawn(function() while true do fakeInput() task.wait(AFKINTERVAL) end end)
+end) end
+
+----------------------------------------------------------------
+-- INVENTORY
+----------------------------------------------------------------
+local function getInventory()
+    local replica = PlayerStateClient:GetLocalReplica()
+    if not replica or not replica.Data or not replica.Data.Inventory then return {} end
+    return replica.Data.Inventory
+end
+
+local function entryDisplayName(entry)
+    if type(entry) ~= "table" then return nil end
+    return entry.Name or entry.Type or entry.ItemType or nil
+end
+
+local function buildItemList()
+    local inv    = getInventory()
+    local result = {}
+    for category, data in pairs(inv) do
+        if type(data) ~= "table" then continue end
+        if listCategories[category] then
+            local counts, sendable = {}, {}
+            for _, entry in pairs(data) do
+                local name = entryDisplayName(entry)
+                if not name then continue end
+                counts[name] = (counts[name] or 0) + 1
+                if not entry.Equipped then
+                    sendable[name] = (sendable[name] or 0) + 1
+                end
+            end
+            for name, total in pairs(counts) do
+                result[#result+1] = {
+                    Category = category, Key = name,
+                    Count = total, Sendable = sendable[name] or 0, IsList = true,
+                }
+            end
+        else
+            for key, c in pairs(data) do
+                local n = tonumber(c)
+                if n and n > 0 then
+                    result[#result+1] = {
+                        Category = category, Key = key,
+                        Count = n, Sendable = n, IsList = false,
+                    }
+                end
+            end
+        end
+    end
+    return result
+end
+
+local function getIdsByName(category, name, limit)
+    local inv  = getInventory()
+    local data = inv[category]
+    local ids  = {}
+    if type(data) ~= "table" then return ids end
+    for id, entry in pairs(data) do
+        local ename = entryDisplayName(entry)
+        if ename == name and not entry.Equipped then
+            ids[#ids+1] = id
+            if #ids >= limit then break end
+        end
+    end
+    return ids
+end
+
+----------------------------------------------------------------
+-- CLAIM MAIL (cho COLLECT_MAIL)
+----------------------------------------------------------------
+local function claimAllMail()
+    local ok, inbox = pcall(function()
+        return Networking.Mailbox.OpenInbox:Fire()
+    end)
+    if not ok or type(inbox) ~= "table" then return 0, "Khong mo duoc inbox" end
+
+    local claimable = {}
+    for giftId, payload in pairs(inbox) do
+        if type(payload) == "table" then
+            local kind = payload.Kind or payload.Type or ""
+            if kind ~= "GuildInvite" then
+                claimable[#claimable+1] = giftId
+            end
+        end
+    end
+    if #claimable == 0 then return 0, "Inbox trong" end
+
+    local claimed, failed = 0, 0
+    local RETRY_WAIT  = 1.5
+    local MAX_RETRIES = 3
+    for _, giftId in ipairs(claimable) do
+        local ok_final = false
+        for attempt = 1, MAX_RETRIES do
+            local pok, result = pcall(function()
+                return Networking.Mailbox.Claim:Fire(giftId)
+            end)
+            if pok and result == true then ok_final = true ; break end
+            if attempt < MAX_RETRIES then task.wait(RETRY_WAIT) end
+        end
+        if ok_final then claimed += 1 else failed += 1 end
+        task.wait(CLAIM_DELAY)
+    end
+
+    if failed == 0 then
+        return claimed, "Da nhan "..claimed.."/"..#claimable.." mail"
+    else
+        return claimed, "Nhan "..claimed.."/"..#claimable.." ("..failed.." that bai)"
+    end
+end
+
+----------------------------------------------------------------
+-- BUILD TASK LIST tu CONFIG
+----------------------------------------------------------------
+-- chuan hoa ten: bo dau cach/ '/_/- va ve thuong de so khop
+local function norm(s)
+    return (tostring(s):lower():gsub("[%s'_%-]", ""))
+end
+
+-- tao bang tra cuu: ten chuan hoa -> record (Category/Key/Sendable/IsList)
+local function buildLookup()
+    local list = buildItemList()
+    local map  = {}
+    for _, rec in ipairs(list) do
+        local k = norm(rec.Key)
+        if not map[k] or rec.Sendable > map[k].Sendable then
+            map[k] = rec
+        end
+    end
+    return map
+end
+
+-- tra userId tu ten, thu lai vai lan vi game hay chan khi goi lien tuc
+local function lookupPlayer(name)
+    for attempt = 1, 3 do
+        local ok, uid = pcall(function()
+            return Networking.Mailbox.LookupPlayer:Fire(name)
+        end)
+        if ok and type(uid) == "number" and uid > 0 then
+            return uid
+        end
+        if attempt < 3 then task.wait(LOOKUP_DELAY) end
+    end
+    return nil
+end
+
+-- Resolve danh sach username -> userId (chay 1 lan). Tra ve { {name, userId}, ... }
+local function resolveUsernames(list)
+    local out = {}
+    for _, name in ipairs(list) do
+        local uid = lookupPlayer(name)
+        if uid then
+            out[#out+1] = { name = name, userId = uid }
+        else
+            log("Bo qua '"..name.."': khong tra duoc userId (offline / sai ten / bi chan)", "warn")
+        end
+        task.wait(LOOKUP_DELAY)
+    end
+    return out
+end
+
+-- Quet kho HIEN TAI theo list item, tao packet cho item nao dang co (chay moi luot)
+-- verbose=true thi bao nhung item trong list ma khong co trong tui (de phat hien go sai ten)
+local function buildItems(itemList, verbose)
+    local lookup = buildLookup()                -- quet item dang co
+    local items, missing = {}, {}
+    for _, name in ipairs(itemList) do
+        local rec = lookup[norm(name)]
+        if not rec then
+            missing[#missing+1] = name
+        else
+            local packets = {}
+            if rec.IsList then
+                local ids = getIdsByName(rec.Category, rec.Key, math.huge)
+                local i = 1
+                while i <= #ids do                          -- gom moi MAX_PER_ITEM con thanh 1 packet
+                    local stop, entries = math.min(i + MAX_PER_ITEM - 1, #ids), {}
+                    for k = i, stop do entries[#entries+1] = { Category = rec.Category, ItemKey = ids[k], Count = 1 } end
+                    packets[#packets+1] = { key = rec.Key, entries = entries, units = (stop - i + 1) }
+                    i = stop + 1
+                end
+            else
+                local left = rec.Sendable
+                while left > 0 do                            -- moi packet 1 entry, Count <= MAX_PER_ITEM
+                    local c = math.min(MAX_PER_ITEM, left)
+                    packets[#packets+1] = { key = rec.Key, entries = { { Category = rec.Category, ItemKey = rec.Key, Count = c } }, units = c }
+                    left = left - c
+                end
+            end
+            if #packets > 0 then
+                items[#items+1] = { key = rec.Key, queue = packets }
+            end
+        end
+    end
+    if verbose and #missing > 0 then
+        log("Khong co trong tui (bo qua): "..table.concat(missing, ", "), "dim")
+    end
+    return items
+end
+
+-- dong goi packet thanh mail: moi mail <= ITEMS_PER_MAIL mon, <= ENTRIES_PER_MAIL entry, khong 2 packet trung mon
+local function packMails(packets, userId, recipient)
+    table.sort(packets, function(p, q) return #p.entries > #q.entries end)   -- packet to xep truoc
+    local total, used, done = #packets, {}, 0
+    local mails = {}
+    while done < total do
+        local entries, keys, pks, slots, units = {}, {}, {}, 0, 0
+        for i = 1, total do
+            if not used[i] then
+                local p = packets[i]
+                if (not keys[p.key]) and slots < ITEMS_PER_MAIL
+                   and (#entries + #p.entries) <= ENTRIES_PER_MAIL then
+                    for _, e in ipairs(p.entries) do entries[#entries+1] = e end
+                    keys[p.key] = true ; slots = slots + 1
+                    pks[#pks+1] = p ; units = units + p.units
+                    used[i] = true ; done = done + 1
+                end
+            end
+        end
+        if slots == 0 then break end                          -- phong loi: packet qua to so voi gioi han
+        mails[#mails+1] = { userId = userId, recipient = recipient, entries = entries, packets = pks, slots = slots, units = units }
+    end
+    return mails
+end
+
+-- gui 1 mail (nhieu mon trong 1 SendBatch), co thu lai khi server bao "wait"
+local function sendMailBatch(mail)
+    local note  = Messages[math.random(1, #Messages)]
+    local tries = 0
+    while true do
+        tries = tries + 1
+        local pok, success, msg = pcall(function()
+            return Networking.Mailbox.SendBatch:Fire(mail.userId, mail.entries, note)
+        end)
+        if pok and success then
+            return true
+        elseif pok and type(msg) == "string" and msg:lower():find("wait") and tries <= MAX_WAIT_RETRY then
+            task.wait(COOLDOWN)
+        else
+            return false, tostring(msg)
+        end
+    end
+end
+
+----------------------------------------------------------------
+-- RUNNERS
+----------------------------------------------------------------
+-- Gui het 'items' trong 1 luot: chon 1 username random gui TAT CA; day thi doi username; tat ca day -> nghi RESEND_WAIT
+-- state.totalSent = so mail da gui tich luy ca phien (de chot MAX_SEND)
+-- tra ve: result ("limit" cham tran ngay | "maxsend" du MAX_SEND | "done"), so mail gui trong luot nay
+local function sendItems(items, usernames, state)
+    -- gom het packet vao 1 hang doi phang
+    local remaining = {}
+    for _, it in ipairs(items) do
+        for _, p in ipairs(it.queue) do remaining[#remaining+1] = p end
+    end
+
+    local fullSet = {}
+    local result, stop, passSent = "done", false, 0
+
+    while (not stop) and #remaining > 0 do
+        -- chon 1 username CHUA day hom thu
+        local cand = {}
+        for _, u in ipairs(usernames) do
+            if not fullSet[u.name] then cand[#cand+1] = u end
+        end
+
+        if #cand == 0 then
+            -- tat ca username deu day -> nghi roi check lai
+            local mins = math.floor(RESEND_WAIT / 60)
+            log("Tat ca username dang day hom thu -> tam dung "..mins.." phut roi check & gui lai", "warn")
+            local left = RESEND_WAIT
+            while left > 0 do local w = math.min(30, left) ; task.wait(w) ; left = left - w end
+            fullSet = {}                              -- gia su recipient da nhat mail trong cho
+            log("Het gio nghi -> thu gui lai", "accent")
+        else
+            local pick  = cand[math.random(1, #cand)]   -- random 1 username
+            local batch = remaining
+            remaining   = {}                            -- lay het goi gui cho nguoi nay
+            local mails = packMails(batch, pick.userId, pick.name)
+            for mi = 1, #mails do
+                local mail = mails[mi]
+                local ok, err = sendMailBatch(mail)
+                if ok then
+                    state.totalSent = state.totalSent + 1
+                    passSent = passSent + 1
+                    log("["..state.totalSent.."] -> "..pick.name.." : "..mail.slots.." mon ("..mail.units.." don vi)", "accent")
+                else
+                    local le = tostring(err):lower()
+                    if le:find("limit") then
+                        log("Tai khoan gui da cham gioi han 100 gift/ngay -> DUNG.", "danger")
+                        result = "limit" ; stop = true ; break
+                    elseif le:find("full") then
+                        log(pick.name.." day hom thu -> doi username khac", "warn")
+                        fullSet[pick.name] = true
+                        for k = mi, #mails do                 -- tra mail nay + cac mail sau ve hang doi
+                            for _, p in ipairs(mails[k].packets) do remaining[#remaining+1] = p end
+                        end
+                        break
+                    else
+                        log("LOI gui -> "..pick.name.." : ("..tostring(err)..") -> bo qua goi nay", "danger")
+                    end
+                end
+                if MAX_SEND > 0 and state.totalSent >= MAX_SEND then
+                    result = "maxsend" ; stop = true ; break
+                end
+                task.wait(SEND_DELAY)
+            end
+        end
+    end
+
+    return result, passSent
+end
+
+local function runAutoMail()
+    local usernames = CONFIG.USERNAMES
+    local itemList  = CONFIG.ITEMS
+    if type(usernames) ~= "table" or #usernames == 0 then log("USERNAMES rong -> dung auto mail", "warn") ; return end
+    if type(itemList)  ~= "table" or #itemList  == 0 then log("ITEMS rong -> dung auto mail", "warn") ; return end
+
+    log("Resolve "..#usernames.." username...", "accent")
+    local resolved = resolveUsernames(usernames)
+    if #resolved == 0 then
+        log("Khong co username hop le -> dung auto mail", "warn")
+        return
+    end
+
+    local loopOn = CONFIG.MAIL_LOOP and true or false
+    local state  = { totalSent = 0 }
+    local pass   = 0
+
+    while true do
+        pass = pass + 1
+        if loopOn then log("===== Luot gui #"..pass.." =====", "accent") end
+
+        local items = buildItems(itemList, pass == 1)   -- bao item thieu chi luot dau
+        local total = 0
+        for _, it in ipairs(items) do total = total + #it.queue end
+
+        if total == 0 then
+            log("Khong co item nao trong tui de gui luc nay", loopOn and "dim" or "warn")
+        else
+            log("Tim thay "..#items.." loai item, "..total.." goi can gui (moi goi <="..MAX_PER_ITEM.." don vi)", "accent")
+
+            local result, passSent = sendItems(items, resolved, state)
+            log("Luot #"..pass.." xong: gui "..passSent.." mail (tong phien: "..state.totalSent..")", "accent")
+
+            if result == "limit" then
+                if (not loopOn) or CONFIG.STOP_ON_LIMIT then
+                    log("Het han muc 100 gift/ngay -> dung auto mail (phan nhan mail van chay). Mai chay lai.", "danger")
+                    break
+                else
+                    local mins = math.floor(LIMIT_WAIT / 60)
+                    log("Het han muc 100 gift/ngay -> nghi "..mins.." phut roi check lai (cho game reset)...", "warn")
+                    local left = LIMIT_WAIT
+                    while left > 0 do local w = math.min(30, left) ; task.wait(w) ; left = left - w end
+                    log("Het gio nghi -> thu gui lai", "accent")
+                end
+            elseif result == "maxsend" then
+                log("Da dat MAX_SEND = "..MAX_SEND.." mail -> dung auto mail.", "warn")
+                break
+            end
+        end
+
+        if not loopOn then break end
+        task.wait(MAIL_INTERVAL)
+    end
+end
+
+local function runCollect()
+    if not CONFIG.COLLECT_MAIL then return end
+    log("Auto Collect Mail: ON (moi "..COLLECT_INTERVAL.."s)", "accent")
+    task.spawn(function()
+        while true do
+            local n, msg = claimAllMail()
+            if n > 0 then log("Collect: "..msg, "accent") end
+            task.wait(COLLECT_INTERVAL)
+        end
+    end)
+end
+
+----------------------------------------------------------------
+-- KHOI DONG: doi game + module + du lieu san sang (thu lai neu inject som)
+----------------------------------------------------------------
+-- doi 1 dieu kien tra ve true, co timeout cho moi vong (khong bao gio bo cuoc)
+local function waitFor(label, checkFn)
+    local logged = false
+    while true do
+        local ok, res = pcall(checkFn)
+        if ok and res then return res end
+        if not logged then
+            log("Dang doi "..label.." (game/executor chua san sang) ...", "warn")
+            logged = true
+        end
+        task.wait(STARTUP_RETRY)
+    end
+end
+
+local function waitUntilReady()
+    -- 1. game loaded
+    if not game:IsLoaded() then game.Loaded:Wait() end
+
+    -- 2. LocalPlayer
+    LocalPlayer = waitFor("LocalPlayer", function() return Players.LocalPlayer end)
+
+    -- 3. require module (thu lai den khi co)
+    PlayerStateClient = waitFor("module PlayerStateClient", function()
+        local cm = ReplicatedStorage:FindFirstChild("ClientModules")
+        local m  = cm and cm:FindFirstChild("PlayerStateClient")
+        return m and require(m)
+    end)
+    Networking = waitFor("module Networking", function()
+        local sm = ReplicatedStorage:FindFirstChild("SharedModules")
+        local m  = sm and sm:FindFirstChild("Networking")
+        return m and require(m)
+    end)
+
+    -- 4. Mailbox remotes san sang
+    waitFor("Mailbox remotes", function()
+        local mb = Networking.Mailbox
+        return mb and mb.SendBatch and mb.OpenInbox and mb.Claim and mb.LookupPlayer and true
+    end)
+
+    -- 5. replica/inventory san sang
+    waitFor("du lieu nguoi choi (replica)", function()
+        local r = PlayerStateClient:GetLocalReplica()
+        return r and r.Data and r.Data.Inventory and true
+    end)
+end
+
+----------------------------------------------------------------
+-- RUN
+----------------------------------------------------------------
+task.spawn(function()
+    -- thu lai toan bo khoi dong neu co loi bat ngo
+    local attempt = 0
+    while true do
+        attempt = attempt + 1
+        local ok, err = pcall(waitUntilReady)
+        if ok then break end
+        warn("[MailGag] Loi khoi dong lan "..attempt..": "..tostring(err).." -> thu lai sau "..STARTUP_RETRY.."s")
+        task.wait(STARTUP_RETRY)
+    end
+
+    log("Mail Gag V2 (Config) loaded - Kenphysical", "accent")
+    setupAntiAfk()  -- bat anti-afk sau khi module san sang
+    runCollect()    -- chay ngam (neu bat)
+    runAutoMail()   -- gui mail (lap lai neu MAIL_LOOP)
+end)
