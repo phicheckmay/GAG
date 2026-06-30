@@ -1,7 +1,89 @@
 key = "test";
+getgenv().CONFIG = {
+    ["Seed"] = {
+        ----- PlantLevel Guide 1st level is < 100 Sheckles, 2nd level is < Amount of ProgressionSeed, 3 level >= Amount of ProgressionSeed
+        ----- if you need Always Plant all Plants Delete Level or Level 3
+        ----- This need if you have limit plant and you need more valuable plants
+        ["ProgressionSeedRequire"] = 20,
+
+        ["CollectWithMutation"] = {"Bamboo", "Mushroom"},
+
+        ["Carrot"] = {MaxPlace = 999, SecureForDelete = false, AlwaysBuy = true, PlantWithSprinkler = false, PlantLevel = 3, SellMulti = 0},
+        ["Strawberry"] = {MaxPlace = 20, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Blueberry"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Tulip"] = {MaxPlace = 999, SecureForDelete = false, AlwaysBuy = true, PlantWithSprinkler = false, PlantLevel = 3},
+        ["Tomato"] = {MaxPlace = 20, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Apple"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Bamboo"] = {MaxPlace = 999, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = false, PlantLevel = 3},
+        ["Corn"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Cactus"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = false, PlantLevel = 2},
+        ["Pineapple"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Mushroom"] = {MaxPlace = 999, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = false, PlantLevel = 3},
+        ["Green Bean"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Banana"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Grape"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Coconut"] = {MaxPlace = 35, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Mango"] = {MaxPlace = 35, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Dragon Fruit"] = {MaxPlace = 35, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Acorn"] = {MaxPlace = 35, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Cherry"] = {MaxPlace = 35, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Sunflower"] = {MaxPlace = 25, SecureForDelete = false, AlwaysBuy = false, PlantWithSprinkler = true, PlantLevel = 3, ProgressionSeed = true},
+        ["Pomegranate"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Poison Apple"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Moon Bloom"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Dragon\'s Breath"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Ghost Pepper"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+        ["Poison Ivy"] = {MaxPlace = 0, SecureForDelete = true, AlwaysBuy = true, PlantWithSprinkler = true, PlantLevel = 3},
+
+
+        ----- SeedPack Seeds = Plant Or Hold
+        ["Gold"] = true,
+        ["Rainbow"] = false,
+        ["Mega"] = false,
+
+        ----- If Game Update What to do with new Seeds
+        ["NEW SEEDS"] = {MaxPlace = 0, SecureForDelete = true,  AlwaysBuy = true, ProgressionSeed = false, UseSprinkler = false, PlantLevel = 3},
+
+    },
+
+    ["Gears"] = {
+
+        ["Common Watering Can"] = {BuyIfHave = 50_000, MaxHold = 500}, --- Price 2k
+        ["Common Sprinkler"] = {BuyIfHave = 50_000, MaxHold = 500}, --- Price 3k
+        ["Uncommon Sprinkler"] = {BuyIfHave = 100_000, MaxHold = 100}, --- Price 10k
+        ["Rare Sprinkler"] = {BuyIfHave = 500_000, MaxHold = 100}, --- Price 80k
+        ["Legendary Sprinkler"] = {BuyIfHave = 100_000_000, MaxHold = 9999}, --- Price 1.2m
+        ["Super Sprinkler"] = {BuyIfHave = 3_000_000, MaxHold = 9999}, --- Price 3m
+        ["Super Watering Can"] = {BuyIfHave = 1_000_000, MaxHold = 9999}, --- Price 1m
+
+    },
+
+
+    ["Pets"] = {
+
+        ["Buy"] = {
+
+            ["Bunny"] = {MaxBuy = 6, BuyIfHave = 100000}, --- Price 20k
+            ["Deer"] = {MaxBuy = 6, BuyIfHave = 500000}, --- Price 50k
+
+            ["Golden Dragonfly"] = {MaxBuy = 999, BuyIfHave = 0}, --- Price 9m
+            ["Unicorn"] = {MaxBuy = 999, BuyIfHave = 0}, --- Price 12m
+            ["Raccoon"] = {MaxBuy = 999, BuyIfHave = 0}, --- Price 15m
+
+        },
+
+        ["Equip"] = {
+
+            ["Deer"] = {Equip = 6, Priority = 1},
+            ["Bunny"] =  {Equip = 6, Priority = 2},
+
+        },
+    }
+}
 repeat
     task.wait()
 until game:IsLoaded()
+
 
 game:GetService("Players").LocalPlayer.PlayerScripts.ControllerStarter.Enabled = false
 
