@@ -1,5 +1,5 @@
 {
-  "cpu_cores_per_tab": 2,
+  "cpu_cores_per_tab": 0,
   "ram_limit_mb_per_tab": 1500,
   "fps_limit": 5,
   "fps_engine_task": 0,
