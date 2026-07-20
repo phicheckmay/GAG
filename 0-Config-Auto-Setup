@@ -1,0 +1,29 @@
+{
+  "version": "4.2.5",
+
+  "quick_action": {
+    "ram_percent": 50,
+    "memory_limit_mb": 5000,
+    "fps": 5,
+    "row": 15
+  },
+
+  "settings": {
+    "startup": {
+      "start_with_windows": false,
+      "start_ld_multi_with_windows": false,
+      "autorun_client": false,
+      "auto_open_volt": false,
+      "auto_open_optimus_volt": true,
+      "startup_delay_minutes": 5
+    },
+
+    "blocksolve": {
+      "bs_key": "",
+      "fs_key": "",
+      "place_id": "",
+      "workers": 3,
+      "loop_minutes": 5
+    }
+  }
+}
