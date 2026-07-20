@@ -1,0 +1,18 @@
+{
+  "cpu_cores_per_tab": 1,
+  "ram_limit_mb_per_tab": 1500,
+  "fps_limit": 5,
+  "fps_engine_task": 15,
+  "pagefile_gb": 0,
+
+  "features": {
+    "disable_3d": true,
+    "eco_mode": true,
+    "close_crash_handler": false,
+    "auto_lock_ram": true,
+    "auto_clear_cache": true,
+    "auto_close_dead_tab": false,
+    "watch_volt_crash": true,
+    "auto_enable_driver": true
+  }
+}
