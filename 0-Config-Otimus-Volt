@@ -8,7 +8,7 @@
   "features": {
     "disable_3d": true,
     "eco_mode": true,
-    "close_crash_handler": false,
+    "close_crash_handler": true,
     "auto_lock_ram": true,
     "auto_clear_cache": true,
     "auto_close_dead_tab": false,
