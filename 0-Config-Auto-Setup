@@ -13,7 +13,7 @@
       "start_with_windows": true,
       "start_ld_multi_with_windows": false,
       "autorun_client": false,
-      "auto_open_volt": true,
+      "auto_open_volt": false,
       "auto_open_optimus_volt": false,
       "auto_open_optimus_cuong": true,
       "startup_delay_minutes": 5
