@@ -2,7 +2,7 @@
   "cpu_cores_per_tab": 1,
   "ram_limit_mb_per_tab": 1500,
   "fps_limit": 5,
-  "fps_engine_task": 0,
+  "fps_engine_task": 15,
   "pagefile_gb": 0,
 
   "features": {
