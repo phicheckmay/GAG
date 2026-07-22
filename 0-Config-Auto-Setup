@@ -1,5 +1,5 @@
 {
-  "version": "4.2.6",
+  "version": "4.3.0",
 
   "quick_action": {
     "ram_percent": 50,
@@ -24,7 +24,8 @@
       "fs_key": "45cf108d93925b1e5f880ed4c260d57f31ce216b51a62a1af91af511918c6750",
       "place_id": "97598239454123",
       "workers": 3,
-      "loop_minutes": 5
+      "loop_minutes": 5,
+      "recovery_enabled": true
     }
   }
 }
