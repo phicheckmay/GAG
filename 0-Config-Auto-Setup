@@ -25,7 +25,8 @@
       "place_id": "97598239454123",
       "workers": 3,
       "loop_minutes": 5,
-      "recovery_enabled": true
+      "recovery_enabled": true,
+      "check_local": false
     }
   }
 }
