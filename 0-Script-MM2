@@ -146,21 +146,44 @@ local lastRoundStartTime = tick()
 local isRoundActive      = false
 
 -- ========================================================================
--- OPTIMIZATION
+-- OPTIMUS - PERFORMANCE OPTIMIZER (tich hop tu Optimus.lua)
+-- Live effect killer, event-driven collision, connection cleanup
 -- ========================================================================
 
+-- Connection manager
+local Conns = {}
+local function trackConn(conn) table.insert(Conns, conn) return conn end
+local function cleanupConns()
+    for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end
+    table.clear(Conns)
+end
+pcall(function()
+    if getgenv then getgenv().__perfCleanup = cleanupConns end
+end)
+
+local function isProtected(obj)
+    local prot = workspace:FindFirstChild("__THINGS")
+    return prot ~= nil and obj:IsDescendantOf(prot)
+end
+
+local function isEffect(obj)
+    return obj:IsA("ParticleEmitter") or obj:IsA("Trail")
+        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles")
+end
+
+-- 1. FPS Cap
 if FPS_LOCK_ENABLED then
     pcall(function() setfpscap(FPS_CAP) end)
 end
 
-local function OptimizationSafe()
+-- 2. Graphics optimization (1 lan)
+local function optimizeGraphics()
     local Lighting = game:GetService("Lighting")
-
-    -- FIX: phai la false de tat render 3D, giam lag
-    pcall(function() RunService:Set3dRenderingEnabled(false) end)
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    pcall(function() RunService:Set3dRenderingEnabled(false) end)
+    pcall(function() Lighting.GlobalShadows = false end)
 
-    for _, effect in pairs(Lighting:GetChildren()) do
+    for _, effect in ipairs(Lighting:GetChildren()) do
         if effect:IsA("BloomEffect") or effect:IsA("SunRaysEffect")
         or effect:IsA("DepthOfFieldEffect") or effect:IsA("BlurEffect")
         or effect:IsA("ColorCorrectionEffect") then
@@ -174,61 +197,88 @@ local function OptimizationSafe()
     end
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ParticleEmitter") or obj:IsA("Trail")
-        or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-            obj.Enabled = false
+        if not isProtected(obj) then
+            if isEffect(obj) then
+                obj.Enabled = false
+            elseif obj:IsA("Sound") then
+                pcall(function() obj.Volume = 0 end)
+            end
         end
     end
 end
 
-OptimizationSafe()
-
--- ========================================================================
--- DISABLE COLLISION
--- ========================================================================
-
-task.spawn(function()
-    task.wait(10)
-    while true do
-        pcall(function()
-            for _, v in pairs(Player.Character:GetDescendants()) do
-                if v:IsA("BasePart") and v.CanCollide then
-                    v.CanCollide = false
-                end
-            end
-        end)
-        RunService.Stepped:Wait()
-    end
-end)
-
--- ========================================================================
--- ANTI-AFK
--- ========================================================================
-
-task.spawn(function()
-    task.wait(60)
-    local GC = getconnections or get_signal_cons
-    if GC then
-        for _, v in pairs(GC(Player.Idled)) do
-            if v["Disable"] then v["Disable"](v)
-            elseif v["Disconnect"] then v["Disconnect"](v) end
+-- 3. Live effect/sound killer (event-driven, khong loop)
+local function startLiveKiller()
+    trackConn(workspace.DescendantAdded:Connect(function(obj)
+        if isProtected(obj) then return end
+        if isEffect(obj) then
+            obj.Enabled = false
+        elseif obj:IsA("Sound") then
+            pcall(function() obj.Volume = 0 end)
         end
-    else
-        local VU = game:GetService("VirtualUser")
-        if VU then
-            Player.Idled:Connect(function()
-                VU:CaptureController()
-                VU:ClickButton2(Vector2.new())
-            end)
+    end))
+end
+
+-- 4. Collision disabler (event-driven, khong loop Stepped)
+local function hookCharacterCollision(char)
+    if not char then return end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") and v.CanCollide then
+            v.CanCollide = false
         end
     end
-end)
+    trackConn(char.DescendantAdded:Connect(function(v)
+        if v:IsA("BasePart") and v.CanCollide then
+            v.CanCollide = false
+        end
+    end))
+end
 
-task.spawn(function()
+local function startCollisionDisabler()
+    if Player.Character then hookCharacterCollision(Player.Character) end
+    trackConn(Player.CharacterAdded:Connect(hookCharacterCollision))
+end
+
+-- 5. Anti-AFK
+local function startAntiAfk()
     pcall(function()
         RS.Network["Idle Tracking: Stop Timer"]:FireServer()
     end)
-end)
+    local VIM = game:GetService("VirtualInputManager")
+    task.spawn(function()
+        while task.wait(300) do
+            pcall(function()
+                VIM:SendKeyEvent(true, "Space", false, game)
+                task.wait(0.2)
+                VIM:SendKeyEvent(false, "Space", false, game)
+            end)
+        end
+    end)
+    task.spawn(function()
+        task.wait(60)
+        local GC = getconnections or get_signal_cons
+        if GC then
+            for _, v in pairs(GC(Player.Idled)) do
+                if v["Disable"] then v["Disable"](v)
+                elseif v["Disconnect"] then v["Disconnect"](v) end
+            end
+        else
+            local VU = game:GetService("VirtualUser")
+            if VU then
+                Player.Idled:Connect(function()
+                    VU:CaptureController()
+                    VU:ClickButton2(Vector2.new())
+                end)
+            end
+        end
+    end)
+end
+
+-- Init Optimus
+optimizeGraphics()
+startLiveKiller()
+startCollisionDisabler()
+startAntiAfk()
 
 -- ========================================================================
 -- AUTO SELECT TABLET
@@ -733,8 +783,9 @@ end)
 -- AUTO KICK
 -- ========================================================================
 
--- So box can mo truoc khi kick
-local BOX_TARGET = 2
+-- So box can mo va level can dat truoc khi kick
+-- Set trong config: AutoKick.BoxTarget va AutoKick.MinLevel
+local BOX_TARGET = Config.AutoKick and Config.AutoKick.BoxTarget or 2
 
 if AUTOKICK_ENABLED then
     task.spawn(function()
@@ -743,24 +794,34 @@ if AUTOKICK_ENABLED then
         while not alreadyKicked do
             pcall(function()
                 local cratesOpened = getSummerCratesOpened() or 0
-                local boxOk = cratesOpened >= BOX_TARGET
+                local currentLevel = getPlayerLevel() or 0
+                local boxOk   = cratesOpened >= BOX_TARGET
+                local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
 
-                print(string.format("[AutoKick] boxOpened=%s/%s | kick=%s",
-                    tostring(cratesOpened), tostring(BOX_TARGET), tostring(boxOk)
+                print(string.format("[AutoKick] box=%s/%s | lv=%s/%s | kick=%s",
+                    tostring(cratesOpened), tostring(BOX_TARGET),
+                    tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL),
+                    tostring(boxOk and levelOk)
                 ))
 
+                -- Hien status theo dieu kien chua dat
                 if not boxOk then
                     StatusLabel.Text = "⚡ Status: Chờ mở box (" .. cratesOpened .. "/" .. BOX_TARGET .. ")"
                     StatusLabel.TextColor3 = Color3.fromRGB(200,200,200)
+                elseif not levelOk then
+                    StatusLabel.Text = "⚡ Status: Chờ level " .. AUTOKICK_MIN_LEVEL .. " (lv" .. currentLevel .. ")"
+                    StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
                 end
 
-                if boxOk then
+                -- Chi kick khi DU CA 2 dieu kien
+                if boxOk and levelOk then
+                    -- Cho mo het shells con du truoc khi kick
                     local waitCrate = 0
                     while canOpenCrate() and waitCrate < 30 do
                         task.wait(2)
                         waitCrate = waitCrate + 2
                     end
-                    StatusLabel.Text = "⚡ Status: Xong " .. BOX_TARGET .. " box - Chuyển acc..."
+                    StatusLabel.Text = "⚡ Status: Xong " .. BOX_TARGET .. " box lv" .. currentLevel .. " - Chuyển acc..."
                     StatusLabel.TextColor3 = SummerGreen
                     pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
                     pcall(function()
@@ -770,7 +831,7 @@ if AUTOKICK_ENABLED then
                     end)
                     task.wait(3)
                     alreadyKicked = true
-                    Player:Kick("Done " .. BOX_TARGET .. " boxes")
+                    Player:Kick("Done " .. BOX_TARGET .. " boxes lv" .. currentLevel)
                 end
             end)
             if not alreadyKicked then task.wait(10) end
