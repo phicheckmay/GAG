@@ -382,8 +382,8 @@ end
 -- Da xac nhan arguments tu hook: Summer2026Box / MysteryBox / SummerKey2026
 -- GetShopItems va GetMysteryBoxData deu crash nen hardcode
 local BOX_ID       = "Summer2026Box"
-local BOX_CURRENCY = "Shells"  -- da xac nhan tu DuckHub config va UI game (120 shells/box)
-local BOX_PRICE    = 120       -- 120 Shells moi mo 1 box
+local BOX_CURRENCY = "SummerKey2026"  -- trong data la SummerKey2026, UI hien la Shells
+local BOX_PRICE    = 120              -- 120 shells/box
 
 local function getSummerBoxIdAndPrice()
     return BOX_ID, BOX_CURRENCY, BOX_PRICE
@@ -550,7 +550,7 @@ makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
 local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,80), UDim2.new(0,0,0.30,0),
-    "🏄 Key: - | 🐚 Shells: -", SummerBlue, nil, true)
+    "🐚 Shells: -", SummerBlue, nil, true)
 
 local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,70), UDim2.new(0,0,0.42,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
@@ -663,8 +663,7 @@ task.spawn(function()
     while task.wait(1) do
         pcall(function()
             local coins  = getSummerCoins()
-            local shells = getShells()
-            TokensLabel.Text = "🏄 Key: " .. displayNum(coins) .. " | 🐚 Shells: " .. displayNum(shells)
+            TokensLabel.Text = "🐚 Shells: " .. displayNum(coins)
 
             local crates = getSummerCratesOpened()
             CratesLabel.Text = "🎁 Crate Opened: " .. displayNum(crates)
@@ -692,8 +691,8 @@ end)
 -- ========================================================================
 
 local function canOpenCrate()
-    -- Check Shells (currency mo box), khong phai SummerKey
-    local shells = getShells() or 0
+    -- SummerKey2026 chinh la Shells trong data (120/box)
+    local shells = getSummerCoins() or 0
     return shells >= BOX_PRICE
 end
 
