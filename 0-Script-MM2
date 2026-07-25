@@ -322,11 +322,20 @@ local function getSummerEventTitle()
     return title or "Summer2026"
 end
 
+-- SummerKey2026 = token farm duoc tu round (hien tren UI)
 local function getSummerCoins()
     local pd = getProfileData()
     if not pd or not pd.Materials or not pd.Materials.Owned then return nil end
-    local key = getSummerCurrencyName()
-    local amount = pd.Materials.Owned[key]
+    local amount = pd.Materials.Owned["SummerKey2026"]
+    if type(amount) == "number" then return amount end
+    return tonumber(amount) or 0
+end
+
+-- Shells = currency de mo box (120 shells/box)
+local function getShells()
+    local pd = getProfileData()
+    if not pd or not pd.Materials or not pd.Materials.Owned then return nil end
+    local amount = pd.Materials.Owned["Shells"]
     if type(amount) == "number" then return amount end
     return tonumber(amount) or 0
 end
@@ -373,8 +382,8 @@ end
 -- Da xac nhan arguments tu hook: Summer2026Box / MysteryBox / SummerKey2026
 -- GetShopItems va GetMysteryBoxData deu crash nen hardcode
 local BOX_ID       = "Summer2026Box"
-local BOX_CURRENCY = "SummerKey2026"
-local BOX_PRICE    = 120  -- 120 SummerKey2026 moi mo 1 box
+local BOX_CURRENCY = "Shells"  -- da xac nhan tu DuckHub config va UI game (120 shells/box)
+local BOX_PRICE    = 120       -- 120 Shells moi mo 1 box
 
 local function getSummerBoxIdAndPrice()
     return BOX_ID, BOX_CURRENCY, BOX_PRICE
@@ -541,7 +550,7 @@ makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
 local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,80), UDim2.new(0,0,0.30,0),
-    "🏄 Summer Key: -", SummerBlue, nil, true)
+    "🏄 Key: - | 🐚 Shells: -", SummerBlue, nil, true)
 
 local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,70), UDim2.new(0,0,0.42,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
@@ -654,7 +663,8 @@ task.spawn(function()
     while task.wait(1) do
         pcall(function()
             local coins  = getSummerCoins()
-            TokensLabel.Text = "🏄 Summer Key: " .. displayNum(coins)
+            local shells = getShells()
+            TokensLabel.Text = "🏄 Key: " .. displayNum(coins) .. " | 🐚 Shells: " .. displayNum(shells)
 
             local crates = getSummerCratesOpened()
             CratesLabel.Text = "🎁 Crate Opened: " .. displayNum(crates)
@@ -682,13 +692,9 @@ end)
 -- ========================================================================
 
 local function canOpenCrate()
-    local pd = getProfileData()
-    if not pd or not pd.Materials or not pd.Materials.Owned then return false end
-    local boxId, currencyKey, required = getSummerBoxIdAndPrice()
-    if not boxId or not required then return false end
-    local owned = pd.Materials.Owned[currencyKey]
-    owned = (type(owned) == "number" and owned) or tonumber(owned) or 0
-    return owned >= required
+    -- Check Shells (currency mo box), khong phai SummerKey
+    local shells = getShells() or 0
+    return shells >= BOX_PRICE
 end
 
 local function openOneCrate()
