@@ -29,7 +29,7 @@
       "recovery_enabled": true,
       "check_local": true,
       "proxy": true,
-      "proxy_type": "socks5",
+      "proxy_type": "socks5h",
       "proxy_per_lan": true,
       "proxy_lan_base": 51,
       "proxy_lan_max": 234,
