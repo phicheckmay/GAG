@@ -1,13 +1,11 @@
 {
   "version": "4.3.1",
-
   "quick_action": {
     "ram_percent": 50,
     "memory_limit_mb": 5000,
     "fps": 5,
     "row": 15
   },
-
   "settings": {
     "startup": {
       "start_with_windows": true,
@@ -19,7 +17,6 @@
       "auto_check_boots_c": true,
       "startup_delay_minutes": 5
     },
-
     "blocksolve": {
       "bs_key": "block_6ecc9d9e243d4f6bdd213d6e0678a875",
       "fs_key": "45cf108d93925b1e5f880ed4c260d57f31ce216b51a62a1af91af511918c6750",
@@ -34,6 +31,49 @@
       "proxy_lan_base": 51,
       "proxy_lan_max": 234,
       "proxy_per_lan_count": 5
+    },
+    "boots_cuong": {
+      "config_template": [
+        "# ===== VỊ TRÍ & KÍCH THƯỚC CỬA SỔ =====",
+        "X = ",
+        "Y = ",
+        "W = 800",
+        "H = 600",
+        "",
+        "# ===== ĐƯỜNG DẪN =====",
+        "PathExe = C:/Tool_Boots",
+        "",
+        "# ===== TÙY CHỌN =====",
+        "EnableBitlybary = true",
+        "EnableAntiAFK = true",
+        "EnableRaknet = true",
+        "DeleteTexture = true",
+        "DeleteImage = true",
+        "DeleteAll = true",
+        "AutoCleanLog = false",
+        "MuteSound = true",
+        "DontUseVoltUI = true",
+        "IsLoginTauriOK = true",
+        "KeepAutoLogin = true",
+        "FpsGame = 5",
+        "LimitCPU = 30",
+        "",
+        "# ===== TIẾN TRÌNH =====",
+        "Pid = 89864",
+        "Handle = 721516",
+        "Tick = 167688057",
+        "MaxRam = 1500",
+        "",
+        "# ===== TÀI KHOẢN VOLT =====",
+        "VoltId = ",
+        "VoltPassword = ",
+        "",
+        "# ===== KHÁC =====",
+        "ToolID = ",
+        "PassID = ",
+        "PcName = ",
+        "StartupRun = false"
+      ]
     }
   }
 }
