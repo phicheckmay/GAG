@@ -29,7 +29,11 @@
       "recovery_enabled": true,
       "check_local": true,
       "proxy": true,
-      "proxy_type": "http",
+      "proxy_type": "socks5",
+      "proxy_per_lan": true,
+      "proxy_lan_base": 51,
+      "proxy_lan_max": 234,
+      "proxy_per_lan_count": 5,
       "proxies": [
         uorder1785084578_country-SG_session-rti47lwgk7_sesstime-2:Sb1zBq0Rd9UOY6rV@budget.legionproxy.io:1337
         uorder1785084578_country-SG_session-mxbbiwe28d_sesstime-2:Sb1zBq0Rd9UOY6rV@budget.legionproxy.io:1337
