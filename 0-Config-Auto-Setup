@@ -16,8 +16,9 @@
       "auto_open_volt": false,
       "auto_open_optimus_volt": false,
       "auto_open_optimus_cuong": true,
+      "auto_check_boots_c": true,
       "startup_delay_minutes": 5
-    },
+    },  
 
     "blocksolve": {
       "bs_key": "block_6ecc9d9e243d4f6bdd213d6e0678a875",
