@@ -27,7 +27,7 @@
       "workers": 3,
       "loop_minutes": 5,
       "recovery_enabled": true,
-      "check_local": false
+      "check_local": true
     }
   }
 }
