@@ -784,7 +784,6 @@ end)
 -- ========================================================================
 
 -- So box can mo va level can dat truoc khi kick
--- Set trong config: AutoKick.BoxTarget va AutoKick.MinLevel
 local BOX_TARGET = Config.AutoKick and Config.AutoKick.BoxTarget or 2
 
 if AUTOKICK_ENABLED then
@@ -795,43 +794,59 @@ if AUTOKICK_ENABLED then
             pcall(function()
                 local cratesOpened = getSummerCratesOpened() or 0
                 local currentLevel = getPlayerLevel() or 0
-                local boxOk   = cratesOpened >= BOX_TARGET
-                local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
+                local _, _, dqRaw, dqMax = getSummerDailyQuestsProgress()
+                local dailyFull = dqMax > 0 and dqRaw >= dqMax
+                local levelOk   = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
 
-                print(string.format("[AutoKick] box=%s/%s | lv=%s/%s | kick=%s",
+                --[[
+                    TH1: box >= target, daily chua full
+                         -> acc cu dang chay ngay 2+ -> tiep tuc farm
+                    TH2: box >= target, daily full
+                         -> xong het roi -> kick
+                    TH3: box < target
+                         -> acc moi / chua du box -> chay binh thuong
+                ]]
+
+                print(string.format("[AutoKick] box=%s/%s | daily=%s/%s | lv=%s/%s",
                     tostring(cratesOpened), tostring(BOX_TARGET),
-                    tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL),
-                    tostring(boxOk and levelOk)
+                    tostring(dqRaw), tostring(dqMax),
+                    tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL)
                 ))
 
-                -- Hien status theo dieu kien chua dat
-                if not boxOk then
+                if cratesOpened >= BOX_TARGET and not dailyFull then
+                    -- TH1: acc cu, daily chua xong -> tiep tuc farm
+                    StatusLabel.Text = "⚡ Status: Đang farm (ngày 2+) " .. dqRaw .. "/" .. dqMax
+                    StatusLabel.TextColor3 = SummerOrange
+
+                elseif cratesOpened < BOX_TARGET then
+                    -- TH3: chua du box -> chay binh thuong
                     StatusLabel.Text = "⚡ Status: Chờ mở box (" .. cratesOpened .. "/" .. BOX_TARGET .. ")"
                     StatusLabel.TextColor3 = Color3.fromRGB(200,200,200)
-                elseif not levelOk then
-                    StatusLabel.Text = "⚡ Status: Chờ level " .. AUTOKICK_MIN_LEVEL .. " (lv" .. currentLevel .. ")"
-                    StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
-                end
 
-                -- Chi kick khi DU CA 2 dieu kien
-                if boxOk and levelOk then
-                    -- Cho mo het shells con du truoc khi kick
-                    local waitCrate = 0
-                    while canOpenCrate() and waitCrate < 30 do
-                        task.wait(2)
-                        waitCrate = waitCrate + 2
-                    end
-                    StatusLabel.Text = "⚡ Status: Xong " .. BOX_TARGET .. " box lv" .. currentLevel .. " - Chuyển acc..."
-                    StatusLabel.TextColor3 = SummerGreen
-                    pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
-                    pcall(function()
-                        if getgenv().client and getgenv().client.ChangeToFolder then
-                            getgenv().client:ChangeToFolder(AUTOKICK_FROM_FOLDER, AUTOKICK_TO_FOLDER, false, nil)
+                elseif cratesOpened >= BOX_TARGET and dailyFull then
+                    -- TH2: du box + daily full -> check level roi kick
+                    if not levelOk then
+                        StatusLabel.Text = "⚡ Status: Chờ level " .. AUTOKICK_MIN_LEVEL .. " (lv" .. currentLevel .. ")"
+                        StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
+                    else
+                        -- Cho mo het shells con du
+                        local waitCrate = 0
+                        while canOpenCrate() and waitCrate < 30 do
+                            task.wait(2)
+                            waitCrate = waitCrate + 2
                         end
-                    end)
-                    task.wait(3)
-                    alreadyKicked = true
-                    Player:Kick("Done " .. BOX_TARGET .. " boxes lv" .. currentLevel)
+                        StatusLabel.Text = "⚡ Status: Xong! Chuyển acc..."
+                        StatusLabel.TextColor3 = SummerGreen
+                        pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
+                        pcall(function()
+                            if getgenv().client and getgenv().client.ChangeToFolder then
+                                getgenv().client:ChangeToFolder(AUTOKICK_FROM_FOLDER, AUTOKICK_TO_FOLDER, false, nil)
+                            end
+                        end)
+                        task.wait(3)
+                        alreadyKicked = true
+                        Player:Kick("Done " .. BOX_TARGET .. " boxes + daily lv" .. currentLevel)
+                    end
                 end
             end)
             if not alreadyKicked then task.wait(10) end
