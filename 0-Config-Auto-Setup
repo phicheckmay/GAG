@@ -2,7 +2,7 @@
   "version": "4.3.5",
   "quick_action": {
     "ram_percent": 95,
-    "memory_limit_mb": 5000,
+    "memory_limit_mb": 15000,
     "fps": 5,
     "row": 15
   },
