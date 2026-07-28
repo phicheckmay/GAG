@@ -409,7 +409,7 @@ end
 local DAILY_MILESTONES = {60, 120, 240, 480}
 
 local function getSummerDailyQuestsProgress()
-    local completed, total, rawProgress, maxChallenge = 0, #DAILY_MILESTONES, 0, DAILY_MILESTONES[#DAILY_MILESTONES]
+    local completed, total, rawProgress, maxChallenge, lastReset = 0, #DAILY_MILESTONES, 0, DAILY_MILESTONES[#DAILY_MILESTONES], 0
     pcall(function()
         local pd = getProfileData()
         if not pd then return end
@@ -419,6 +419,7 @@ local function getSummerDailyQuestsProgress()
         local dailyData = eventData.Quests["DailyCoins"]
         if not dailyData or type(dailyData) ~= "table" then return end
         rawProgress = tonumber(dailyData.Progress) or 0
+        lastReset   = tonumber(dailyData.LastReset) or 0
         completed = 0
         for _, milestone in ipairs(DAILY_MILESTONES) do
             if rawProgress >= milestone then
@@ -426,7 +427,7 @@ local function getSummerDailyQuestsProgress()
             end
         end
     end)
-    return completed, total, rawProgress, maxChallenge
+    return completed, total, rawProgress, maxChallenge, lastReset
 end
 
 -- Da xac nhan arguments tu hook: Summer2026Box / MysteryBox / SummerKey2026
@@ -738,7 +739,7 @@ task.spawn(function()
             local crates = getSummerCratesOpened()
             CratesLabel.Text = "🎁 Crate Opened: " .. displayNum(crates)
 
-            local _, _, dqRaw, dqMax = getSummerDailyQuestsProgress()
+            local _, _, dqRaw, dqMax, _ = getSummerDailyQuestsProgress()
             local dqStr = dqMax > 0 and (formatNumber(dqRaw) .. "/" .. formatNumber(dqMax)) or "-/-"
             DailyLabel.Text = "📋 Daily Quest: " .. dqStr
 
@@ -821,17 +822,24 @@ if AUTOKICK_ENABLED then
         while not alreadyKicked do
             pcall(function()
                 local cratesOpened  = getSummerCratesOpened() or 0
-                local boxThisSession = cratesOpened - startBox  -- so box mo THEM hom nay
+                local boxThisSession = cratesOpened - startBox
                 local currentLevel  = getPlayerLevel() or 0
-                local _, _, dqRaw, dqMax = getSummerDailyQuestsProgress()
-                local dailyFull = dqMax > 0 and dqRaw >= dqMax
+                local _, _, dqRaw, dqMax, lastReset = getSummerDailyQuestsProgress()
+                
+                -- Daily chi tinh la "hom nay xong" neu LastReset < 24h
+                -- neu diff > 20h thi daily van la cua hom qua, chua reset
+                local diffHours = (os.time() - lastReset) / 3600
+                local dailyIsToday = diffHours < 20  -- reset trong 20h gan nhat = daily hom nay
+                local dailyFull = dqMax > 0 and dqRaw >= dqMax and dailyIsToday
+                
                 local levelOk   = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
                 local boxOk     = boxThisSession >= BOX_TARGET
 
-                print(string.format("[AutoKick] boxSession=%s/%s (total=%s) | daily=%s/%s | lv=%s/%s",
+                print(string.format("[AutoKick] boxSession=%s/%s (total=%s) | daily=%s/%s (today=%s, diff=%.1fh) | lv=%s/%s",
                     tostring(boxThisSession), tostring(BOX_TARGET),
                     tostring(cratesOpened),
                     tostring(dqRaw), tostring(dqMax),
+                    tostring(dailyIsToday), diffHours,
                     tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL)
                 ))
 
