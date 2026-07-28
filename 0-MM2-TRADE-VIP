@@ -736,8 +736,10 @@ do
     end
 
     function AccChanger.MoveFolder(from, to)
-        if from == "" and to == "" then
-            aclog("folder rong -> khong chuyen")
+        -- Phai co DU CA HAI. Nua voi (VD Folder 2 chua dien) ma van goi thi
+        -- acc bi day vao folder rong -> khong lay lai duoc.
+        if from == "" or to == "" then
+            aclog("Thieu folder (from='" .. from .. "' to='" .. to .. "') -> khong chuyen")
             return false
         end
         if not AccChanger.IsAvailable() then
@@ -752,11 +754,21 @@ do
         return ok
     end
 
-    -- opts: Profile, MarkText, Reason, Delay, Kick, KickIfNoChanger
+    -- opts: Profile, From, To, MarkText, Reason, Delay, Kick, KickIfNoChanger
     function AccChanger.Switch(opts)
         opts = opts or {}
         local profile = opts.Profile or "Done Quest"
-        local from, to = AccChanger.GetFolders(profile)
+
+        -- Uu tien folder id go tay trong config (dung khi acc manager KHONG
+        -- phai Decode, hoac Decode khong expose ChangeAccConfig ra global).
+        local from = opts.From or ""
+        local to   = opts.To   or ""
+        if from == "" and to == "" then
+            from, to = AccChanger.GetFolders(profile)
+            aclog("Lay folder tu global cua acc manager")
+        else
+            aclog("Dung folder go tay trong config")
+        end
         aclog(("Profile '%s' | from='%s' to='%s'"):format(profile, from, to))
 
         AccChanger.Mark(opts.MarkText or profile)
@@ -796,6 +808,8 @@ local function autoKickModule()
         setStatus("✅ Hết item - Đổi acc & kick...", Green)
         AccChanger.Switch({
             Profile         = CHANGEACC.Profile or "Done Quest",
+            From            = CHANGEACC.From,
+            To              = CHANGEACC.To,
             MarkText        = CHANGEACC.MarkText,
             Delay           = CHANGEACC.Delay or 3,
             Reason          = "Trade VIP - da gui het item",
