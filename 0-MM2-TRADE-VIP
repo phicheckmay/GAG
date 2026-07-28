@@ -1,158 +1,422 @@
 -- ========================================================================
--- 💎 TRADE VIP MM2
+-- 💎 TRADE VIP MM2 - MAIN
 -- ========================================================================
--- ✅ Auto send trade request toi username cu the
--- ✅ Auto offer item theo danh sach config
--- ✅ Auto accept trade tu trusted username
--- ✅ Discord webhook khi trade xong
--- ✅ Beautiful UI
+-- KHONG chua config. Moi thu doc tu getgenv().TradeVipConfig
+-- (xem file TradeVIP-Config.lua).
+--
+-- Thay doi so voi V1:
+--  ✅ Tach config ra file rieng, bo hardcode
+--  ✅ FIX: ItemsLabel/StatusLabel bi tham chieu truoc khi khai bao ->
+--          forward-declare o dau file (day la ly do UI khong ra ten item)
+--  ✅ FIX: doc so luong THAT trong tui (truoc do getItemCount tra ve toi da 1)
+--  ✅ FIX: tu do duong dan Owned trong ProfileData, doi chieu voi Database
+--  ✅ FIX: khop ten item khong phan biet hoa thuong / khoang trang / gach
+--  ✅ FIX: AccChanger.GetFolders bi lo trong mang -> ipairs chay 0 vong
+--  ✅ FIX: id that la "IcecreamChroma", KHONG phai "ChromaIcecream"
+--  ✅ FIX: Icecream va IcecreamChroma trung ItemName -> them [id] cho ro
+--  ✅ Chia lo toi da 4 item/trade, tinh theo SO LUONG that
+--  ✅ ExcludeItems chan gui nham DefaultKnife / DefaultGun
+--  ✅ Gom thanh module ro rang, thu tu khai bao dung
 -- ========================================================================
 
+print("==================================================")
+print("### TRADE VIP MM2 - BUILD 2026-07-28-P (scan-verified) ###")
+print("==================================================")
+
 -- ========================================================================
--- ⚙️ CONFIG
+-- 1. CONFIG
 -- ========================================================================
 
 local Config = (getgenv and getgenv().TradeVipConfig) or {}
 
--- Username nhan item (acc chinh cua may)
-local RECEIVER_NAME = Config.ReceiverName or "NoahLion652"
+local RECEIVER_NAME  = Config.ReceiverName or ""
+local TRADE_ITEMS    = Config.TradeItems or {}
+local TRADE_RARITY   = Config.TradeRarity or "Godly"
+local EXCLUDE_ITEMS  = Config.ExcludeItems or { "DefaultKnife", "DefaultGun" }
+local MAX_PER_TRADE  = Config.MaxPerTrade or 4
+local RETRY_DELAY    = Config.RetryDelay or 5
+local MAX_ATTEMPTS   = Config.MaxAttempts or 5
+local AFTER_TRADE    = Config.AfterTrade or "kick"
+local WATCH_ITEMS    = Config.WatchItems or { "Icecream", "ChromaIcecream" }
+local SHOW_UI        = Config.ShowUI ~= false
+local DEBUG          = Config.Debug == true
 
--- Danh sach item muon trade (itemId)
--- De trong = trade tat ca Godly
-local TRADE_ITEMS = Config.TradeItems or {}
+local AUTOKICK       = Config.AutoKick or {}
+local AUTOKICK_ON    = AUTOKICK.Enabled ~= false
 
--- Chi trade Godly hay tat ca
-local TRADE_RARITY = Config.TradeRarity or "Godly"
+local CHANGEACC      = Config.ChangeAcc or {}
+local CHANGEACC_ON   = CHANGEACC.Enabled == true
 
--- Delay giua cac lan thu lai (giay)
-local RETRY_DELAY = Config.RetryDelay or 5
+local WEBHOOK        = Config.Webhook or {}
+local WEBHOOK_ON     = WEBHOOK.Enabled == true
+local WEBHOOK_URL    = WEBHOOK.URL or ""
 
--- Sau khi trade xong thi sao
--- "kick" = kick acc | "continue" = tiep tuc farm | "idle" = dung lai
-local AFTER_TRADE = Config.AfterTrade or "kick"
-
--- Webhook
-local WEBHOOK_ENABLED = false
-local WEBHOOK_URL = ""
-if Config.Webhook then
-    WEBHOOK_ENABLED = Config.Webhook.Enabled == true
-    WEBHOOK_URL = Config.Webhook.URL or ""
+if RECEIVER_NAME == "" then
+    warn("[TradeVIP] Chua set ReceiverName trong config -> dung!")
+    return
 end
 
 -- ========================================================================
--- SERVICES
+-- 2. SERVICES + REMOTES
 -- ========================================================================
 
-local Players         = game:GetService("Players")
-local RS              = game:GetService("ReplicatedStorage")
-local HttpService     = game:GetService("HttpService")
+local Players     = game:GetService("Players")
+local RS          = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
-local Player          = Players.LocalPlayer
+local Player      = Players.LocalPlayer
+local IS_RECEIVER = (Player.Name:lower() == RECEIVER_NAME:lower())
 
--- Trade remotes
-local Trade           = RS.Trade
-local SendRequest     = Trade.SendRequest      -- RemoteFunction
-local AcceptRequest   = Trade.AcceptRequest    -- RemoteEvent
-local OfferItem       = Trade.OfferItem        -- RemoteEvent
-local AcceptTrade     = Trade.AcceptTrade      -- RemoteEvent
-local DeclineRequest  = Trade.DeclineRequest   -- RemoteEvent
-local CancelRequest   = Trade.CancelRequest    -- RemoteEvent
-local StartTrade      = Trade.StartTrade       -- RemoteEvent (client)
-local UpdateTrade     = Trade.UpdateTrade      -- RemoteEvent (client)
-local CompleteTrade   = Trade.CompleteTrade    -- RemoteEvent (client)
+local Trade         = RS:WaitForChild("Trade")
+local SendRequest   = Trade:WaitForChild("SendRequest")   -- :InvokeServer(receiver)
+local OfferItem     = Trade:WaitForChild("OfferItem")
+local StartTrade    = Trade:WaitForChild("StartTrade")
+local UpdateTrade   = Trade:WaitForChild("UpdateTrade")
+local CompleteTrade = Trade:WaitForChild("CompleteTrade")
 
--- ========================================================================
--- STATE
--- ========================================================================
-
-local tradeStatus     = "Idle"  -- Idle / Waiting / Trading / Done / Failed
-local tradeComplete   = false
-local startTime       = tick()
-local itemsTraded     = {}
+-- LUU Y: KHONG override SendRequest.OnClientInvoke - lam vay se chan
+-- StartTrade fire. Cach dung dung: nghe StartTrade roi bam nut Accept.
 
 -- ========================================================================
--- HELPER FUNCTIONS
+-- 3. STATE + FORWARD DECLARE UI
+-- ------------------------------------------------------------------------
+-- ⚠️ DAY LA CHO FIX BUG CHINH: o V1 ham updateItemsLabel() nam TREN phan
+-- tao GUI, nen bien `ItemsLabel` trong ham do la GLOBAL nil (khong phai
+-- local o duoi). `if ItemsLabel then` khong bao gio dung -> label item
+-- dung nguyen chu "Dang scan item Godly..." mai mai.
+-- Khai bao truoc o day thi moi ham ben duoi deu tro dung 1 bien.
 -- ========================================================================
 
-local function getProfileData()
-    local tab
-    pcall(function()
-        tab = require(RS:WaitForChild("Modules"):WaitForChild("ProfileData"))
-    end)
-    return tab
+local ItemsLabel, SenderLabel, StatusLabel, OnlineLabel, WatchLabel
+local bg
+
+local tradeComplete = false
+local startTime     = tick()
+local itemsTraded   = {}
+
+local Gold   = Color3.fromRGB(255, 200, 50)
+local Purple = Color3.fromRGB(180, 100, 255)
+local Green  = Color3.fromRGB(100, 255, 150)
+local Red    = Color3.fromRGB(255, 100, 50)
+local White  = Color3.fromRGB(255, 255, 255)
+local Gray   = Color3.fromRGB(150, 150, 150)
+
+local function setStatus(text, color)
+    if StatusLabel then
+        StatusLabel.Text = text
+        StatusLabel.TextColor3 = color or White
+    end
 end
 
-local function getSyncWeapons()
-    local ok, Sync = pcall(function()
-        return require(RS:WaitForChild("Database"):WaitForChild("Sync"))
-    end)
-    return (ok and Sync and Sync.Weapons) or nil
+local function setSender(text, color)
+    if SenderLabel then
+        SenderLabel.Text = text
+        SenderLabel.TextColor3 = color or Gray
+    end
 end
 
--- Lay danh sach item can trade
-local function getItemsToTrade()
-    local items = {}
-    local pd = getProfileData()
-    if not pd or not pd.Weapons or not pd.Weapons.Owned then return items end
-    local Weapons = getSyncWeapons()
-    if not Weapons then return items end
+-- ========================================================================
+-- 4. MODULE: INVENTORY  (viet lai hoan toan)
+-- ------------------------------------------------------------------------
+-- V1 gia dinh cung: pd.Weapons.Owned[id] ton tai = so huu, count = 1.
+-- Thuc te: duong dan co the khac tuy ban game, va value la SO LUONG.
+-- Module nay tu do duong dan roi doi chieu voi Database de xac nhan.
+-- ========================================================================
 
-    -- Neu config co danh sach cu the
-    if #TRADE_ITEMS > 0 then
-        for _, itemId in ipairs(TRADE_ITEMS) do
-            if pd.Weapons.Owned[itemId] then
-                local item = Weapons[itemId]
-                if item then
-                    table.insert(items, {
-                        id       = itemId,
-                        name     = item.ItemName or item.Name or itemId,
-                        rarity   = item.Rarity or "Unknown",
-                        itemType = item.ItemType or "Knife",
-                    })
+local Inv = {}
+do
+    local function norm(s)
+        return tostring(s):lower():gsub("[%s_%-]", "")
+    end
+    Inv.norm = norm
+
+    local function tryRequire(parent, name)
+        if not parent then return nil end
+        local inst = parent:FindFirstChild(name)
+        if not inst then return nil end
+        local ok, mod = pcall(require, inst)
+        return (ok and type(mod) == "table") and mod or nil
+    end
+
+    -- Bang dinh nghia item cua game: { [itemId] = {ItemName, Rarity, ItemType} }
+    local dbCache
+    function Inv.GetDatabase()
+        if dbCache then return dbCache end
+        local DB = RS:FindFirstChild("Database")
+        local Sync = tryRequire(DB, "Sync")
+        if Sync and type(Sync.Weapons) == "table" then
+            dbCache = Sync.Weapons
+            return dbCache
+        end
+        -- fallback cho ban game de rieng
+        local W = tryRequire(DB, "Weapons")
+        if W then dbCache = W return dbCache end
+        return nil
+    end
+
+    function Inv.GetProfile()
+        return tryRequire(RS:FindFirstChild("Modules"), "ProfileData")
+    end
+
+    -- ✅ DA XAC NHAN bang scan thuc te (Server Version 1450):
+    --      ProfileData.Weapons.Owned  -> khop Database 100%
+    --      value la NUMBER = so luong  (VD Owned.Icecream = 1)
+    --      DB item: RS.Database.Sync.Weapons (997 item)
+    --      field:   ItemName / ItemType / Rarity / ItemID / Season / Image
+    --    Cac duong dan con lai giu lam du phong khi game update.
+    local KNOWN_PATHS = {
+        { "Weapons", "Owned" },
+        { "Inventory", "Weapons" },
+        { "Inventory", "Owned" },
+        { "Owned" },
+        { "Weapons" },
+    }
+
+    local function pick(root, path)
+        local node = root
+        for _, k in ipairs(path) do
+            if type(node) ~= "table" then return nil end
+            node = node[k]
+        end
+        return (type(node) == "table" and next(node) ~= nil) and node or nil
+    end
+
+    -- Bang nay co PHAI la bang so huu khong? -> doi chieu key voi Database.
+    local function looksLikeOwned(t, db)
+        if type(t) ~= "table" then return false end
+        if not db then return next(t) ~= nil end
+        local hit, total = 0, 0
+        for k in pairs(t) do
+            if type(k) == "string" then
+                total = total + 1
+                if db[k] ~= nil then hit = hit + 1 end
+            end
+            if total >= 30 then break end
+        end
+        return total > 0 and hit >= math.max(1, math.floor(total * 0.4))
+    end
+
+    -- Tra ve { [itemId] = soLuong }
+    function Inv.GetOwned()
+        local pd = Inv.GetProfile()
+        if type(pd) ~= "table" then return {} end
+        local db = Inv.GetDatabase()
+
+        local raw
+        for _, p in ipairs(KNOWN_PATHS) do
+            local t = pick(pd, p)
+            if looksLikeOwned(t, db) then
+                raw = t
+                break
+            end
+        end
+        if not raw then return {} end
+
+        local owned = {}
+        for k, v in pairs(raw) do
+            if type(k) == "string" then
+                local n = 0
+                if type(v) == "number" then
+                    n = v
+                elseif v == true then
+                    n = 1
+                elseif type(v) == "table" then
+                    n = tonumber(v.Count or v.Amount or v.Quantity or v.Qty) or 1
+                end
+                if n > 0 then owned[k] = n end
+            end
+        end
+        return owned
+    end
+
+    -- Doi ten nguoi go -> itemId that (khong phan biet hoa thuong/space/gach)
+    -- ⚠️ DB co NHIEU id dung chung 1 ItemName:
+    --      Icecream       -> ItemName "Icecream"
+    --      IcecreamChroma -> ItemName "Icecream"  (!!)
+    --    Neu map ten de len id thi "Icecream" co the tro nham sang Chroma
+    --    tuy thu tu pairs(). -> Quet 2 luot: ID truoc (uu tien tuyet doi),
+    --    ten sau va CHI dien vao cho con trong.
+    local resolveCache, dupName
+    local function buildCaches()
+        resolveCache, dupName = {}, {}
+        local db = Inv.GetDatabase()
+        if not db then return end
+
+        -- Luot 1: itemId (chinh xac nhat)
+        for id in pairs(db) do
+            if type(id) == "string" then resolveCache[norm(id)] = id end
+        end
+
+        -- Dem ten trung de biet co can hien them [id] khong
+        local nameCount = {}
+        for id, def in pairs(db) do
+            if type(id) == "string" and type(def) == "table" then
+                local dn = def.ItemName or def.Name
+                if type(dn) == "string" then
+                    local k = norm(dn)
+                    nameCount[k] = (nameCount[k] or 0) + 1
                 end
             end
         end
+
+        -- Luot 2: ItemName, khong ghi de id da co
+        for id, def in pairs(db) do
+            if type(id) == "string" and type(def) == "table" then
+                local dn = def.ItemName or def.Name
+                if type(dn) == "string" then
+                    local k = norm(dn)
+                    if resolveCache[k] == nil then resolveCache[k] = id end
+                    if (nameCount[k] or 0) > 1 then dupName[id] = true end
+                end
+            end
+        end
+    end
+
+    function Inv.Resolve(name)
+        if not resolveCache then buildCaches() end
+        return (resolveCache and resolveCache[norm(name)]) or name
+    end
+
+    -- Ten hien thi. Neu ItemName bi trung voi item khac -> them [id] cho ro.
+    function Inv.Label(itemId, itemName)
+        if not resolveCache then buildCaches() end
+        local nm = itemName or itemId
+        if dupName and dupName[itemId] then
+            return nm .. " [" .. itemId .. "]"
+        end
+        return nm
+    end
+
+    -- Thong tin hien thi cua 1 item
+    function Inv.Info(itemId)
+        local db   = Inv.GetDatabase()
+        local def  = db and db[itemId]
+        local name = (def and (def.ItemName or def.Name)) or itemId
+        return {
+            id       = itemId,
+            name     = name,
+            label    = Inv.Label(itemId, name),
+            rarity   = (def and def.Rarity) or "Unknown",
+            itemType = (def and def.ItemType) or "Knife",
+        }
+    end
+
+    -- Item bi cam gui (DefaultKnife / DefaultGun ...)
+    local excludeSet
+    function Inv.IsExcluded(itemId)
+        if not excludeSet then
+            excludeSet = {}
+            for _, raw in ipairs(EXCLUDE_ITEMS) do
+                excludeSet[Inv.Resolve(raw)] = true
+            end
+        end
+        return excludeSet[itemId] == true
+    end
+
+    -- So luong 1 item trong tui
+    function Inv.Count(nameOrId, ownedCache)
+        local owned = ownedCache or Inv.GetOwned()
+        return owned[Inv.Resolve(nameOrId)] or 0
+    end
+
+    -- Danh sach item can gui. Tra ve mang { {id,name,rarity,itemType,count} }
+    function Inv.GetItemsToTrade()
+        local owned = Inv.GetOwned()
+        local items = {}
+
+        -- Co danh sach chi dinh -> uu tien
+        if type(TRADE_ITEMS) == "table" and #TRADE_ITEMS > 0 then
+            for _, raw in ipairs(TRADE_ITEMS) do
+                local id = Inv.Resolve(raw)
+                local n  = owned[id] or 0
+                if n > 0 and not Inv.IsExcluded(id) then
+                    local info = Inv.Info(id)
+                    info.count = n
+                    table.insert(items, info)
+                end
+            end
+            return items
+        end
+
+        -- Khong co danh sach -> loc theo rarity
+        local wantAll = norm(TRADE_RARITY) == "all"
+        for id, n in pairs(owned) do
+            if not Inv.IsExcluded(id) then
+                local info = Inv.Info(id)
+                if wantAll or norm(info.rarity) == norm(TRADE_RARITY) then
+                    info.count = n
+                    table.insert(items, info)
+                end
+            end
+        end
+        table.sort(items, function(a, b) return a.label < b.label end)
         return items
     end
 
-    -- Neu khong co danh sach -> lay theo rarity
-    for itemId, _ in pairs(pd.Weapons.Owned) do
-        local item = Weapons[itemId]
-        if item and item.Rarity == TRADE_RARITY then
-            table.insert(items, {
-                id       = itemId,
-                name     = item.ItemName or item.Name or itemId,
-                rarity   = item.Rarity or "Unknown",
-                itemType = item.ItemType or "Knife",
-            })
-        end
+    -- Tong SO LUONG con lai (khong phai so dong) - value trong Owned la number
+    function Inv.CountBag()
+        local ok, n = pcall(function()
+            local total = 0
+            for _, it in ipairs(Inv.GetItemsToTrade()) do
+                total = total + (it.count or 1)
+            end
+            return total
+        end)
+        return ok and n or 0
     end
-    return items
+
+    -- Trai phang theo so luong: {id x3} -> 3 phan tu. Dung de chia lo.
+    function Inv.FlattenQueue()
+        local flat = {}
+        for _, it in ipairs(Inv.GetItemsToTrade()) do
+            for _ = 1, (it.count or 1) do table.insert(flat, it) end
+        end
+        return flat
+    end
+
+    -- Chuoi hien thi cho cac item dang theo doi (WatchItems)
+    -- Dung label -> "Icecream" va "Icecream [IcecreamChroma]" khong lan nhau
+    function Inv.WatchText()
+        local owned = Inv.GetOwned()
+        local parts = {}
+        for _, raw in ipairs(WATCH_ITEMS) do
+            local id   = Inv.Resolve(raw)
+            local info = Inv.Info(id)
+            table.insert(parts, info.label .. ": " .. (owned[id] or 0))
+        end
+        if #parts == 0 then return "⚔️ (chua set WatchItems)" end
+        return "⚔️ " .. table.concat(parts, " | ")
+    end
+
+    -- In cau truc ra console khi Debug = true
+    function Inv.Dump()
+        local pd = Inv.GetProfile()
+        print("[Inv] ProfileData =", type(pd))
+        if type(pd) == "table" then
+            for k, v in pairs(pd) do print("  ." .. tostring(k), type(v)) end
+        end
+        local db = Inv.GetDatabase()
+        print("[Inv] Database.Weapons =", type(db))
+        local owned = Inv.GetOwned()
+        local c = 0
+        for id, n in pairs(owned) do
+            local i = Inv.Info(id)
+            print(("  [%s] x%s | %s | %s"):format(id, tostring(n), i.name, i.rarity))
+            c = c + 1
+            if c >= 60 then print("  ... (cat bot)") break end
+        end
+        print("[Inv] Tong item so huu: " .. c)
+    end
 end
 
--- Tim player theo username trong server
-local function findPlayer(username)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name == username or p.Name:lower() == username:lower() then
-            return p
-        end
-    end
-    return nil
-end
-
-local function formatNumber(num)
-    local s = tostring(num)
-    local k
-    repeat s, k = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2") until k == 0
-    return s
-end
+if DEBUG then pcall(Inv.Dump) end
 
 -- ========================================================================
--- WEBHOOK
+-- 5. MODULE: WEBHOOK
 -- ========================================================================
 
 local function sendWebhook(items)
-    if not WEBHOOK_ENABLED or not WEBHOOK_URL or #WEBHOOK_URL == 0 then return end
+    if not WEBHOOK_ON or WEBHOOK_URL == "" then return end
     local lines = {}
     for _, item in ipairs(items) do
         table.insert(lines, "**" .. item.name .. "** (" .. item.rarity .. ")")
@@ -164,7 +428,7 @@ local function sendWebhook(items)
                       "\n**⚔️ Items:**\n" .. table.concat(lines, "\n"),
         color = 15158332,
         footer = { text = "Trade VIP MM2" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z"),
     }
     pcall(function()
         local json = HttpService:JSONEncode({ embeds = { embed } })
@@ -177,315 +441,547 @@ local function sendWebhook(items)
 end
 
 -- ========================================================================
--- GUI
+-- 6. MODULE: GUI
 -- ========================================================================
 
-local function getGuiParent()
-    local p
-    pcall(function() p = gethui() end)
-    if p then return p end
-    pcall(function() p = game:GetService("CoreGui") end)
-    if p then return p end
-    return Player:WaitForChild("PlayerGui")
+do
+    local function getGuiParent()
+        local p
+        pcall(function() p = gethui() end)
+        if p then return p end
+        pcall(function() p = game:GetService("CoreGui") end)
+        if p then return p end
+        return Player:WaitForChild("PlayerGui")
+    end
+
+    local guiParent = getGuiParent()
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name           = "TradeVipMM2UI"
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ResetOnSpawn   = false
+    pcall(function() ScreenGui.Parent = guiParent end)
+
+    bg = Instance.new("Frame", ScreenGui)
+    bg.Size            = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    bg.BorderSizePixel = 0
+    bg.Visible         = SHOW_UI
+
+    local function makeLabel(size, pos, text, color, bold)
+        local lbl = Instance.new("TextLabel", bg)
+        lbl.Size = size
+        lbl.Position = pos
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = color
+        lbl.Font = bold and Enum.Font.GothamBold or Enum.Font.GothamSemibold
+        lbl.TextScaled = true
+        local stroke = Instance.new("UIStroke", lbl)
+        stroke.Thickness = 2
+        stroke.Color = color
+        stroke.Transparency = 0.5
+        return lbl
+    end
+
+    makeLabel(UDim2.new(1,0,0,75), UDim2.new(0,0,0.05,0),
+        "💎 Trade Vip MM2", Gold, true)
+
+    makeLabel(UDim2.new(1,0,0,50), UDim2.new(0,0,0.18,0),
+        (IS_RECEIVER and "👂 RECEIVER: " or "📤 SENDER: ") .. Player.Name,
+        (IS_RECEIVER and Purple or Gold), true)
+
+    makeLabel(UDim2.new(1,0,0,42), UDim2.new(0,0,0.28,0),
+        (IS_RECEIVER and "🎯 Nhận đồ từ mọi sender"
+                      or ("🎯 Gửi tới: " .. RECEIVER_NAME)),
+        Purple, false)
+
+    -- Dong WATCH: so luong item theo doi (Icecream / ChromaIcecream)
+    WatchLabel = makeLabel(UDim2.new(1,0,0,48), UDim2.new(0,0,0.37,0),
+        "⚔️ Đang đọc túi...", Gold, true)
+
+    -- Dong ITEMS: danh sach item se gui / con lai
+    ItemsLabel = makeLabel(UDim2.new(1,0,0,48), UDim2.new(0,0,0.47,0),
+        "📦 ...", White, false)
+
+    SenderLabel = makeLabel(UDim2.new(1,0,0,45), UDim2.new(0,0,0.57,0),
+        (IS_RECEIVER and "🎯 Chờ sender..." or "📡 Chờ vào bàn trade..."),
+        Gray, false)
+
+    OnlineLabel = makeLabel(UDim2.new(1,0,0,42), UDim2.new(0,0,0.66,0),
+        "🕐 Online: 00:00:00", Gray, false)
+
+    StatusLabel = makeLabel(UDim2.new(1,0,0,62), UDim2.new(0,0,0.75,0),
+        (IS_RECEIVER and "⏳ Chờ trade request..." or "⏳ Chuẩn bị gửi trade..."),
+        White, false)
+
+    -- Toggle
+    local ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name           = "TradeVipToggle"
+    ToggleGui.IgnoreGuiInset = true
+    ToggleGui.ResetOnSpawn   = false
+    ToggleGui.DisplayOrder   = 9999
+    pcall(function() ToggleGui.Parent = guiParent end)
+
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Size                  = UDim2.new(0, 45, 0, 45)
+    ToggleBtn.Position              = UDim2.new(0, 10, 0.5, -22)
+    ToggleBtn.BackgroundColor3      = Gold
+    ToggleBtn.BackgroundTransparency = 0.2
+    ToggleBtn.Text                  = "💎"
+    ToggleBtn.TextSize              = 22
+    ToggleBtn.Font                  = Enum.Font.GothamBold
+    ToggleBtn.TextColor3            = White
+    ToggleBtn.BorderSizePixel       = 0
+    ToggleBtn.Parent                = ToggleGui
+    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+    local uiVisible = SHOW_UI
+    ToggleBtn.MouseButton1Click:Connect(function()
+        uiVisible = not uiVisible
+        bg.Visible = uiVisible
+        ToggleBtn.BackgroundColor3 = uiVisible and Gold or Color3.fromRGB(80,80,80)
+        ToggleBtn.Text = uiVisible and "💎" or "👁"
+    end)
 end
 
-local guiParent = getGuiParent()
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TradeVipMM2UI"
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ResetOnSpawn = false
-pcall(function() ScreenGui.Parent = guiParent end)
-
-local bg = Instance.new("Frame", ScreenGui)
-bg.Size = UDim2.new(1, 0, 1, 0)
-bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-bg.BorderSizePixel = 0
-
-local Gold   = Color3.fromRGB(255, 200, 50)
-local Purple = Color3.fromRGB(180, 100, 255)
-local Green  = Color3.fromRGB(100, 255, 150)
-local White  = Color3.fromRGB(255, 255, 255)
-local Gray   = Color3.fromRGB(150, 150, 150)
-
-local function makeLabel(parent, size, pos, text, color, bold)
-    local lbl = Instance.new("TextLabel", parent)
-    lbl.Size = size
-    lbl.Position = pos
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = color
-    lbl.Font = bold and Enum.Font.GothamBold or Enum.Font.GothamSemibold
-    lbl.TextScaled = true
-    local stroke = Instance.new("UIStroke", lbl)
-    stroke.Thickness = 2
-    stroke.Color = color
-    stroke.Transparency = 0.5
-    return lbl
-end
-
-makeLabel(bg, UDim2.new(1,0,0,90), UDim2.new(0,0,0.05,0),
-    "💎 Trade Vip MM2", Gold, true)
-
-makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.18,0),
-    "👤 Sender: " .. Player.Name, White, false)
-
-makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.27,0),
-    "🎯 Receiver: " .. RECEIVER_NAME, Purple, false)
-
-local ItemsLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.36,0),
-    "⚔️ Items: Đang scan...", Gold, false)
-
-local ReceiverLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.45,0),
-    "🔍 Receiver: Chờ vào server...", Gray, false)
-
-local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.54,0),
-    "🕐 Online: 00:00:00", Gray, false)
-
-local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.64,0),
-    "⚡ Status: Đang khởi động...", White, false)
-
--- Toggle button
-local ToggleGui = Instance.new("ScreenGui")
-ToggleGui.Name = "TradeVipToggle"
-ToggleGui.IgnoreGuiInset = true
-ToggleGui.ResetOnSpawn = false
-ToggleGui.DisplayOrder = 9999
-pcall(function() ToggleGui.Parent = guiParent end)
-
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
-ToggleBtn.Position = UDim2.new(0, 10, 0.5, -22)
-ToggleBtn.BackgroundColor3 = Gold
-ToggleBtn.BackgroundTransparency = 0.2
-ToggleBtn.Text = "💎"
-ToggleBtn.TextSize = 22
-ToggleBtn.Font = Enum.Font.GothamBold
-ToggleBtn.TextColor3 = White
-ToggleBtn.BorderSizePixel = 0
-ToggleBtn.Parent = ToggleGui
-Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
-
-local uiVisible = true
-ToggleBtn.MouseButton1Click:Connect(function()
-    uiVisible = not uiVisible
-    bg.Visible = uiVisible
-    ToggleBtn.BackgroundColor3 = uiVisible and Gold or Color3.fromRGB(80,80,80)
-    ToggleBtn.Text = uiVisible and "💎" or "👁"
-end)
-
--- UI update loop
+-- Vong update UI: dong ho moi giay, tui moi 3 giay (CA 2 VAI deu chay)
 task.spawn(function()
+    local tick3 = 0
     while task.wait(1) do
         pcall(function()
-            local elapsed = math.floor(tick() - startTime)
-            local h = math.floor(elapsed / 3600)
-            local m = math.floor((elapsed % 3600) / 60)
-            local s = elapsed % 60
-            OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d", h, m, s)
+            local e = math.floor(tick() - startTime)
+            OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d",
+                math.floor(e/3600), math.floor((e%3600)/60), e%60)
 
-            local receiver = findPlayer(RECEIVER_NAME)
-            if receiver then
-                ReceiverLabel.Text = "✅ Receiver: " .. RECEIVER_NAME .. " (trong server)"
-                ReceiverLabel.TextColor3 = Green
-            else
-                ReceiverLabel.Text = "⏳ Receiver: Chờ " .. RECEIVER_NAME .. " vào server..."
-                ReceiverLabel.TextColor3 = Gray
+            tick3 = tick3 + 1
+            if tick3 >= 3 then
+                tick3 = 0
+                WatchLabel.Text = Inv.WatchText()
             end
         end)
     end
 end)
 
 -- ========================================================================
--- TRADE LOGIC
+-- 7. MODULE: ACCEPT-CLICKER
+-- ------------------------------------------------------------------------
+-- Ban game nay khong an remote AcceptRequest/AcceptTrade. Thay vao do
+-- tim nut Accept dang hien (ke ca ImageButton) roi BAM -> game tu fire.
+--   * RECEIVER: chay vong auto-accept LIEN TUC (passive)
+--   * SENDER  : CHI bam Accept cua chinh minh trong luc gui trade
 -- ========================================================================
 
--- Listener: nhan trade request tu RECEIVER_NAME -> auto accept
-StartTrade.OnClientEvent:Connect(function(tradeData, senderName)
-    if type(senderName) == "string" and senderName == RECEIVER_NAME then
-        print("[TradeVip] Nhan trade request tu " .. RECEIVER_NAME .. " -> Accept!")
-        task.wait(0.5)
-        AcceptRequest:FireServer()
+local ClickerGui  = Player:WaitForChild("PlayerGui")
+local ACCEPT_KEYS = { accept = true, confirm = true, yes = true }
+
+local function ck_clean(s) return tostring(s):lower():gsub("%s+", "") end
+
+local function ck_isTradeButton(btn)
+    local node = btn
+    while node and node ~= game do
+        if node.Name:lower():find("trade") then return true end
+        node = node.Parent
     end
+    return false
+end
+
+local function ck_isShown(gui)
+    local node = gui
+    while node and node ~= ClickerGui do
+        if node:IsA("GuiObject") and node.Visible == false then return false end
+        node = node.Parent
+    end
+    return node == ClickerGui
+end
+
+local function ck_labelOf(b)
+    if type(b.Text) == "string" and b.Text ~= "" then return b.Text end
+    for _, d in ipairs(b:GetDescendants()) do
+        if d:IsA("TextLabel") and type(d.Text) == "string" and d.Text ~= "" then
+            return d.Text
+        end
+    end
+    return ""
+end
+
+local function ck_isAccept(b)
+    if ACCEPT_KEYS[ck_clean(b.Name)] then return true end
+    if b.Parent and ACCEPT_KEYS[ck_clean(b.Parent.Name)] then return true end
+    if ACCEPT_KEYS[ck_clean(ck_labelOf(b))] then return true end
+    return false
+end
+
+local function ck_fireSignal(signal)
+    local fired = false
+    pcall(function()
+        if getconnections then
+            for _, c in ipairs(getconnections(signal)) do
+                if typeof(c.Fire) == "function" then c:Fire(); fired = true
+                elseif typeof(c.Function) == "function" then c.Function(); fired = true end
+            end
+        end
+    end)
+    if not fired then
+        pcall(function() if firesignal then firesignal(signal); fired = true end end)
+    end
+    return fired
+end
+
+local function ck_click(btn)
+    local a = ck_fireSignal(btn.MouseButton1Click)
+    local b = ck_fireSignal(btn.Activated)
+    return a or b
+end
+
+local function scanClickAccept(lastClick)
+    for _, g in ipairs(ClickerGui:GetDescendants()) do
+        if g:IsA("GuiButton") and g.Visible and ck_isTradeButton(g)
+           and ck_isShown(g) and ck_isAccept(g) then
+            local now = tick()
+            if not lastClick[g] or now - lastClick[g] > 2.5 then
+                lastClick[g] = now
+                print("[TradeVip] Bam Accept '" .. g.Name .. "' -> "
+                      .. tostring(ck_click(g)))
+            end
+        end
+    end
+end
+
+local function getTradePartner()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player then
+            for _, g in ipairs(ClickerGui:GetDescendants()) do
+                if g:IsA("TextLabel") and g.Visible and type(g.Text) == "string"
+                   and g.Text:find(p.Name, 1, true)
+                   and ck_isTradeButton(g) and ck_isShown(g) then
+                    return p.Name
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ========================================================================
+-- 8. MODULE: ACC-CHANGER  (doi acc tu farm Decode)
+-- ------------------------------------------------------------------------
+-- Doi acc THAT SU qua getgenv().client:ChangeToFolder (do tool farm Decode /
+-- luarmor cung cap). Config folder o getgenv().ChangeAccConfig.
+-- Trung khop 100% voi cach MM2-SUMMER-V2 dang lam.
+-- ========================================================================
+
+local AccChanger = {}
+do
+    local function aclog(...) print("[AccChanger]", ...) end
+
+    function AccChanger.GetFolders(profile)
+        profile = profile or "Done Quest"
+        local from, to = "", ""
+        pcall(function()
+            if not getgenv then return end
+            local g = getgenv()
+
+            -- ⚠️ FIX: V1 dung { g.ChangeAccConfig, g.TLfig, g.TradeVipConfig }
+            -- Neu phan tu dau la nil thi mang bi LO -> ipairs dung ngay
+            -- vong 0 -> khong bao gio tim ra folder. Gio push tung cai.
+            local cands = {}
+            local seen  = {}
+            local function push(v)
+                if type(v) == "table" and not seen[v] then
+                    seen[v] = true
+                    table.insert(cands, v)
+                end
+            end
+
+            push(g.ChangeAccConfig)   -- ten goc cua Decode
+            push(g.TLfig)             -- ten trong change-acc.txt
+
+            -- Quet moi global co key ["Change Mode"]
+            for _, v in pairs(g) do
+                if type(v) == "table" then
+                    local ok = false
+                    pcall(function() ok = v["Change Mode"] ~= nil end)
+                    if ok then push(v) end
+                end
+            end
+
+            for _, cfg in ipairs(cands) do
+                pcall(function()
+                    local decode = cfg["Change Mode"] and cfg["Change Mode"]["Decode"]
+                    local entry  = decode and decode["Folder"] and decode["Folder"][profile]
+                    if entry and ((entry["Folder 1"] or "") ~= ""
+                               or (entry["Folder 2"] or "") ~= "") then
+                        from = entry["Folder 1"] or ""
+                        to   = entry["Folder 2"] or ""
+                    end
+                end)
+                if from ~= "" or to ~= "" then break end
+            end
+        end)
+        return from, to
+    end
+
+    function AccChanger.IsAvailable()
+        local ok = false
+        pcall(function()
+            ok = (getgenv and getgenv().client
+                  and type(getgenv().client.ChangeToFolder) == "function") and true or false
+        end)
+        return ok
+    end
+
+    function AccChanger.Mark(text)
+        pcall(function() writefile(Player.Name .. ".txt", text or "Done Quest") end)
+    end
+
+    function AccChanger.MoveFolder(from, to)
+        if from == "" and to == "" then
+            aclog("folder rong -> khong chuyen")
+            return false
+        end
+        if not AccChanger.IsAvailable() then
+            aclog("getgenv().client:ChangeToFolder khong co -> Decode chua load?")
+            return false
+        end
+        local ok, err = pcall(function()
+            getgenv().client:ChangeToFolder(from, to, false, nil)
+        end)
+        if ok then aclog(("Chuyen folder: '%s' -> '%s'"):format(from, to))
+        else aclog("ChangeToFolder loi: " .. tostring(err)) end
+        return ok
+    end
+
+    -- opts: Profile, MarkText, Reason, Delay, Kick, KickIfNoChanger
+    function AccChanger.Switch(opts)
+        opts = opts or {}
+        local profile = opts.Profile or "Done Quest"
+        local from, to = AccChanger.GetFolders(profile)
+        aclog(("Profile '%s' | from='%s' to='%s'"):format(profile, from, to))
+
+        AccChanger.Mark(opts.MarkText or profile)
+        local moved = AccChanger.MoveFolder(from, to)
+
+        if opts.Kick == false then return moved end
+        if not moved and not opts.KickIfNoChanger then
+            aclog("Khong chuyen duoc folder -> KHONG kick (tranh lap vo han)")
+            return false
+        end
+        task.wait(opts.Delay or 3)
+        pcall(function() Player:Kick(opts.Reason or ("Done: " .. profile)) end)
+        return true
+    end
+end
+
+-- ========================================================================
+-- 9. MODULE: AUTO-KICK
+-- ------------------------------------------------------------------------
+-- Tra ve true neu da xu ly xong (tui rong). false neu con item -> gui tiep.
+-- ========================================================================
+
+local function autoKickModule()
+    local remaining = Inv.CountBag()
+    ItemsLabel.Text = "📦 Còn " .. remaining .. " item " .. TRADE_RARITY .. " trong túi"
+    print("[AutoKick] Re-scan tui: con " .. remaining .. " item " .. TRADE_RARITY)
+
+    if remaining > 0 then return false end
+
+    if not (AUTOKICK_ON and AFTER_TRADE ~= "idle") then
+        setStatus("✅ Đã gửi hết item! (không kick)", Green)
+        return true
+    end
+
+    print("[AutoKick] Tui het item chi dinh -> doi acc + kick")
+    if CHANGEACC_ON then
+        setStatus("✅ Hết item - Đổi acc & kick...", Green)
+        AccChanger.Switch({
+            Profile         = CHANGEACC.Profile or "Done Quest",
+            MarkText        = CHANGEACC.MarkText,
+            Delay           = CHANGEACC.Delay or 3,
+            Reason          = "Trade VIP - da gui het item",
+            KickIfNoChanger = CHANGEACC.KickIfNoChanger == true,
+        })
+    else
+        setStatus("✅ Hết item - Đang kick...", Green)
+        task.wait(1)
+        pcall(function() Player:Kick("Trade VIP - da gui het item") end)
+    end
+    return true
+end
+
+-- ========================================================================
+-- 10. TRADE LOGIC
+-- ========================================================================
+
+CompleteTrade.OnClientEvent:Connect(function()
+    tradeComplete = true
+    setStatus("✅ Trade hoàn tất!", Green)
+    print("[TradeVip] CompleteTrade fired!")
+    if #itemsTraded > 0 then pcall(function() sendWebhook(itemsTraded) end) end
 end)
 
--- Listener: trade complete
-CompleteTrade.OnClientEvent:Connect(function(success, items)
-    if success then
-        print("[TradeVip] Trade COMPLETE!")
-        tradeComplete = true
-        tradeStatus = "Done"
-        StatusLabel.Text = "✅ Trade xong! " .. (AFTER_TRADE == "kick" and "Đang kick..." or "Done!")
-        StatusLabel.TextColor3 = Green
-        sendWebhook(itemsTraded)
-    end
-end)
+-- RECEIVER: vong auto-accept lien tuc
+if IS_RECEIVER then
+    task.spawn(function()
+        print("[TradeVip] RECEIVER auto-accept: DANG CHAY")
+        local lastClick, tk = {}, 0
+        while true do
+            task.wait(0.4)
+            pcall(function()
+                scanClickAccept(lastClick)
+                tk = tk + 1
+                if tk >= 3 then
+                    tk = 0
+                    local partner = getTradePartner()
+                    if partner then
+                        setSender("🤝 Đang trade với: " .. partner, Green)
+                        setStatus("🤝 Trade với " .. partner .. "...", Green)
+                    else
+                        setSender("🎯 Chờ sender...", Gray)
+                        setStatus("👂 RECEIVER - Chờ trade...", Purple)
+                    end
+                    ItemsLabel.Text = "📦 Trong túi: " .. Inv.CountBag()
+                        .. " " .. TRADE_RARITY
+                end
+            end)
+        end
+    end)
+end
 
--- Main trade function
-local function doTrade()
-    -- 1. Scan items
-    local items = getItemsToTrade()
-    if #items == 0 then
-        StatusLabel.Text = "❌ Không có item " .. TRADE_RARITY .. " để trade!"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+local function findPlayer(username)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower() == username:lower() then return p end
+    end
+    return nil
+end
+
+-- items: lo da chia san (toi da MAX_PER_TRADE phan tu, co the trung id
+-- neu so huu nhieu cai giong nhau)
+local function doTrade(items)
+    if not items or #items == 0 then
+        setStatus("❌ Không có item " .. TRADE_RARITY .. " để trade!", Red)
         print("[TradeVip] Khong co item de trade!")
         return false
     end
 
     itemsTraded = items
-    local itemNames = {}
-    for _, item in ipairs(items) do
-        table.insert(itemNames, item.name)
-    end
-    ItemsLabel.Text = "⚔️ Items: " .. table.concat(itemNames, ", ")
+    local names = {}
+    for _, it in ipairs(items) do table.insert(names, it.label or it.name) end
+    ItemsLabel.Text = "📦 " .. table.concat(names, ", ")
 
-    -- 2. Cho receiver vao server
-    StatusLabel.Text = "⏳ Chờ " .. RECEIVER_NAME .. " vào server..."
-    StatusLabel.TextColor3 = Gray
-
-    local waitStart = tick()
-    local receiver = nil
-    while not receiver and tick() - waitStart < 300 do  -- cho toi da 5 phut
+    -- Cho receiver vao server (toi da 5 phut)
+    setStatus("⏳ Chờ " .. RECEIVER_NAME .. " vào server...", Gray)
+    local waitStart, receiver = tick(), nil
+    while not receiver and tick() - waitStart < 300 do
         receiver = findPlayer(RECEIVER_NAME)
         if not receiver then task.wait(3) end
     end
-
     if not receiver then
-        StatusLabel.Text = "❌ " .. RECEIVER_NAME .. " không vào server sau 5 phút!"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        setStatus("❌ " .. RECEIVER_NAME .. " không vào server sau 5 phút!", Red)
         return false
     end
 
-    -- 3. Send trade request
-    StatusLabel.Text = "📤 Gửi trade request tới " .. RECEIVER_NAME .. "..."
-    StatusLabel.TextColor3 = Gold
-
-    local ok, result = pcall(function()
-        return SendRequest:InvokeServer(receiver)
-    end)
-
+    -- Gui trade request
+    setStatus("📤 Gửi trade request tới " .. RECEIVER_NAME .. "...", Gold)
+    local ok, result = pcall(function() return SendRequest:InvokeServer(receiver) end)
     if not ok or not result then
         print("[TradeVip] SendRequest fail:", tostring(result))
-        StatusLabel.Text = "❌ Gửi request thất bại, thử lại..."
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        setStatus("❌ Gửi request thất bại, thử lại...", Red)
         return false
     end
-
     print("[TradeVip] SendRequest OK:", tostring(result))
-    StatusLabel.Text = "⏳ Chờ " .. RECEIVER_NAME .. " accept request..."
-    StatusLabel.TextColor3 = Gray
 
-    -- 4. Cho trade bat dau (StartTrade fire)
+    -- Cho ban trade mo. Mot so ban StartTrade chi fire ben receiver ->
+    -- lay StartTrade HOAC UpdateTrade lam tin hieu, toi da 6s.
+    setStatus("⏳ Chờ " .. RECEIVER_NAME .. " accept request...", Gray)
     local tradeStarted = false
-    local conn = StartTrade.OnClientEvent:Connect(function(tradeData, senderName)
-        tradeStarted = true
-    end)
+    local c1 = StartTrade.OnClientEvent:Connect(function() tradeStarted = true end)
+    local c2 = UpdateTrade.OnClientEvent:Connect(function() tradeStarted = true end)
+    local w = tick()
+    while not tradeStarted and tick() - w < 6 do task.wait(0.3) end
+    c1:Disconnect()
+    c2:Disconnect()
 
-    local waitTrade = tick()
-    while not tradeStarted and tick() - waitTrade < 30 do
-        task.wait(0.5)
-    end
-    conn:Disconnect()
-
-    if not tradeStarted then
-        StatusLabel.Text = "❌ " .. RECEIVER_NAME .. " không accept request!"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
-        return false
-    end
-
-    -- 5. Offer items
-    StatusLabel.Text = "📦 Đang offer " .. #items .. " items..."
-    StatusLabel.TextColor3 = Purple
-
-    task.wait(1)  -- doi trade UI load
-
+    -- Offer 1 LAN (offer lai se reset dong ho chong scam 6s -> ket trade)
+    setStatus("📦 Đang offer " .. #items .. " items...", Purple)
     for _, item in ipairs(items) do
         print("[TradeVip] Offering: " .. item.id .. " (" .. item.itemType .. ")")
-        pcall(function()
-            OfferItem:FireServer(item.id, item.itemType)
-        end)
-        task.wait(0.5)
+        pcall(function() OfferItem:FireServer(item.id, item.itemType) end)
+        task.wait(0.4)
     end
 
-    -- 6. Accept trade
-    task.wait(1)
-    StatusLabel.Text = "✅ Accept trade..."
-    StatusLabel.TextColor3 = Green
-
-    pcall(function()
-        AcceptTrade:FireServer(true)
-    end)
-
-    -- 7. Cho complete
-    local waitComplete = tick()
-    while not tradeComplete and tick() - waitComplete < 30 do
-        task.wait(0.5)
+    -- Tu bam Accept cua chinh minh, cho toi da 40s
+    setStatus("⏳ Bấm Accept & chờ hoàn tất...", Green)
+    local lastClick = {}
+    local t0 = tick()
+    while not tradeComplete and tick() - t0 < 40 do
+        pcall(function() scanClickAccept(lastClick) end)
+        task.wait(0.4)
     end
-
     return tradeComplete
 end
 
 -- ========================================================================
--- MAIN LOOP
+-- 11. MAIN
 -- ========================================================================
 
 print("💎 Trade Vip MM2 - Started!")
-print("  Sender:   " .. Player.Name)
+print("  Role:     " .. (IS_RECEIVER and "RECEIVER" or "SENDER"))
+print("  Player:   " .. Player.Name)
 print("  Receiver: " .. RECEIVER_NAME)
 
 task.spawn(function()
-    task.wait(5)  -- doi game load
+    task.wait(5)  -- doi game load xong
 
-    -- Scan items truoc
-    local items = getItemsToTrade()
-    if #items == 0 then
-        StatusLabel.Text = "❌ Không có item " .. TRADE_RARITY .. " để trade!"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
-        print("[TradeVip] Khong co item " .. TRADE_RARITY .. " nao!")
-        return
+    WatchLabel.Text = Inv.WatchText()
+
+    if IS_RECEIVER then
+        setStatus("👂 Chế độ RECEIVER - Chờ trade từ sender...", Purple)
+        print("[TradeVip] Dang o che do RECEIVER (" .. Player.Name .. ")")
+        return  -- vong auto-accept o tren da chay
     end
 
-    local itemNames = {}
-    for _, item in ipairs(items) do
-        table.insert(itemNames, item.name .. " (" .. item.rarity .. ")")
-    end
-    ItemsLabel.Text = "⚔️ " .. #items .. " items: " .. table.concat(itemNames, ", ")
-    print("[TradeVip] Items to trade: " .. table.concat(itemNames, ", "))
-
-    -- Neu minh la receiver -> chi can accept
-    if Player.Name == RECEIVER_NAME then
-        StatusLabel.Text = "👂 Chế độ RECEIVER - Chờ trade từ sender..."
-        StatusLabel.TextColor3 = Purple
-        print("[TradeVip] Dang o che do RECEIVER, cho trade request...")
-        -- StartTrade listener da duoc set phia tren
-        return
-    end
-
-    -- Neu la sender -> send trade
+    -- SENDER: MM2 toi da 4 item/lo -> gui tung lo, re-scan tui, den khi rong.
+    setStatus("📤 Bắt đầu gửi item...", Gold)
     local attempts = 0
-    while not tradeComplete do
-        attempts = attempts + 1
-        print("[TradeVip] Attempt #" .. attempts)
+    while true do
+        -- Trai phang theo so luong roi cat lo <= MAX_PER_TRADE
+        local queue = Inv.FlattenQueue()
 
-        local success = doTrade()
-
-        if success then
-            print("[TradeVip] Trade thanh cong!")
-            task.wait(2)
-
-            if AFTER_TRADE == "kick" then
-                Player:Kick("Trade VIP Done")
-            end
+        if #queue == 0 then
+            print("[TradeVip] Da gui het item chi dinh!")
+            autoKickModule()
             break
+        end
+
+        local batch = {}
+        for i = 1, math.min(MAX_PER_TRADE, #queue) do
+            table.insert(batch, queue[i])
+        end
+
+        local names = {}
+        for _, it in ipairs(batch) do table.insert(names, it.label or it.name) end
+        ItemsLabel.Text = "📦 Còn " .. #queue .. " | lô này: "
+                          .. table.concat(names, ", ")
+        print("[TradeVip] Con " .. #queue .. " item, gui lo "
+              .. #batch .. ": " .. table.concat(names, ", "))
+
+        tradeComplete = false
+        setSender("📡 Đang gửi lô (" .. #batch .. "/" .. #queue .. ")...", Purple)
+
+        if doTrade(batch) then
+            attempts = 0
+            print("[TradeVip] Lo thanh cong, re-scan tui...")
+            task.wait(2)
         else
-            if attempts >= 5 then
-                StatusLabel.Text = "❌ Thất bại sau 5 lần thử!"
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
-                print("[TradeVip] That bai sau 5 lan thu!")
+            attempts = attempts + 1
+            if attempts >= MAX_ATTEMPTS then
+                setStatus("❌ Thất bại sau " .. MAX_ATTEMPTS .. " lần thử!", Red)
+                print("[TradeVip] That bai sau " .. MAX_ATTEMPTS .. " lan thu!")
                 break
             end
-            print("[TradeVip] That bai, thu lai sau " .. RETRY_DELAY .. "s...")
-            StatusLabel.Text = "⏳ Thử lại sau " .. RETRY_DELAY .. "s... (" .. attempts .. "/5)"
+            setStatus("⏳ Thử lại sau " .. RETRY_DELAY .. "s... ("
+                      .. attempts .. "/" .. MAX_ATTEMPTS .. ")", Gray)
             task.wait(RETRY_DELAY)
         end
     end
