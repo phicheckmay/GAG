@@ -1,0 +1,492 @@
+-- ========================================================================
+-- 💎 TRADE VIP MM2
+-- ========================================================================
+-- ✅ Auto send trade request toi username cu the
+-- ✅ Auto offer item theo danh sach config
+-- ✅ Auto accept trade tu trusted username
+-- ✅ Discord webhook khi trade xong
+-- ✅ Beautiful UI
+-- ========================================================================
+
+-- ========================================================================
+-- ⚙️ CONFIG
+-- ========================================================================
+
+local Config = (getgenv and getgenv().TradeVipConfig) or {}
+
+-- Username nhan item (acc chinh cua may)
+local RECEIVER_NAME = Config.ReceiverName or "NoahLion652"
+
+-- Danh sach item muon trade (itemId)
+-- De trong = trade tat ca Godly
+local TRADE_ITEMS = Config.TradeItems or {}
+
+-- Chi trade Godly hay tat ca
+local TRADE_RARITY = Config.TradeRarity or "Godly"
+
+-- Delay giua cac lan thu lai (giay)
+local RETRY_DELAY = Config.RetryDelay or 5
+
+-- Sau khi trade xong thi sao
+-- "kick" = kick acc | "continue" = tiep tuc farm | "idle" = dung lai
+local AFTER_TRADE = Config.AfterTrade or "kick"
+
+-- Webhook
+local WEBHOOK_ENABLED = false
+local WEBHOOK_URL = ""
+if Config.Webhook then
+    WEBHOOK_ENABLED = Config.Webhook.Enabled == true
+    WEBHOOK_URL = Config.Webhook.URL or ""
+end
+
+-- ========================================================================
+-- SERVICES
+-- ========================================================================
+
+local Players         = game:GetService("Players")
+local RS              = game:GetService("ReplicatedStorage")
+local HttpService     = game:GetService("HttpService")
+
+local Player          = Players.LocalPlayer
+
+-- Trade remotes
+local Trade           = RS.Trade
+local SendRequest     = Trade.SendRequest      -- RemoteFunction
+local AcceptRequest   = Trade.AcceptRequest    -- RemoteEvent
+local OfferItem       = Trade.OfferItem        -- RemoteEvent
+local AcceptTrade     = Trade.AcceptTrade      -- RemoteEvent
+local DeclineRequest  = Trade.DeclineRequest   -- RemoteEvent
+local CancelRequest   = Trade.CancelRequest    -- RemoteEvent
+local StartTrade      = Trade.StartTrade       -- RemoteEvent (client)
+local UpdateTrade     = Trade.UpdateTrade      -- RemoteEvent (client)
+local CompleteTrade   = Trade.CompleteTrade    -- RemoteEvent (client)
+
+-- ========================================================================
+-- STATE
+-- ========================================================================
+
+local tradeStatus     = "Idle"  -- Idle / Waiting / Trading / Done / Failed
+local tradeComplete   = false
+local startTime       = tick()
+local itemsTraded     = {}
+
+-- ========================================================================
+-- HELPER FUNCTIONS
+-- ========================================================================
+
+local function getProfileData()
+    local tab
+    pcall(function()
+        tab = require(RS:WaitForChild("Modules"):WaitForChild("ProfileData"))
+    end)
+    return tab
+end
+
+local function getSyncWeapons()
+    local ok, Sync = pcall(function()
+        return require(RS:WaitForChild("Database"):WaitForChild("Sync"))
+    end)
+    return (ok and Sync and Sync.Weapons) or nil
+end
+
+-- Lay danh sach item can trade
+local function getItemsToTrade()
+    local items = {}
+    local pd = getProfileData()
+    if not pd or not pd.Weapons or not pd.Weapons.Owned then return items end
+    local Weapons = getSyncWeapons()
+    if not Weapons then return items end
+
+    -- Neu config co danh sach cu the
+    if #TRADE_ITEMS > 0 then
+        for _, itemId in ipairs(TRADE_ITEMS) do
+            if pd.Weapons.Owned[itemId] then
+                local item = Weapons[itemId]
+                if item then
+                    table.insert(items, {
+                        id       = itemId,
+                        name     = item.ItemName or item.Name or itemId,
+                        rarity   = item.Rarity or "Unknown",
+                        itemType = item.ItemType or "Knife",
+                    })
+                end
+            end
+        end
+        return items
+    end
+
+    -- Neu khong co danh sach -> lay theo rarity
+    for itemId, _ in pairs(pd.Weapons.Owned) do
+        local item = Weapons[itemId]
+        if item and item.Rarity == TRADE_RARITY then
+            table.insert(items, {
+                id       = itemId,
+                name     = item.ItemName or item.Name or itemId,
+                rarity   = item.Rarity or "Unknown",
+                itemType = item.ItemType or "Knife",
+            })
+        end
+    end
+    return items
+end
+
+-- Tim player theo username trong server
+local function findPlayer(username)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name == username or p.Name:lower() == username:lower() then
+            return p
+        end
+    end
+    return nil
+end
+
+local function formatNumber(num)
+    local s = tostring(num)
+    local k
+    repeat s, k = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2") until k == 0
+    return s
+end
+
+-- ========================================================================
+-- WEBHOOK
+-- ========================================================================
+
+local function sendWebhook(items)
+    if not WEBHOOK_ENABLED or not WEBHOOK_URL or #WEBHOOK_URL == 0 then return end
+    local lines = {}
+    for _, item in ipairs(items) do
+        table.insert(lines, "**" .. item.name .. "** (" .. item.rarity .. ")")
+    end
+    local embed = {
+        title = "💎 Trade VIP MM2 - Done!",
+        description = "**👤 Sender:** " .. Player.Name ..
+                      "\n**👤 Receiver:** " .. RECEIVER_NAME ..
+                      "\n**⚔️ Items:**\n" .. table.concat(lines, "\n"),
+        color = 15158332,
+        footer = { text = "Trade VIP MM2" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
+    }
+    pcall(function()
+        local json = HttpService:JSONEncode({ embeds = { embed } })
+        local req = getgenv and (getgenv().request or getgenv().http_request)
+        if type(req) == "function" then
+            req({ Url = WEBHOOK_URL, Method = "POST",
+                  Headers = { ["Content-Type"] = "application/json" }, Body = json })
+        end
+    end)
+end
+
+-- ========================================================================
+-- GUI
+-- ========================================================================
+
+local function getGuiParent()
+    local p
+    pcall(function() p = gethui() end)
+    if p then return p end
+    pcall(function() p = game:GetService("CoreGui") end)
+    if p then return p end
+    return Player:WaitForChild("PlayerGui")
+end
+
+local guiParent = getGuiParent()
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TradeVipMM2UI"
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+pcall(function() ScreenGui.Parent = guiParent end)
+
+local bg = Instance.new("Frame", ScreenGui)
+bg.Size = UDim2.new(1, 0, 1, 0)
+bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+bg.BorderSizePixel = 0
+
+local Gold   = Color3.fromRGB(255, 200, 50)
+local Purple = Color3.fromRGB(180, 100, 255)
+local Green  = Color3.fromRGB(100, 255, 150)
+local White  = Color3.fromRGB(255, 255, 255)
+local Gray   = Color3.fromRGB(150, 150, 150)
+
+local function makeLabel(parent, size, pos, text, color, bold)
+    local lbl = Instance.new("TextLabel", parent)
+    lbl.Size = size
+    lbl.Position = pos
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = color
+    lbl.Font = bold and Enum.Font.GothamBold or Enum.Font.GothamSemibold
+    lbl.TextScaled = true
+    local stroke = Instance.new("UIStroke", lbl)
+    stroke.Thickness = 2
+    stroke.Color = color
+    stroke.Transparency = 0.5
+    return lbl
+end
+
+makeLabel(bg, UDim2.new(1,0,0,90), UDim2.new(0,0,0.05,0),
+    "💎 Trade Vip MM2", Gold, true)
+
+makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.18,0),
+    "👤 Sender: " .. Player.Name, White, false)
+
+makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.27,0),
+    "🎯 Receiver: " .. RECEIVER_NAME, Purple, false)
+
+local ItemsLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.36,0),
+    "⚔️ Items: Đang scan...", Gold, false)
+
+local ReceiverLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.45,0),
+    "🔍 Receiver: Chờ vào server...", Gray, false)
+
+local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.54,0),
+    "🕐 Online: 00:00:00", Gray, false)
+
+local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.64,0),
+    "⚡ Status: Đang khởi động...", White, false)
+
+-- Toggle button
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "TradeVipToggle"
+ToggleGui.IgnoreGuiInset = true
+ToggleGui.ResetOnSpawn = false
+ToggleGui.DisplayOrder = 9999
+pcall(function() ToggleGui.Parent = guiParent end)
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(0, 10, 0.5, -22)
+ToggleBtn.BackgroundColor3 = Gold
+ToggleBtn.BackgroundTransparency = 0.2
+ToggleBtn.Text = "💎"
+ToggleBtn.TextSize = 22
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextColor3 = White
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = ToggleGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+local uiVisible = true
+ToggleBtn.MouseButton1Click:Connect(function()
+    uiVisible = not uiVisible
+    bg.Visible = uiVisible
+    ToggleBtn.BackgroundColor3 = uiVisible and Gold or Color3.fromRGB(80,80,80)
+    ToggleBtn.Text = uiVisible and "💎" or "👁"
+end)
+
+-- UI update loop
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            local elapsed = math.floor(tick() - startTime)
+            local h = math.floor(elapsed / 3600)
+            local m = math.floor((elapsed % 3600) / 60)
+            local s = elapsed % 60
+            OnlineLabel.Text = string.format("🕐 Online: %02d:%02d:%02d", h, m, s)
+
+            local receiver = findPlayer(RECEIVER_NAME)
+            if receiver then
+                ReceiverLabel.Text = "✅ Receiver: " .. RECEIVER_NAME .. " (trong server)"
+                ReceiverLabel.TextColor3 = Green
+            else
+                ReceiverLabel.Text = "⏳ Receiver: Chờ " .. RECEIVER_NAME .. " vào server..."
+                ReceiverLabel.TextColor3 = Gray
+            end
+        end)
+    end
+end)
+
+-- ========================================================================
+-- TRADE LOGIC
+-- ========================================================================
+
+-- Listener: nhan trade request tu RECEIVER_NAME -> auto accept
+StartTrade.OnClientEvent:Connect(function(tradeData, senderName)
+    if type(senderName) == "string" and senderName == RECEIVER_NAME then
+        print("[TradeVip] Nhan trade request tu " .. RECEIVER_NAME .. " -> Accept!")
+        task.wait(0.5)
+        AcceptRequest:FireServer()
+    end
+end)
+
+-- Listener: trade complete
+CompleteTrade.OnClientEvent:Connect(function(success, items)
+    if success then
+        print("[TradeVip] Trade COMPLETE!")
+        tradeComplete = true
+        tradeStatus = "Done"
+        StatusLabel.Text = "✅ Trade xong! " .. (AFTER_TRADE == "kick" and "Đang kick..." or "Done!")
+        StatusLabel.TextColor3 = Green
+        sendWebhook(itemsTraded)
+    end
+end)
+
+-- Main trade function
+local function doTrade()
+    -- 1. Scan items
+    local items = getItemsToTrade()
+    if #items == 0 then
+        StatusLabel.Text = "❌ Không có item " .. TRADE_RARITY .. " để trade!"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        print("[TradeVip] Khong co item de trade!")
+        return false
+    end
+
+    itemsTraded = items
+    local itemNames = {}
+    for _, item in ipairs(items) do
+        table.insert(itemNames, item.name)
+    end
+    ItemsLabel.Text = "⚔️ Items: " .. table.concat(itemNames, ", ")
+
+    -- 2. Cho receiver vao server
+    StatusLabel.Text = "⏳ Chờ " .. RECEIVER_NAME .. " vào server..."
+    StatusLabel.TextColor3 = Gray
+
+    local waitStart = tick()
+    local receiver = nil
+    while not receiver and tick() - waitStart < 300 do  -- cho toi da 5 phut
+        receiver = findPlayer(RECEIVER_NAME)
+        if not receiver then task.wait(3) end
+    end
+
+    if not receiver then
+        StatusLabel.Text = "❌ " .. RECEIVER_NAME .. " không vào server sau 5 phút!"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        return false
+    end
+
+    -- 3. Send trade request
+    StatusLabel.Text = "📤 Gửi trade request tới " .. RECEIVER_NAME .. "..."
+    StatusLabel.TextColor3 = Gold
+
+    local ok, result = pcall(function()
+        return SendRequest:InvokeServer(receiver)
+    end)
+
+    if not ok or not result then
+        print("[TradeVip] SendRequest fail:", tostring(result))
+        StatusLabel.Text = "❌ Gửi request thất bại, thử lại..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        return false
+    end
+
+    print("[TradeVip] SendRequest OK:", tostring(result))
+    StatusLabel.Text = "⏳ Chờ " .. RECEIVER_NAME .. " accept request..."
+    StatusLabel.TextColor3 = Gray
+
+    -- 4. Cho trade bat dau (StartTrade fire)
+    local tradeStarted = false
+    local conn = StartTrade.OnClientEvent:Connect(function(tradeData, senderName)
+        tradeStarted = true
+    end)
+
+    local waitTrade = tick()
+    while not tradeStarted and tick() - waitTrade < 30 do
+        task.wait(0.5)
+    end
+    conn:Disconnect()
+
+    if not tradeStarted then
+        StatusLabel.Text = "❌ " .. RECEIVER_NAME .. " không accept request!"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        return false
+    end
+
+    -- 5. Offer items
+    StatusLabel.Text = "📦 Đang offer " .. #items .. " items..."
+    StatusLabel.TextColor3 = Purple
+
+    task.wait(1)  -- doi trade UI load
+
+    for _, item in ipairs(items) do
+        print("[TradeVip] Offering: " .. item.id .. " (" .. item.itemType .. ")")
+        pcall(function()
+            OfferItem:FireServer(item.id, item.itemType)
+        end)
+        task.wait(0.5)
+    end
+
+    -- 6. Accept trade
+    task.wait(1)
+    StatusLabel.Text = "✅ Accept trade..."
+    StatusLabel.TextColor3 = Green
+
+    pcall(function()
+        AcceptTrade:FireServer(true)
+    end)
+
+    -- 7. Cho complete
+    local waitComplete = tick()
+    while not tradeComplete and tick() - waitComplete < 30 do
+        task.wait(0.5)
+    end
+
+    return tradeComplete
+end
+
+-- ========================================================================
+-- MAIN LOOP
+-- ========================================================================
+
+print("💎 Trade Vip MM2 - Started!")
+print("  Sender:   " .. Player.Name)
+print("  Receiver: " .. RECEIVER_NAME)
+
+task.spawn(function()
+    task.wait(5)  -- doi game load
+
+    -- Scan items truoc
+    local items = getItemsToTrade()
+    if #items == 0 then
+        StatusLabel.Text = "❌ Không có item " .. TRADE_RARITY .. " để trade!"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+        print("[TradeVip] Khong co item " .. TRADE_RARITY .. " nao!")
+        return
+    end
+
+    local itemNames = {}
+    for _, item in ipairs(items) do
+        table.insert(itemNames, item.name .. " (" .. item.rarity .. ")")
+    end
+    ItemsLabel.Text = "⚔️ " .. #items .. " items: " .. table.concat(itemNames, ", ")
+    print("[TradeVip] Items to trade: " .. table.concat(itemNames, ", "))
+
+    -- Neu minh la receiver -> chi can accept
+    if Player.Name == RECEIVER_NAME then
+        StatusLabel.Text = "👂 Chế độ RECEIVER - Chờ trade từ sender..."
+        StatusLabel.TextColor3 = Purple
+        print("[TradeVip] Dang o che do RECEIVER, cho trade request...")
+        -- StartTrade listener da duoc set phia tren
+        return
+    end
+
+    -- Neu la sender -> send trade
+    local attempts = 0
+    while not tradeComplete do
+        attempts = attempts + 1
+        print("[TradeVip] Attempt #" .. attempts)
+
+        local success = doTrade()
+
+        if success then
+            print("[TradeVip] Trade thanh cong!")
+            task.wait(2)
+
+            if AFTER_TRADE == "kick" then
+                Player:Kick("Trade VIP Done")
+            end
+            break
+        else
+            if attempts >= 5 then
+                StatusLabel.Text = "❌ Thất bại sau 5 lần thử!"
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 50)
+                print("[TradeVip] That bai sau 5 lan thu!")
+                break
+            end
+            print("[TradeVip] That bai, thu lai sau " .. RETRY_DELAY .. "s...")
+            StatusLabel.Text = "⏳ Thử lại sau " .. RETRY_DELAY .. "s... (" .. attempts .. "/5)"
+            task.wait(RETRY_DELAY)
+        end
+    end
+end)
