@@ -20,7 +20,7 @@
 -- ========================================================================
 
 print("==================================================")
-print("### TRADE VIP MM2 - BUILD 2026-07-28-P (scan-verified) ###")
+print("### TRADE VIP MM2 - BUILD 2026-07-28-Q (watch multiline) ###")
 print("==================================================")
 
 -- ========================================================================
@@ -87,7 +87,8 @@ local CompleteTrade = Trade:WaitForChild("CompleteTrade")
 -- Khai bao truoc o day thi moi ham ben duoi deu tro dung 1 bien.
 -- ========================================================================
 
-local ItemsLabel, SenderLabel, StatusLabel, OnlineLabel, WatchLabel
+local ItemsLabel, SenderLabel, StatusLabel, OnlineLabel
+local WatchLabels = {}
 local bg
 
 local tradeComplete = false
@@ -277,12 +278,14 @@ do
         return (resolveCache and resolveCache[norm(name)]) or name
     end
 
-    -- Ten hien thi. Neu ItemName bi trung voi item khac -> them [id] cho ro.
+    -- Ten hien thi. Neu ten bi trung voi item khac (Icecream vs IcecreamChroma
+    -- deu ten "Icecream") thi dung luon itemId cho khoi lan. Con neu itemId
+    -- vua dung bang ten thi giu nguyen, khong lap "Icecream [Icecream]".
     function Inv.Label(itemId, itemName)
         if not resolveCache then buildCaches() end
         local nm = itemName or itemId
-        if dupName and dupName[itemId] then
-            return nm .. " [" .. itemId .. "]"
+        if dupName and dupName[itemId] and norm(nm) ~= norm(itemId) then
+            return itemId
         end
         return nm
     end
@@ -374,15 +377,27 @@ do
         return flat
     end
 
-    -- Chuoi hien thi cho cac item dang theo doi (WatchItems)
-    -- Dung label -> "Icecream" va "Icecream [IcecreamChroma]" khong lan nhau
-    function Inv.WatchText()
+    -- Danh sach item theo doi, MOI CAI 1 DONG rieng tren UI
+    function Inv.WatchList()
         local owned = Inv.GetOwned()
-        local parts = {}
+        local rows  = {}
         for _, raw in ipairs(WATCH_ITEMS) do
             local id   = Inv.Resolve(raw)
             local info = Inv.Info(id)
-            table.insert(parts, info.label .. ": " .. (owned[id] or 0))
+            table.insert(rows, {
+                id    = id,
+                label = info.label,
+                count = owned[id] or 0,
+            })
+        end
+        return rows
+    end
+
+    -- Ban 1 dong (dung cho log console)
+    function Inv.WatchText()
+        local parts = {}
+        for _, r in ipairs(Inv.WatchList()) do
+            table.insert(parts, r.label .. ": " .. r.count)
         end
         if #parts == 0 then return "⚔️ (chua set WatchItems)" end
         return "⚔️ " .. table.concat(parts, " | ")
@@ -496,22 +511,53 @@ do
                       or ("🎯 Gửi tới: " .. RECEIVER_NAME)),
         Purple, false)
 
-    -- Dong WATCH: so luong item theo doi (Icecream / ChromaIcecream)
-    WatchLabel = makeLabel(UDim2.new(1,0,0,48), UDim2.new(0,0,0.37,0),
-        "⚔️ Đang đọc túi...", Gold, true)
+    -- Khung WATCH: MOI ITEM 1 DONG rieng (dung UIListLayout)
+    local watchCount = math.max(#WATCH_ITEMS, 1)
+    local ROW_H      = 42
+    local watchH     = ROW_H * watchCount
 
-    -- Dong ITEMS: danh sach item se gui / con lai
-    ItemsLabel = makeLabel(UDim2.new(1,0,0,48), UDim2.new(0,0,0.47,0),
+    local WatchFrame = Instance.new("Frame", bg)
+    WatchFrame.BackgroundTransparency = 1
+    WatchFrame.Position = UDim2.new(0, 0, 0.35, 0)
+    WatchFrame.Size     = UDim2.new(1, 0, 0, watchH)
+
+    local layout = Instance.new("UIListLayout", WatchFrame)
+    layout.FillDirection       = Enum.FillDirection.Vertical
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder           = Enum.SortOrder.LayoutOrder
+    layout.Padding             = UDim.new(0, 2)
+
+    WatchLabels = {}
+    for i = 1, watchCount do
+        local lbl = Instance.new("TextLabel", WatchFrame)
+        lbl.LayoutOrder            = i
+        lbl.Size                   = UDim2.new(1, 0, 0, ROW_H - 2)
+        lbl.BackgroundTransparency = 1
+        lbl.Text                   = "⚔️ ..."
+        lbl.TextColor3             = Gold
+        lbl.Font                   = Enum.Font.GothamBold
+        lbl.TextScaled             = true
+        local st = Instance.new("UIStroke", lbl)
+        st.Thickness   = 2
+        st.Color       = Gold
+        st.Transparency = 0.5
+        WatchLabels[i] = lbl
+    end
+
+    -- Cac dong con lai day xuong duoi khung watch
+    local y0 = watchH + 8
+
+    ItemsLabel = makeLabel(UDim2.new(1,0,0,46), UDim2.new(0,0,0.35,y0),
         "📦 ...", White, false)
 
-    SenderLabel = makeLabel(UDim2.new(1,0,0,45), UDim2.new(0,0,0.57,0),
+    SenderLabel = makeLabel(UDim2.new(1,0,0,44), UDim2.new(0,0,0.35,y0+52),
         (IS_RECEIVER and "🎯 Chờ sender..." or "📡 Chờ vào bàn trade..."),
         Gray, false)
 
-    OnlineLabel = makeLabel(UDim2.new(1,0,0,42), UDim2.new(0,0,0.66,0),
+    OnlineLabel = makeLabel(UDim2.new(1,0,0,40), UDim2.new(0,0,0.35,y0+102),
         "🕐 Online: 00:00:00", Gray, false)
 
-    StatusLabel = makeLabel(UDim2.new(1,0,0,62), UDim2.new(0,0,0.75,0),
+    StatusLabel = makeLabel(UDim2.new(1,0,0,58), UDim2.new(0,0,0.35,y0+148),
         (IS_RECEIVER and "⏳ Chờ trade request..." or "⏳ Chuẩn bị gửi trade..."),
         White, false)
 
@@ -557,7 +603,12 @@ task.spawn(function()
             tick3 = tick3 + 1
             if tick3 >= 3 then
                 tick3 = 0
-                WatchLabel.Text = Inv.WatchText()
+                -- moi item 1 dong
+                local rows = Inv.WatchList()
+                for i, lbl in ipairs(WatchLabels) do
+                    local r = rows[i]
+                    lbl.Text = r and ("⚔️ " .. r.label .. ": " .. r.count) or ""
+                end
             end
         end)
     end
@@ -754,24 +805,21 @@ do
         return ok
     end
 
-    -- opts: Profile, From, To, MarkText, Reason, Delay, Kick, KickIfNoChanger
+    -- opts: From, To, Profile, MarkText, Reason, Delay, Kick, KickIfNoChanger
     function AccChanger.Switch(opts)
         opts = opts or {}
-        local profile = opts.Profile or "Done Quest"
 
-        -- Uu tien folder id go tay trong config (dung khi acc manager KHONG
-        -- phai Decode, hoac Decode khong expose ChangeAccConfig ra global).
+        -- Uu tien folder go thang trong config. Chi khi de trong VA co khai
+        -- Profile thi moi di do global cua acc manager khac (VD Decode).
         local from = opts.From or ""
         local to   = opts.To   or ""
-        if from == "" and to == "" then
-            from, to = AccChanger.GetFolders(profile)
-            aclog("Lay folder tu global cua acc manager")
-        else
-            aclog("Dung folder go tay trong config")
+        if from == "" and to == "" and opts.Profile then
+            from, to = AccChanger.GetFolders(opts.Profile)
+            aclog("Lay folder tu global theo profile '" .. opts.Profile .. "'")
         end
-        aclog(("Profile '%s' | from='%s' to='%s'"):format(profile, from, to))
+        aclog(("from='%s' to='%s'"):format(from, to))
 
-        AccChanger.Mark(opts.MarkText or profile)
+        AccChanger.Mark(opts.MarkText or "Done Trade")
         local moved = AccChanger.MoveFolder(from, to)
 
         if opts.Kick == false then return moved end
@@ -780,7 +828,7 @@ do
             return false
         end
         task.wait(opts.Delay or 3)
-        pcall(function() Player:Kick(opts.Reason or ("Done: " .. profile)) end)
+        pcall(function() Player:Kick(opts.Reason or "Trade VIP - xong") end)
         return true
     end
 end
@@ -807,9 +855,9 @@ local function autoKickModule()
     if CHANGEACC_ON then
         setStatus("✅ Hết item - Đổi acc & kick...", Green)
         AccChanger.Switch({
-            Profile         = CHANGEACC.Profile or "Done Quest",
             From            = CHANGEACC.From,
             To              = CHANGEACC.To,
+            Profile         = CHANGEACC.Profile,   -- nil = khong do global
             MarkText        = CHANGEACC.MarkText,
             Delay           = CHANGEACC.Delay or 3,
             Reason          = "Trade VIP - da gui het item",
@@ -947,7 +995,11 @@ print("  Receiver: " .. RECEIVER_NAME)
 task.spawn(function()
     task.wait(5)  -- doi game load xong
 
-    WatchLabel.Text = Inv.WatchText()
+    local rows0 = Inv.WatchList()
+    for i, lbl in ipairs(WatchLabels) do
+        local r = rows0[i]
+        lbl.Text = r and ("⚔️ " .. r.label .. ": " .. r.count) or ""
+    end
 
     if IS_RECEIVER then
         setStatus("👂 Chế độ RECEIVER - Chờ trade từ sender...", Purple)
