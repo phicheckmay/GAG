@@ -405,8 +405,9 @@ local function getSummerCratesOpened()
 end
 
 -- Daily Quest = ProfileData["Summer2026"].Quests["DailyCoins"].Progress
--- Milestones: 60 / 120 / 240 / 480 (tu UI game)
-local DAILY_MILESTONES = {60, 120, 240, 480}
+-- Milestones: 60 / 120 / 240 / 480 / 960
+-- 960 la moc cuoi (moc kick), UI se hien xxx/960
+local DAILY_MILESTONES = {60, 120, 240, 480, 960}
 
 local function getSummerDailyQuestsProgress()
     local completed, total, rawProgress, maxChallenge, lastReset = 0, #DAILY_MILESTONES, 0, DAILY_MILESTONES[#DAILY_MILESTONES], 0
@@ -807,75 +808,169 @@ end)
 -- AUTO KICK
 -- ========================================================================
 
--- So box can mo THEM trong session nay (khong phu thuoc tong cu)
-local BOX_TARGET  = Config.AutoKick and Config.AutoKick.BoxTarget or 2
-local startBox    = nil  -- so box luc bat dau session, doc lan dau sau 30s
+-- Dieu kien kick = Daily Quest DU + TONG box da mo DU target
+-- Box target la CONG DON theo moc Weekly Quest (khong reset moi ngay):
+--   week <= 6        -> tong 2 box  (ngay 1: 0/2, mo them 2)
+--   6 < week <= 12   -> tong 3 box  (ngay 2: 2/3, mo them 1)
+--   week > 12        -> tong 5 box  (ngay 3: 3/5, mo them 2)
+local DAILY_KICK_TARGET = (Config.AutoKick and Config.AutoKick.DailyTarget) or 960
+local MAX_DRAIN_BOX     = (Config.AutoKick and Config.AutoKick.MaxDrainBox) or 20
+-- Sau khi daily du 960: neu X phut khong mo them duoc box nao -> kick.
+-- Dong ho nay bat dau tu luc daily xong, va reset moi lan mo duoc 1 box.
+-- Shell = 0 tu dong roi vao day (khong mo duoc box -> het 10p -> kick).
+local STALL_MINUTES     = (Config.AutoKick and Config.AutoKick.StallMinutes) or 10
+
+local WEEKLY_BOX_TIERS = (Config.AutoKick and Config.AutoKick.WeeklyBoxTiers) or {
+    { max = 6,  box = 2 },
+    { max = 12, box = 3 },
+    { max = 18, box = 5 },
+}
+
+local function getBoxTargetByWeekly(weekly)
+    for _, tier in ipairs(WEEKLY_BOX_TIERS) do
+        if weekly <= tier.max then return tier.box, tier.max end
+    end
+    local last = WEEKLY_BOX_TIERS[#WEEKLY_BOX_TIERS]
+    return last.box, last.max
+end
+
+-- Mo box lien tuc cho den khi het shell hoac du target
+-- boxNow = TONG box da mo, khong phai so box trong session
+local function drainCrates(boxNow, boxTarget)
+    local drained = 0
+    while (getSummerCoins() or 0) >= BOX_PRICE
+          and (boxNow + drained) < boxTarget
+          and drained < MAX_DRAIN_BOX do
+        local result = openOneCrate()
+        if result == nil then
+            print("[AutoKick] openOneCrate that bai -> dung vet box")
+            break
+        end
+        if type(result) == "string" then
+            sendItemWebhook(Player.Name, result)
+        elseif type(result) == "table" then
+            for _, itemId in pairs(result) do
+                if type(itemId) == "string" then
+                    sendItemWebhook(Player.Name, itemId)
+                end
+            end
+        end
+        drained = drained + 1
+        StatusLabel.Text = "⚡ Status: Mở box (" .. (boxNow + drained) .. "/" .. boxTarget .. ")..."
+        StatusLabel.TextColor3 = SummerGreen
+        task.wait(OPEN_CRATE_DELAY)
+    end
+    return drained
+end
+
+local function doChangeAccAndKick(reason)
+    StatusLabel.Text = "⚡ Status: Xong! Chuyển acc..."
+    StatusLabel.TextColor3 = SummerGreen
+    pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
+    pcall(function()
+        if getgenv().client and getgenv().client.ChangeToFolder then
+            getgenv().client:ChangeToFolder(AUTOKICK_FROM_FOLDER, AUTOKICK_TO_FOLDER, false, nil)
+        else
+            print("[AutoKick] ChangeToFolder khong co -> Decode chua load, van kick")
+        end
+    end)
+    task.wait(3)
+    Player:Kick(reason)
+end
 
 if AUTOKICK_ENABLED then
     task.spawn(function()
         task.wait(30)
-        -- Doc so box hien tai lam baseline
-        startBox = getSummerCratesOpened() or 0
-        print("[AutoKick] startBox = " .. startBox .. " | target = +" .. BOX_TARGET)
+        print("[AutoKick] daily target = " .. DAILY_KICK_TARGET
+              .. " | box tinh theo TONG tich luy (khong reset moi session)")
 
         local alreadyKicked = false
+        local lastBoxCount  = nil   -- so box session lan check truoc
+        local clockStart    = nil   -- moc bat dau dem 10 phut
+
         while not alreadyKicked do
             pcall(function()
-                local cratesOpened  = getSummerCratesOpened() or 0
-                local boxThisSession = cratesOpened - startBox
-                local currentLevel  = getPlayerLevel() or 0
-                local _, _, dqRaw, dqMax, lastReset = getSummerDailyQuestsProgress()
-                
-                -- Daily chi tinh la "hom nay xong" neu LastReset < 24h
-                -- neu diff > 20h thi daily van la cua hom qua, chua reset
-                local diffHours = (os.time() - lastReset) / 3600
-                local dailyIsToday = diffHours < 20  -- reset trong 20h gan nhat = daily hom nay
-                local dailyFull = dqMax > 0 and dqRaw >= dqMax and dailyIsToday
-                
-                local levelOk   = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
-                local boxOk     = boxThisSession >= BOX_TARGET
+                -- TONG box da mo cua ca event (cong don qua nhieu ngay),
+                -- KHONG phai so box mo trong session nay
+                local boxTotal = getSummerCratesOpened() or 0
+                local currentLevel   = getPlayerLevel() or 0
+                local weekly         = getWeeklyProgress() or 0
+                local _, _, dqRaw, _, lastReset = getSummerDailyQuestsProgress()
 
-                print(string.format("[AutoKick] boxSession=%s/%s (total=%s) | daily=%s/%s (today=%s, diff=%.1fh) | lv=%s/%s",
-                    tostring(boxThisSession), tostring(BOX_TARGET),
-                    tostring(cratesOpened),
-                    tostring(dqRaw), tostring(dqMax),
-                    tostring(dailyIsToday), diffHours,
-                    tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL)
+                local boxTarget, tierMax = getBoxTargetByWeekly(weekly)
+
+                -- Daily chi tinh la "hom nay" neu LastReset < 20h
+                local diffHours    = (os.time() - lastReset) / 3600
+                local dailyIsToday = diffHours < 20
+                local dailyFull    = dqRaw >= DAILY_KICK_TARGET and dailyIsToday
+
+                local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
+                local boxOk   = boxTotal >= boxTarget
+
+                -- Dong ho chi chay sau khi daily du, reset moi lan mo them box
+                if not dailyFull then
+                    clockStart   = nil
+                    lastBoxCount = boxTotal
+                else
+                    if clockStart == nil then clockStart = tick() end
+                    if lastBoxCount ~= boxTotal then
+                        lastBoxCount = boxTotal
+                        clockStart   = tick()
+                    end
+                end
+                local stallMin = clockStart and ((tick() - clockStart) / 60) or 0
+
+                print(string.format("[AutoKick] daily=%s/%s (today=%s) | week=%s (tier<=%s) | box=+%s/%s | lv=%s/%s | stall=%.1fm",
+                    tostring(dqRaw), tostring(DAILY_KICK_TARGET), tostring(dailyIsToday),
+                    tostring(weekly), tostring(tierMax),
+                    tostring(boxTotal), tostring(boxTarget),
+                    tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL),
+                    stallMin
                 ))
 
-                if not boxOk then
-                    -- Chua du box hom nay -> tiep tuc farm
-                    StatusLabel.Text = "⚡ Status: Chờ mở box (" .. boxThisSession .. "/" .. BOX_TARGET .. ")"
-                    StatusLabel.TextColor3 = Color3.fromRGB(200,200,200)
-
-                elseif boxOk and not dailyFull then
-                    -- Du box nhung daily chua xong -> tiep tuc farm
-                    StatusLabel.Text = "⚡ Status: Farm daily " .. dqRaw .. "/" .. dqMax .. " (box ✅)"
+                if not dailyFull then
+                    StatusLabel.Text = "⚡ Status: Farm daily " .. dqRaw .. "/" .. DAILY_KICK_TARGET
                     StatusLabel.TextColor3 = SummerOrange
 
-                elseif boxOk and dailyFull and not levelOk then
-                    -- Du box + daily xong nhung chua du level
+                elseif not levelOk then
                     StatusLabel.Text = "⚡ Status: Chờ level " .. AUTOKICK_MIN_LEVEL .. " (lv" .. currentLevel .. ")"
                     StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
 
-                elseif boxOk and dailyFull and levelOk then
-                    -- Du het: box + daily + level -> kick
-                    local waitCrate = 0
-                    while canOpenCrate() and waitCrate < 30 do
-                        task.wait(2)
-                        waitCrate = waitCrate + 2
-                    end
-                    StatusLabel.Text = "⚡ Status: Xong! Chuyển acc..."
-                    StatusLabel.TextColor3 = SummerGreen
-                    pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
-                    pcall(function()
-                        if getgenv().client and getgenv().client.ChangeToFolder then
-                            getgenv().client:ChangeToFolder(AUTOKICK_FROM_FOLDER, AUTOKICK_TO_FOLDER, false, nil)
+                else
+                    -- Daily xong + du level -> co gang mo cho du box theo tier weekly
+                    if not boxOk then
+                        local drained = drainCrates(boxTotal, boxTarget)
+                        boxTotal = boxTotal + drained
+                        boxOk = boxTotal >= boxTarget
+                        if drained > 0 then
+                            lastBoxCount = boxTotal
+                            clockStart   = tick()
                         end
-                    end)
-                    task.wait(3)
-                    alreadyKicked = true
-                    Player:Kick("Done +" .. BOX_TARGET .. " boxes lv" .. currentLevel)
+                    end
+
+                    local shells = getSummerCoins() or 0
+
+                    if boxOk then
+                        -- Du box theo moc weekly -> kick
+                        alreadyKicked = true
+                        doChangeAccAndKick(string.format("Daily %d | week %d | box +%d/%d lv%d",
+                            dqRaw, weekly, boxTotal, boxTarget, currentLevel))
+
+                    elseif stallMin >= STALL_MINUTES then
+                        -- Qua X phut khong mo them duoc box nao (shell = 0 roi vao day) -> kick
+                        print(string.format("[AutoKick] %d phut khong mo them box (shell=%d) -> kick, box +%d/%d week %d",
+                            math.floor(stallMin), shells, boxTotal, boxTarget, weekly))
+                        StatusLabel.Text = "⚡ Status: Không mở thêm được box, chuyển acc..."
+                        StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
+                        alreadyKicked = true
+                        doChangeAccAndKick(string.format("Timeout | box +%d/%d week %d shell %d",
+                            boxTotal, boxTarget, weekly, shells))
+
+                    else
+                        StatusLabel.Text = string.format("⚡ Status: Chờ box %d/%d (week %d, shell %d, %dp)",
+                            boxTotal, boxTarget, weekly, shells, math.floor(stallMin))
+                        StatusLabel.TextColor3 = Color3.fromRGB(200,200,200)
+                    end
                 end
             end)
             if not alreadyKicked then task.wait(10) end
