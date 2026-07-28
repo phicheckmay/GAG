@@ -610,28 +610,30 @@ local SummerOrange = Color3.fromRGB(255, 170, 50)
 local SummerBlue   = Color3.fromRGB(50, 180, 255)
 local SummerGreen  = Color3.fromRGB(100, 255, 150)
 
-makeLabel(bg, UDim2.new(1,0,0,100), UDim2.new(0,0,0.08,0),
+-- Title + Username (static)
+makeLabel(bg, UDim2.new(1,0,0,90), UDim2.new(0,0,0.04,0),
     "🏖️ Kenphysical Farm MM2", SummerOrange, nil, true)
 
-makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
+makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.16,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
-local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,70), UDim2.new(0,0,0.08,0),
+-- Dynamic labels
+local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.25,0),
     "🐚 Shells: -", SummerBlue, nil, true)
 
-local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
+local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.36,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
 
-local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.31,0),
+local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.46,0),
     "📋 Daily Quest: -/-", SummerGreen, nil, false)
 
-local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.42,0),
-    "📅 Weekly Quest: -/-", Color3.fromRGB(180, 130, 255), nil, false)
+local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.55,0),
+    "📅 Weekly Quest: -/-", Color3.fromRGB(180,130,255), nil, false)
 
-local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.53,0),
+local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.65,0),
     "🕐 Online: 00:00:00", Color3.fromRGB(150,150,150), nil, false)
 
-local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.64,0),
+local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.75,0),
     "⚡ Status: Đang khởi động...", Color3.fromRGB(255,255,255), nil, false)
 
 -- Toggle button
