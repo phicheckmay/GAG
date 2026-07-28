@@ -435,7 +435,24 @@ local BOX_ID       = "Summer2026Box"
 local BOX_CURRENCY = "SummerKey2026"  -- trong data la SummerKey2026, UI hien la Shells
 local BOX_PRICE    = 120              -- 120 shells/box
 
-local function getSummerBoxIdAndPrice()
+-- Weekly Quest = ProfileData["Summer2026"].Quests["WeeklyQuests"].Progress
+-- Milestones: 6 / 18 / 26
+local WEEKLY_MILESTONES = {6, 18, 26}
+
+local function getWeeklyProgress()
+    local rawProgress, maxChallenge = 0, WEEKLY_MILESTONES[#WEEKLY_MILESTONES]
+    pcall(function()
+        local pd = getProfileData()
+        if not pd then return end
+        local title = getSummerEventTitle()
+        local eventData = pd[title]
+        if not eventData or not eventData.Quests then return end
+        local weeklyData = eventData.Quests["WeeklyQuests"]
+        if not weeklyData or type(weeklyData) ~= "table" then return end
+        rawProgress = tonumber(weeklyData.Progress) or 0
+    end)
+    return rawProgress, maxChallenge
+end
     return BOX_ID, BOX_CURRENCY, BOX_PRICE
 end
 
@@ -599,19 +616,22 @@ makeLabel(bg, UDim2.new(1,0,0,100), UDim2.new(0,0,0.08,0),
 makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
-local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,80), UDim2.new(0,0,0.30,0),
+local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,70), UDim2.new(0,0,0.08,0),
     "🐚 Shells: -", SummerBlue, nil, true)
 
-local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,70), UDim2.new(0,0,0.42,0),
+local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.20,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
 
-local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.53,0),
+local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.31,0),
     "📋 Daily Quest: -/-", SummerGreen, nil, false)
 
-local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.64,0),
+local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.42,0),
+    "📅 Weekly Quest: -/-", Color3.fromRGB(180, 130, 255), nil, false)
+
+local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.53,0),
     "🕐 Online: 00:00:00", Color3.fromRGB(150,150,150), nil, false)
 
-local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.75,0),
+local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.64,0),
     "⚡ Status: Đang khởi động...", Color3.fromRGB(255,255,255), nil, false)
 
 -- Toggle button
@@ -721,6 +741,9 @@ task.spawn(function()
             local _, _, dqRaw, dqMax = getSummerDailyQuestsProgress()
             local dqStr = dqMax > 0 and (formatNumber(dqRaw) .. "/" .. formatNumber(dqMax)) or "-/-"
             DailyLabel.Text = "📋 Daily Quest: " .. dqStr
+
+            local wqRaw, wqMax = getWeeklyProgress()
+            WeeklyLabel.Text = "📅 Weekly Quest: " .. formatNumber(wqRaw) .. "/" .. formatNumber(wqMax)
 
             local elapsed = math.floor(tick() - startTime)
             local days  = math.floor(elapsed / 86400)
