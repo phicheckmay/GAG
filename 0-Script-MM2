@@ -453,8 +453,6 @@ local function getWeeklyProgress()
     end)
     return rawProgress, maxChallenge
 end
-    return BOX_ID, BOX_CURRENCY, BOX_PRICE
-end
 
 -- ========================================================================
 -- UTILITY
