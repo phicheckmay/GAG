@@ -1,5 +1,5 @@
 {
-  "version": "4.3.5",
+  "version": "4.3.5-Volt-X",
   "quick_action": {
     "ram_percent": 95,
     "memory_limit_mb": 15000,
@@ -23,6 +23,7 @@
       "place_id": "97598239454123",
       "workers": 3,
       "loop_minutes": 5,
+      "auto_enabled": false,
       "recovery_enabled": false,
       "check_local": false,
       "proxy": false,
