@@ -56,13 +56,24 @@ local ROUND_TIMEOUT     = 10 * 60
 local HOP_MIN_PLAYERS   = 4
 local HOP_MAX_PLAYERS   = 10
 local HOP_SCRAPE_AMOUNT = 50
+-- Hop theo toc do kiem coin: kiem duoi X coin trong Y giay -> server rac / farm chet
+local HOP_COIN_THRESHOLD = 250
+local HOP_COIN_SECONDS   = 1800   -- 30 phut
 if Config.ServerHop and type(Config.ServerHop) == "table" then
     HOP_ENABLED       = Config.ServerHop.Enabled ~= false
     ROUND_TIMEOUT     = Config.ServerHop.RoundTimeout or ROUND_TIMEOUT
     HOP_MIN_PLAYERS   = Config.ServerHop.MinPlayers or HOP_MIN_PLAYERS
     HOP_MAX_PLAYERS   = Config.ServerHop.MaxPlayers or HOP_MAX_PLAYERS
     HOP_SCRAPE_AMOUNT = Config.ServerHop.ScrapeAmount or HOP_SCRAPE_AMOUNT
+    if Config.ServerHop.CoinThreshold ~= nil then
+        HOP_COIN_THRESHOLD = Config.ServerHop.CoinThreshold
+    end
+    HOP_COIN_SECONDS  = Config.ServerHop.CoinCheckSeconds or HOP_COIN_SECONDS
 end
+
+-- Co dung chung: AutoKick set = true khi daily da du 960.
+-- Luc do cam hop, vi acc chi con doi mo box roi kick, hop la phi 1 luot.
+local DAILY_DONE = false
 
 -- Auto Kick
 local AUTOKICK_ENABLED       = true
@@ -903,6 +914,7 @@ if AUTOKICK_ENABLED then
                 local diffHours    = (os.time() - lastReset) / 3600
                 local dailyIsToday = diffHours < 20
                 local dailyFull    = dqRaw >= DAILY_KICK_TARGET and dailyIsToday
+                DAILY_DONE = dailyFull   -- bao cho Server Hop biet de khoi hop nua
 
                 local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
                 local boxOk   = boxTotal >= boxTarget
@@ -1059,18 +1071,59 @@ end
 
 local function checkRoundTimeout()
     if not HOP_ENABLED then return end
+    if DAILY_DONE then return end   -- daily xong roi, de AutoKick lo
     if tick() - lastRoundStartTime >= ROUND_TIMEOUT and not isRoundActive then
         print("🚨 No round for " .. math.floor(ROUND_TIMEOUT/60) .. " min, hopping...")
-        StatusLabel.Text = "⚡ Status: Server hop..."
+        StatusLabel.Text = "⚡ Status: Server hop (het round)..."
         StatusLabel.TextColor3 = Color3.fromRGB(255,100,50)
         hopToLowPlayers(true, HOP_SCRAPE_AMOUNT, HOP_MIN_PLAYERS, HOP_MAX_PLAYERS)
     end
+end
+
+-- Moc do coin de tinh toc do farm.
+-- Dung DAILY progress chu KHONG dung so shell dang cam:
+-- shell bi tru moi lan mo box nen se am, con daily progress chi tang.
+local coinWindowStart = tick()
+local coinWindowBase  = nil
+
+local function checkCoinRate()
+    if not HOP_ENABLED then return end
+    if HOP_COIN_THRESHOLD <= 0 then return end   -- 0 = tat
+    if DAILY_DONE then return end                -- farm xong roi, khong hop nua
+
+    local _, _, dqNow = getSummerDailyQuestsProgress()
+    dqNow = dqNow or 0
+
+    if coinWindowBase == nil then
+        coinWindowBase  = dqNow
+        coinWindowStart = tick()
+        return
+    end
+
+    local elapsed = tick() - coinWindowStart
+    if elapsed < HOP_COIN_SECONDS then return end
+
+    local gained = dqNow - coinWindowBase
+    if gained < HOP_COIN_THRESHOLD then
+        print(string.format("🚨 Chi kiem %d coin trong %d phut (can %d) -> hop server",
+            gained, math.floor(elapsed/60), HOP_COIN_THRESHOLD))
+        StatusLabel.Text = "⚡ Status: Server hop (farm cham)..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255,100,50)
+        hopToLowPlayers(true, HOP_SCRAPE_AMOUNT, HOP_MIN_PLAYERS, HOP_MAX_PLAYERS)
+    else
+        print(string.format("[CoinRate] OK: +%d coin / %d phut", gained, math.floor(elapsed/60)))
+    end
+
+    -- Mo cua so do moi
+    coinWindowBase  = dqNow
+    coinWindowStart = tick()
 end
 
 task.spawn(function()
     task.wait(30)
     while true do
         checkRoundTimeout()
+        checkCoinRate()
         task.wait(30)
     end
 end)
