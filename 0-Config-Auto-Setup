@@ -49,7 +49,7 @@
         "EnableAntiAFK = true",
         "EnableRaknet = true",
         "DeleteTexture = true",
-        "DeleteImage = true",
+        "DeleteImage = false",
         "DeleteAll = false",
         "AutoCleanLog = false",
         "MuteSound = true",
