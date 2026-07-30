@@ -50,7 +50,7 @@
         "EnableRaknet = true",
         "DeleteTexture = true",
         "DeleteImage = true",
-        "DeleteAll = true",
+        "DeleteAll = false",
         "AutoCleanLog = false",
         "MuteSound = true",
         "DontUseVoltUI = true",
