@@ -1,5 +1,5 @@
 {
-  "version": "4.3.5-Volt-X",
+  "version": "4.3.5",
   "quick_action": {
     "ram_percent": 95,
     "memory_limit_mb": 15000,
@@ -13,8 +13,8 @@
       "autorun_client": false,
       "auto_open_volt": false,
       "auto_open_optimus_volt": false,
-      "auto_open_optimus_cuong": false,
-      "auto_check_boots_c": false,
+      "auto_open_optimus_cuong": true,
+      "auto_check_boots_c": true,
       "startup_delay_minutes": 5
     },
     "blocksolve": {
