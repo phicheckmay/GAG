@@ -22,7 +22,7 @@
       "fs_key": "cb3d5e55b3ce5712815d7f866e99761a1a4895ca1b59d74233fdf02eb358d891",
       "place_id": "97598239454123",
       "workers": 3,
-      "loop_minutes": 5,
+      "loop_minutes": 3,
       "auto_enabled": true,
       "recovery_enabled": true,
       "check_local": true,
