@@ -19,7 +19,7 @@
     },
     "blocksolve": {
       "bs_key": "block_6ecc9d9e243d4f6bdd213d6e0678a875",
-      "fs_key": "45cf108d93925b1e5f880ed4c260d57f31ce216b51a62a1af91af511918c6750",
+      "fs_key": "cb3d5e55b3ce5712815d7f866e99761a1a4895ca1b59d74233fdf02eb358d891",
       "place_id": "97598239454123",
       "workers": 3,
       "loop_minutes": 5,
