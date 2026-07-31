@@ -25,7 +25,7 @@
       "loop_minutes": 3,
       "auto_enabled": true,
       "recovery_enabled": true,
-      "check_local": true,
+      "check_local": false,
       "proxy": false,
       "proxy_type": "socks5h",
       "proxy_per_lan": false,
