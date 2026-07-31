@@ -28,7 +28,7 @@
       "check_local": true,
       "proxy": false,
       "proxy_type": "socks5h",
-      "proxy_per_lan": true,
+      "proxy_per_lan": false,
       "proxy_lan_base": 51,
       "proxy_lan_max": 234,
       "proxy_per_lan_count": 5
