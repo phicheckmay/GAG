@@ -36,10 +36,10 @@
     "boots_cuong": {
       "config_template": [
         "# ===== VỊ TRÍ & KÍCH THƯỚC CỬA SỔ =====",
-        "X = ",
-        "Y = ",
+        "X = 1120",
+        "Y = 3",
         "W = 800",
-        "H = 600",
+        "H = 620",
         "",
         "# ===== ĐƯỜNG DẪN =====",
         "PathExe = C:/Tool_Boots",
