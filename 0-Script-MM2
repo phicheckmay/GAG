@@ -14,6 +14,11 @@
 -- ✅ Server Hop khi khong co round
 -- ✅ Summer Tracker (SummerKey, Crate, Daily Quest)
 -- ✅ Auto Kick (Decode) khi xong Daily Quest
+-- ✅ V2.1: fix hop marker index, daily theo LastReset server, DAILY_DONE task
+--          rieng, bo drainCrates, guard coin-rate am, bootstrap farm giua round
+-- ✅ V2.2: Gold Box - mo THEM box classic (Boxes list) bang VANG truoc khi kick
+-- ✅ V2.3: BoxType uu tien + auto-do candidate lam fallback (calibrate tung box),
+--          getGold 2 duong (pd/Materials), mac dinh TAT, log "reset X.Xh"
 -- ========================================================================
 
 -- ========================================================================
@@ -388,15 +393,6 @@ local function getSummerCoins()
     local pd = getProfileData()
     if not pd or not pd.Materials or not pd.Materials.Owned then return nil end
     local amount = pd.Materials.Owned["SummerKey2026"]
-    if type(amount) == "number" then return amount end
-    return tonumber(amount) or 0
-end
-
--- Shells = currency de mo box (120 shells/box)
-local function getShells()
-    local pd = getProfileData()
-    if not pd or not pd.Materials or not pd.Materials.Owned then return nil end
-    local amount = pd.Materials.Owned["Shells"]
     if type(amount) == "number" then return amount end
     return tonumber(amount) or 0
 end
@@ -816,6 +812,127 @@ task.spawn(function()
 end)
 
 -- ========================================================================
+-- GOLD BOX - mo THEM box classic bang VANG sau khi HOAN THANH nhiem vu
+-- (goi trong doChangeAccAndKick, ngay truoc khi roi acc - KHONG chay luc farm)
+-- ========================================================================
+-- Vang = Coins (currency dump). Boxes = list id classic (GunBox1/KnifeBox1...).
+-- LUU Y: arg giua cua OpenCrate KHONG phai field BoxType (Summer2026Box co
+-- BoxType="Weapons" nhung mo bang "MysteryBox"). Nen thu GB.BoxType truoc, sai
+-- thi TU DO cac candidate con lai (cai nao lam VANG GIAM thi khoa cho box do).
+-- Arg sai -> server tu choi -> vang khong doi -> khong ton gi.
+local GB = (type(Config.GoldBox) == "table") and Config.GoldBox or {}
+local GB_ENABLED  = GB.Enabled == true
+local GB_CURRENCY = GB.Currency or "Coins"
+local GB_PRICE    = GB.Price or 1000
+local GB_KEEP     = GB.KeepGold or 0
+local GB_MAX      = GB.MaxPerKick or 10
+local GB_TYPE_CANDIDATES = (type(GB.TypeCandidates) == "table" and GB.TypeCandidates)
+    or { GB.BoxType or "MysteryBox", "Weapons", "GunBox", "Classic" }
+
+-- Danh sach hop: uu tien GB.Boxes (mang), fallback GB.BoxId (1 hop kieu cu)
+local GB_BOXES = {}
+if type(GB.Boxes) == "table" then
+    for _, id in ipairs(GB.Boxes) do
+        if type(id) == "string" and id ~= "" then table.insert(GB_BOXES, id) end
+    end
+elseif type(GB.BoxId) == "string" and GB.BoxId ~= "" then
+    table.insert(GB_BOXES, GB.BoxId)
+end
+
+local gbTypeFor = {}   -- moi box tu nho arg giua da calibrate
+
+-- Doc so vang: uu tien key cap 1 cua ProfileData, fallback Materials.Owned
+local function getGold()
+    local pd = getProfileData()
+    if not pd then return nil end
+    local v = pd[GB_CURRENCY]
+    if type(v) == "number" then return v end
+    if pd.Materials and pd.Materials.Owned then
+        v = pd.Materials.Owned[GB_CURRENCY]
+        if type(v) == "number" then return v end
+        return tonumber(v)
+    end
+    return nil
+end
+
+-- Mo 1 hop. Chua biet arg giua -> tu do (thu GB.BoxType truoc, chi ton vang khi DUNG).
+local function openGoldBoxOnce(boxId)
+    local locked = gbTypeFor[boxId]
+    if locked then
+        local ok, r = pcall(function()
+            return OpenCrateRemote:InvokeServer(boxId, locked, GB_CURRENCY)
+        end)
+        if ok and r ~= nil and r ~= false then return r end
+        return nil
+    end
+    for _, cand in ipairs(GB_TYPE_CANDIDATES) do
+        local before = getGold() or 0
+        local ok, r = pcall(function()
+            return OpenCrateRemote:InvokeServer(boxId, cand, GB_CURRENCY)
+        end)
+        task.wait(2)   -- doi server tru vang
+        if ok and (getGold() or 0) < before then
+            gbTypeFor[boxId] = cand
+            print("[GoldBox] " .. boxId .. " arg giua = '" .. cand .. "'")
+            return r or true
+        end
+    end
+    return nil
+end
+
+-- Mo lien tuc (xoay vong deu list) den khi het vang (chua KeepGold),
+-- cham GB_MAX, hoac tat ca hop deu fail 1 vong
+local function drainGoldBoxes()
+    if not GB_ENABLED then return 0 end
+    if #GB_BOXES == 0 or GB_CURRENCY == "" then
+        print("[GoldBox] Thieu Boxes/Currency trong config -> bo qua.")
+        return 0
+    end
+    local opened, idx, failStreak = 0, 1, 0
+    while opened < GB_MAX and failStreak < #GB_BOXES do
+        local gold = getGold()
+        if gold == nil then
+            print("[GoldBox] Khong doc duoc vang key '" .. GB_CURRENCY .. "' -> bo qua")
+            break
+        end
+        if gold < GB_PRICE + GB_KEEP then break end
+        local boxId = GB_BOXES[idx]
+        idx = (idx % #GB_BOXES) + 1
+        local result = openGoldBoxOnce(boxId)
+        if result ~= nil and result ~= false then
+            failStreak = 0
+            if type(result) == "string" then
+                sendItemWebhook(Player.Name, result)
+            elseif type(result) == "table" then
+                for _, itemId in pairs(result) do
+                    if type(itemId) == "string" then sendItemWebhook(Player.Name, itemId) end
+                end
+            end
+            opened = opened + 1
+            StatusLabel.Text = "⚡ Status: Mở " .. boxId .. " (" .. opened .. ")..."
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 220, 0)
+            print("[GoldBox] " .. boxId .. " OK -> tong " .. opened .. " hop, con " .. tostring(getGold()) .. " vang")
+            task.wait(OPEN_CRATE_DELAY)
+        else
+            failStreak = failStreak + 1
+            print("[GoldBox] " .. boxId .. " mo that bai (" .. failStreak .. "/" .. #GB_BOXES .. ")")
+            task.wait(0.5)
+        end
+    end
+    if opened > 0 then
+        print(string.format("[GoldBox] Xong: mo %d hop, con %s vang", opened, tostring(getGold())))
+    end
+    return opened
+end
+
+if GB_ENABLED then
+    print("[GoldBox] Che do: mo them SAU KHI hoan thanh, truoc khi kick | "
+        .. (#GB_BOXES > 0 and table.concat(GB_BOXES, ", ") or "CHUA CO Boxes")
+        .. " | gia " .. GB_PRICE .. " " .. (GB_CURRENCY ~= "" and GB_CURRENCY or "?")
+        .. " | giu lai " .. GB_KEEP .. " | max " .. GB_MAX .. "/lan")
+end
+
+-- ========================================================================
 -- AUTO KICK
 -- ========================================================================
 
@@ -825,56 +942,50 @@ end)
 --   6 < week <= 12   -> tong 3 box  (ngay 2: 2/3, mo them 1)
 --   week > 12        -> tong 5 box  (ngay 3: 3/5, mo them 2)
 local DAILY_KICK_TARGET = (Config.AutoKick and Config.AutoKick.DailyTarget) or 960
-local MAX_DRAIN_BOX     = (Config.AutoKick and Config.AutoKick.MaxDrainBox) or 20
 -- Sau khi daily du 960: neu X phut khong mo them duoc box nao -> kick.
 -- Dong ho nay bat dau tu luc daily xong, va reset moi lan mo duoc 1 box.
 -- Shell = 0 tu dong roi vao day (khong mo duoc box -> het 10p -> kick).
 local STALL_MINUTES     = (Config.AutoKick and Config.AutoKick.StallMinutes) or 10
 
-local WEEKLY_BOX_TIERS = (Config.AutoKick and Config.AutoKick.WeeklyBoxTiers) or {
+local DEFAULT_WEEKLY_BOX_TIERS = {
     { max = 6,  box = 2 },
     { max = 12, box = 3 },
     { max = 18, box = 5 },
 }
 
+-- FIX (CRITICAL): script chi chap nhan dang ARRAY {{max=,box=},...}.
+-- Neu config dua sai dang (vd map {[0]=2,[6]=1,...}) thi ipairs lap 0 lan,
+-- #t = 0, last = t[0] = number -> "attempt to index number" -> CA tick AutoKick
+-- chet trong pcall (khong kick, khong set DAILY_DONE). Validate + fallback default.
+local function normalizeWeeklyTiers(raw)
+    if type(raw) == "table" then
+        local n, ok = 0, true
+        for _, tier in ipairs(raw) do
+            n = n + 1
+            if type(tier) ~= "table" or type(tier.max) ~= "number" or type(tier.box) ~= "number" then
+                ok = false
+                break
+            end
+        end
+        if ok and n > 0 then return raw end
+    end
+    print("[AutoKick] WeeklyBoxTiers sai dinh dang -> dung default (can array {max=,box=})")
+    return DEFAULT_WEEKLY_BOX_TIERS
+end
+
+local WEEKLY_BOX_TIERS = normalizeWeeklyTiers(Config.AutoKick and Config.AutoKick.WeeklyBoxTiers)
+
 local function getBoxTargetByWeekly(weekly)
     for _, tier in ipairs(WEEKLY_BOX_TIERS) do
         if weekly <= tier.max then return tier.box, tier.max end
     end
-    local last = WEEKLY_BOX_TIERS[#WEEKLY_BOX_TIERS]
+    local last = WEEKLY_BOX_TIERS[#WEEKLY_BOX_TIERS] or DEFAULT_WEEKLY_BOX_TIERS[#DEFAULT_WEEKLY_BOX_TIERS]
     return last.box, last.max
 end
 
--- Mo box lien tuc cho den khi het shell hoac du target
--- boxNow = TONG box da mo, khong phai so box trong session
-local function drainCrates(boxNow, boxTarget)
-    local drained = 0
-    while (getSummerCoins() or 0) >= BOX_PRICE
-          and (boxNow + drained) < boxTarget
-          and drained < MAX_DRAIN_BOX do
-        local result = openOneCrate()
-        if result == nil then
-            print("[AutoKick] openOneCrate that bai -> dung vet box")
-            break
-        end
-        if type(result) == "string" then
-            sendItemWebhook(Player.Name, result)
-        elseif type(result) == "table" then
-            for _, itemId in pairs(result) do
-                if type(itemId) == "string" then
-                    sendItemWebhook(Player.Name, itemId)
-                end
-            end
-        end
-        drained = drained + 1
-        StatusLabel.Text = "⚡ Status: Mở box (" .. (boxNow + drained) .. "/" .. boxTarget .. ")..."
-        StatusLabel.TextColor3 = SummerGreen
-        task.wait(OPEN_CRATE_DELAY)
-    end
-    return drained
-end
-
 local function doChangeAccAndKick(reason)
+    -- Nhiem vu xong -> mo them Gold Box bang so vang du roi moi roi acc
+    pcall(drainGoldBoxes)
     StatusLabel.Text = "⚡ Status: Xong! Chuyển acc..."
     StatusLabel.TextColor3 = SummerGreen
     pcall(function() writefile(Player.Name .. ".txt", "Done Quest") end)
@@ -888,6 +999,18 @@ local function doChangeAccAndKick(reason)
     task.wait(3)
     Player:Kick(reason)
 end
+
+-- Task rieng cap nhat DAILY_DONE cho ServerHop, KHONG phu thuoc AutoKick bat/tat.
+-- Mot nguon su that duy nhat: daily >= target va LastReset trong vong 24h.
+task.spawn(function()
+    while task.wait(15) do
+        pcall(function()
+            local _, _, dqRaw, _, lastReset = getSummerDailyQuestsProgress()
+            DAILY_DONE = dqRaw >= DAILY_KICK_TARGET
+                and lastReset > 0 and (os.time() - lastReset) < 86400
+        end)
+    end
+end)
 
 if AUTOKICK_ENABLED then
     task.spawn(function()
@@ -910,11 +1033,13 @@ if AUTOKICK_ENABLED then
 
                 local boxTarget, tierMax = getBoxTargetByWeekly(weekly)
 
-                -- Daily chi tinh la "hom nay" neu LastReset < 20h
+                -- Reset moi 24h luc 08:00 UTC (15:00 VN) - xac nhan tu diagnostic.
+                -- Daily con "hom nay" neu chua qua 24h ke tu LastReset.
+                -- (Truoc la < 20h -> cat oan 4h cuoi chu ky, daily xong ma khong kick.)
                 local diffHours    = (os.time() - lastReset) / 3600
-                local dailyIsToday = diffHours < 20
+                local dailyIsToday = diffHours < 24
                 local dailyFull    = dqRaw >= DAILY_KICK_TARGET and dailyIsToday
-                DAILY_DONE = dailyFull   -- bao cho Server Hop biet de khoi hop nua
+                -- DAILY_DONE do task rieng cap nhat (khong phu thuoc AutoKick bat/tat)
 
                 local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
                 local boxOk   = boxTotal >= boxTarget
@@ -932,8 +1057,8 @@ if AUTOKICK_ENABLED then
                 end
                 local stallMin = clockStart and ((tick() - clockStart) / 60) or 0
 
-                print(string.format("[AutoKick] daily=%s/%s (today=%s) | week=%s (tier<=%s) | box=+%s/%s | lv=%s/%s | stall=%.1fm",
-                    tostring(dqRaw), tostring(DAILY_KICK_TARGET), tostring(dailyIsToday),
+                print(string.format("[AutoKick] daily=%s/%s (reset %.1fh, today=%s) | week=%s (tier<=%s) | box=+%s/%s | lv=%s/%s | stall=%.1fm",
+                    tostring(dqRaw), tostring(DAILY_KICK_TARGET), (os.time() - lastReset)/3600, tostring(dailyIsToday),
                     tostring(weekly), tostring(tierMax),
                     tostring(boxTotal), tostring(boxTarget),
                     tostring(currentLevel), tostring(AUTOKICK_MIN_LEVEL),
@@ -949,17 +1074,9 @@ if AUTOKICK_ENABLED then
                     StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
 
                 else
-                    -- Daily xong + du level -> co gang mo cho du box theo tier weekly
-                    if not boxOk then
-                        local drained = drainCrates(boxTotal, boxTarget)
-                        boxTotal = boxTotal + drained
-                        boxOk = boxTotal >= boxTarget
-                        if drained > 0 then
-                            lastBoxCount = boxTotal
-                            clockStart   = tick()
-                        end
-                    end
-
+                    -- Daily xong + du level. Auto-opener (task rieng) la thang tieu shell
+                    -- duy nhat -> o day chi QUAN SAT: du box theo tier -> kick, hoac ket
+                    -- STALL_MINUTES khong mo them box (shell=0) -> kick.
                     local shells = getSummerCoins() or 0
 
                     if boxOk then
@@ -1059,12 +1176,29 @@ local function hopToLowPlayers(Logs, Amount, MinPlayers, MaxPlayers)
         writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json", HttpService:JSONEncode(JobIDs))
     end
 
-    local SelectedJobID = JobIDs[math.random(1, #JobIDs)]
+    -- FIX: JobIDs[1] la MARKER GIO (cache staleness), khong phai JobId.
+    -- Phai random tu index 2. Neu cache rong (scrape 0 server / HttpGet fail)
+    -- thi ghi marker -1 de vong check 30s sau tu refetch, tranh fail loop 100%.
+    local function pickJobId()
+        if #JobIDs < 2 then return nil end
+        return JobIDs[math.random(2, #JobIDs)]
+    end
+
+    local SelectedJobID = pickJobId()
+    if not SelectedJobID then
+        print("[Hop] Cache rong -> ep refetch lan sau")
+        pcall(function()
+            writefile("ServerHopper//" .. game.PlaceId .. "//low_players-jobids.json",
+                HttpService:JSONEncode({ -1 }))
+        end)
+        return
+    end
     if Logs then print("🎯 Hopping to: " .. SelectedJobID) end
     TeleportService:TeleportToPlaceInstance(game.PlaceId, SelectedJobID)
     Player.OnTeleport:Connect(function(Status)
         if Status == Enum.TeleportState.Failed then
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, JobIDs[math.random(1, #JobIDs)])
+            local retry = pickJobId()
+            if retry then TeleportService:TeleportToPlaceInstance(game.PlaceId, retry) end
         end
     end)
 end
@@ -1104,6 +1238,12 @@ local function checkCoinRate()
     if elapsed < HOP_COIN_SECONDS then return end
 
     local gained = dqNow - coinWindowBase
+    -- Daily vua reset giua cua so (dqNow tut ve 0) -> gained am -> mo cua so moi, khong hop oan
+    if gained < 0 then
+        coinWindowBase  = dqNow
+        coinWindowStart = tick()
+        return
+    end
     if gained < HOP_COIN_THRESHOLD then
         print(string.format("🚨 Chi kiem %d coin trong %d phut (can %d) -> hop server",
             gained, math.floor(elapsed/60), HOP_COIN_THRESHOLD))
@@ -1250,6 +1390,19 @@ end)
 
 print("🏖️ Kenphysical MM2 Summer 2026 Farm - Started!")
 print("⌨️ Nhan H de toggle UI")
+
+-- FIX: neu re-inject luc round dang chay va acc dang song -> RoundStart da fire
+-- tu truoc nen AutofarmStarted ket false mai. Bat farm + dong bo trang thai round.
+-- (Vao server moi qua hop thi dang o lobby, PlayerData chua co ten -> khong dinh nham.)
+pcall(function()
+    local CRC = require(RS.Modules.CurrentRoundClient)
+    local pd  = CRC.PlayerData[Player.Name]
+    if pd and pd.Dead ~= true then
+        AutofarmStarted    = true
+        isRoundActive      = true
+        lastRoundStartTime = tick()
+    end
+end)
 
 while true do
     pcall(function()
