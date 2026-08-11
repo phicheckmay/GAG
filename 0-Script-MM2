@@ -36,6 +36,9 @@
 -- ✅ V3: ban phat hanh (noi dung = V2.4.2, doi ten file)
 -- ✅ V3.1: dong UI "💰 Vang: X" - so du vang trong tui (key theo GoldBox.Currency),
 --          dong bag doi icon sang 🎒 cho khoi trung
+-- ✅ V3.2 (SAFE): chong anti-cheat Error 267 "Invalid position" - glide teleport
+--          chia cu nhay xa thanh nhieu buoc <= MaxStudsPerStep, nghi giua step;
+--          mac dinh CoinDelay 1.5 / Timeout 3.5 / GlideStep 18 (uu tien AN TOAN)
 -- ========================================================================
 
 -- ========================================================================
@@ -1391,9 +1394,39 @@ end)
 
 -- V2.4: tham so toc do farm, chinh qua Config.FarmTuning
 local FT = (Config.FarmTuning and type(Config.FarmTuning) == "table") and Config.FarmTuning or {}
-local COIN_DELAY     = tonumber(FT.CoinDelay) or 1.7     -- giay nghi duoi platform giua cac chuyen
-local COIN_TIMEOUT   = tonumber(FT.CoinTimeout) or 5     -- giay toi da cho 1 coin
+local COIN_DELAY     = tonumber(FT.CoinDelay) or 1.5     -- giay nghi duoi platform giua cac chuyen
+local COIN_TIMEOUT   = tonumber(FT.CoinTimeout) or 3.5   -- giay toi da cho 1 coin
 local COINS_PER_TRIP = math.max(1, math.floor(tonumber(FT.CoinsPerTrip) or 1))
+
+-- V3.2: chong Error 267. Nhay xa 1 phat -> server co "Invalid position".
+-- Glide = chia doan duong thanh nhieu buoc nho, moi buoc <= MaxStudsPerStep,
+-- nghi StepWait giua cac buoc -> server thay chuyen dong "muot", khong co cheat.
+local GLIDE_STEP     = tonumber(FT.MaxStudsPerStep) or 18    -- studs toi da moi buoc
+local GLIDE_WAIT     = tonumber(FT.StepWait) or 0.06         -- giay nghi giua cac buoc
+
+local glideToPlatform  -- forward declare (gan = glideTo ngay sau khi dinh nghia)
+
+-- Di chuyen BadanPart toi targetCF theo tung buoc <= GLIDE_STEP.
+-- Doan ngan (<= GLIDE_STEP) thi nhay thang 1 phat nhu cu.
+local function glideTo(targetCF)
+    if not BadanPart then return end
+    local startPos = BadanPart.Position
+    local goalPos  = targetCF.Position
+    local dist = (goalPos - startPos).Magnitude
+    if dist <= GLIDE_STEP then
+        BadanPart.CFrame = targetCF
+        return
+    end
+    local steps = math.ceil(dist / GLIDE_STEP)
+    for i = 1, steps do
+        if not BadanPart or not BadanPart.Parent then return end
+        local pos = startPos:Lerp(goalPos, i / steps)
+        pcall(function() BadanPart.CFrame = CFrame.new(pos) end)
+        task.wait(GLIDE_WAIT)
+    end
+    pcall(function() BadanPart.CFrame = targetCF end)  -- dat dung goc coin buoc cuoi
+end
+glideToPlatform = glideTo  -- teleportToPlatform (dinh nghia truoc) dung chung glide
 
 -- Coin ket (touch khong an / nguoi khac giu) -> bo qua tam thoi, khoi chon lai lien tuc
 local skipUntil = setmetatable({}, { __mode = "k" })
@@ -1402,7 +1435,7 @@ local function teleportToPlatform()
     local plat = workspace:FindFirstChild("Papan") or createPlatform()
     if BadanPart then
         local yOff = plat.Size.Y/2 + BadanPart.Size.Y/2 + 4
-        BadanPart.CFrame = plat.CFrame + Vector3.new(0, yOff, 0)
+        glideToPlatform(plat.CFrame + Vector3.new(0, yOff, 0))
     end
 end
 
@@ -1614,7 +1647,7 @@ while true do
                         if not cf then break end
                         attempted = true
 
-                        BadanPart.CFrame = cf
+                        glideTo(cf)   -- V3.2: glide thay vi nhay 1 phat
                         local collectStart = tick()
                         while coin.Parent == coinContainer
                         and coin:FindFirstChild("TouchInterest")
