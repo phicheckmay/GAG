@@ -19,6 +19,10 @@
 -- ✅ V2.2: Gold Box - mo THEM box classic (Boxes list) bang VANG truoc khi kick
 -- ✅ V2.3: BoxType uu tien + auto-do candidate lam fallback (calibrate tung box),
 --          getGold 2 duong (pd/Materials), mac dinh TAT, log "reset X.Xh"
+-- ✅ V2.3.1: acc online xuyen moc reset 15:00 VN -> server chua ap reset, counter
+--            thanh "cua so cu" (keo dai qua 24h) -> tu rejoin sau 3p de lam moi
+-- ✅ V2.3.2: weekly cham tran 26 + daily xong = het sach nguon shell -> chi cho
+--            WeeklyCapStallMinutes (3p) roi kick, khoi dot 10p stall vo ich
 -- ========================================================================
 
 -- ========================================================================
@@ -87,11 +91,15 @@ local AUTOKICK_MIN_LEVEL     = 0
 local AUTOKICK_MAX_ONLINE    = 0
 local AUTOKICK_FROM_FOLDER   = ""
 local AUTOKICK_TO_FOLDER     = ""
+local AUTOKICK_WEEKLY_CAP       = 26  -- weekly cham tran nay = het thuong shell weekly
+local AUTOKICK_WEEKLY_CAP_STALL = 3   -- daily xong + weekly tran -> chi cho X phut roi kick
 if Config.AutoKick and type(Config.AutoKick) == "table" then
     AUTOKICK_ENABLED     = Config.AutoKick.Enabled == true
     AUTOKICK_CONDITION   = Config.AutoKick.Condition or "DailyQuest"
     AUTOKICK_MIN_LEVEL   = Config.AutoKick.MinLevel or 0
     AUTOKICK_MAX_ONLINE  = Config.AutoKick.MaxOnlineMinutes or 0
+    AUTOKICK_WEEKLY_CAP       = Config.AutoKick.WeeklyCap or 26
+    AUTOKICK_WEEKLY_CAP_STALL = Config.AutoKick.WeeklyCapStallMinutes or 3
 end
 
 pcall(function()
@@ -1021,6 +1029,7 @@ if AUTOKICK_ENABLED then
         local alreadyKicked = false
         local lastBoxCount  = nil   -- so box session lan check truoc
         local clockStart    = nil   -- moc bat dau dem 10 phut
+        local staleSince    = nil   -- moc phat hien counter thuoc cua so cu
 
         while not alreadyKicked do
             pcall(function()
@@ -1040,6 +1049,12 @@ if AUTOKICK_ENABLED then
                 local dailyIsToday = diffHours < 24
                 local dailyFull    = dqRaw >= DAILY_KICK_TARGET and dailyIsToday
                 -- DAILY_DONE do task rieng cap nhat (khong phu thuoc AutoKick bat/tat)
+
+                -- CUA SO CU: acc online lien tuc xuyen moc reset -> server chi ap reset
+                -- khi JOIN lai, nen LastReset ket qua 24h va counter la cua ngay hom qua.
+                -- Farm tiep la vo ich (so khong len nua) -> rejoin de lam moi profile.
+                local staleWindow = lastReset > 0 and not dailyIsToday
+                if not staleWindow then staleSince = nil end
 
                 local levelOk = AUTOKICK_MIN_LEVEL <= 0 or currentLevel >= AUTOKICK_MIN_LEVEL
                 local boxOk   = boxTotal >= boxTarget
@@ -1066,8 +1081,24 @@ if AUTOKICK_ENABLED then
                 ))
 
                 if not dailyFull then
-                    StatusLabel.Text = "⚡ Status: Farm daily " .. dqRaw .. "/" .. DAILY_KICK_TARGET
-                    StatusLabel.TextColor3 = SummerOrange
+                    if staleWindow then
+                        if staleSince == nil then staleSince = tick() end
+                        local waitLeft = math.max(0, 180 - math.floor(tick() - staleSince))
+                        StatusLabel.Text = "⚡ Status: Daily cửa sổ cũ - rejoin sau " .. waitLeft .. "s"
+                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+                        if waitLeft <= 0 then
+                            print(string.format(
+                                "[AutoKick] Counter cua so cu (reset %.1fh truoc, daily=%d) -> rejoin lam moi profile",
+                                diffHours, dqRaw))
+                            staleSince = tick()  -- teleport fail thi 3 phut sau tu thu lai
+                            pcall(function()
+                                game:GetService("TeleportService"):Teleport(game.PlaceId)
+                            end)
+                        end
+                    else
+                        StatusLabel.Text = "⚡ Status: Farm daily " .. dqRaw .. "/" .. DAILY_KICK_TARGET
+                        StatusLabel.TextColor3 = SummerOrange
+                    end
 
                 elseif not levelOk then
                     StatusLabel.Text = "⚡ Status: Chờ level " .. AUTOKICK_MIN_LEVEL .. " (lv" .. currentLevel .. ")"
@@ -1084,6 +1115,19 @@ if AUTOKICK_ENABLED then
                         alreadyKicked = true
                         doChangeAccAndKick(string.format("Daily %d | week %d | box +%d/%d lv%d",
                             dqRaw, weekly, boxTotal, boxTarget, currentLevel))
+
+                    elseif AUTOKICK_WEEKLY_CAP > 0 and weekly >= AUTOKICK_WEEKLY_CAP
+                       and stallMin >= AUTOKICK_WEEKLY_CAP_STALL then
+                        -- Weekly da cham tran + daily xong = HET SACH nguon shell
+                        -- (weekly khong thuong nua, daily da lanh het moc) -> cho
+                        -- them 10p stall la vo ich, kick som sau X phut
+                        print(string.format("[AutoKick] Weekly %d dat tran %d + daily xong -> het nguon shell, kick som sau %dp (box +%d/%d, shell %d)",
+                            weekly, AUTOKICK_WEEKLY_CAP, AUTOKICK_WEEKLY_CAP_STALL, boxTotal, boxTarget, shells))
+                        StatusLabel.Text = "⚡ Status: Weekly max - hết nguồn shell, chuyển acc..."
+                        StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
+                        alreadyKicked = true
+                        doChangeAccAndKick(string.format("WeeklyMax %d | box +%d/%d shell %d",
+                            weekly, boxTotal, boxTarget, shells))
 
                     elseif stallMin >= STALL_MINUTES then
                         -- Qua X phut khong mo them duoc box nao (shell = 0 roi vao day) -> kick
