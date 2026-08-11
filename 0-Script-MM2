@@ -21,8 +21,9 @@
 --          getGold 2 duong (pd/Materials), mac dinh TAT, log "reset X.Xh"
 -- ✅ V2.3.1: acc online xuyen moc reset 15:00 VN -> server chua ap reset, counter
 --            thanh "cua so cu" (keo dai qua 24h) -> tu rejoin sau 3p de lam moi
--- ✅ V2.3.2: weekly cham tran 26 + daily xong = het sach nguon shell -> chi cho
---            WeeklyCapStallMinutes (3p) roi kick, khoi dot 10p stall vo ich
+-- ✅ V2.3.2: weekly cham tran 26 -> kick som (het nguon shell weekly)
+-- ✅ V2.3.3: nhanh weekly-cap thanh VO DIEU KIEN (TH1): weekly >= 26 la dem 3p
+--            roi kick, bat ke daily/level/box; chua tran (TH2) farm binh thuong
 -- ========================================================================
 
 -- ========================================================================
@@ -1030,6 +1031,7 @@ if AUTOKICK_ENABLED then
         local lastBoxCount  = nil   -- so box session lan check truoc
         local clockStart    = nil   -- moc bat dau dem 10 phut
         local staleSince    = nil   -- moc phat hien counter thuoc cua so cu
+        local weeklyCapSince = nil  -- moc phat hien weekly cham tran (TH1)
 
         while not alreadyKicked do
             pcall(function()
@@ -1042,6 +1044,31 @@ if AUTOKICK_ENABLED then
 
                 local boxTarget, tierMax = getBoxTargetByWeekly(weekly)
 
+                -- TH1: WEEKLY CHAM TRAN -> dem X phut roi kick, VO DIEU KIEN
+                -- (bat ke daily/level/box). Weekly 26 = 3 moc x120 shell lanh het,
+                -- acc tot nghiep event. X phut dem phang tu luc phat hien, du cho
+                -- auto-opener nuong not shell le >= 120 truoc khi roi acc.
+                if AUTOKICK_WEEKLY_CAP > 0 and weekly >= AUTOKICK_WEEKLY_CAP then
+                    if weeklyCapSince == nil then
+                        weeklyCapSince = tick()
+                        print(string.format("[AutoKick] TH1: Weekly %d >= tran %d -> kick sau %dp, bat ke dieu kien khac",
+                            weekly, AUTOKICK_WEEKLY_CAP, AUTOKICK_WEEKLY_CAP_STALL))
+                    end
+                    local waitLeft = AUTOKICK_WEEKLY_CAP_STALL * 60 - (tick() - weeklyCapSince)
+                    if waitLeft <= 0 then
+                        alreadyKicked = true
+                        doChangeAccAndKick(string.format("WeeklyMax %d | box +%d | daily %d",
+                            weekly, boxTotal, dqRaw))
+                    else
+                        StatusLabel.Text = "⚡ Status: Weekly max " .. weekly .. " - kick sau " .. math.ceil(waitLeft) .. "s"
+                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+                    end
+                    return
+                else
+                    weeklyCapSince = nil
+                end
+
+                -- TH2 (weekly chua tran): farm binh thuong theo cac check duoi day.
                 -- Reset moi 24h luc 08:00 UTC (15:00 VN) - xac nhan tu diagnostic.
                 -- Daily con "hom nay" neu chua qua 24h ke tu LastReset.
                 -- (Truoc la < 20h -> cat oan 4h cuoi chu ky, daily xong ma khong kick.)
@@ -1115,19 +1142,6 @@ if AUTOKICK_ENABLED then
                         alreadyKicked = true
                         doChangeAccAndKick(string.format("Daily %d | week %d | box +%d/%d lv%d",
                             dqRaw, weekly, boxTotal, boxTarget, currentLevel))
-
-                    elseif AUTOKICK_WEEKLY_CAP > 0 and weekly >= AUTOKICK_WEEKLY_CAP
-                       and stallMin >= AUTOKICK_WEEKLY_CAP_STALL then
-                        -- Weekly da cham tran + daily xong = HET SACH nguon shell
-                        -- (weekly khong thuong nua, daily da lanh het moc) -> cho
-                        -- them 10p stall la vo ich, kick som sau X phut
-                        print(string.format("[AutoKick] Weekly %d dat tran %d + daily xong -> het nguon shell, kick som sau %dp (box +%d/%d, shell %d)",
-                            weekly, AUTOKICK_WEEKLY_CAP, AUTOKICK_WEEKLY_CAP_STALL, boxTotal, boxTarget, shells))
-                        StatusLabel.Text = "⚡ Status: Weekly max - hết nguồn shell, chuyển acc..."
-                        StatusLabel.TextColor3 = Color3.fromRGB(255,200,100)
-                        alreadyKicked = true
-                        doChangeAccAndKick(string.format("WeeklyMax %d | box +%d/%d shell %d",
-                            weekly, boxTotal, boxTarget, shells))
 
                     elseif stallMin >= STALL_MINUTES then
                         -- Qua X phut khong mo them duoc box nao (shell = 0 roi vao day) -> kick
