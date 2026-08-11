@@ -37,8 +37,11 @@
 -- ✅ V3.1: dong UI "💰 Vang: X" - so du vang trong tui (key theo GoldBox.Currency),
 --          dong bag doi icon sang 🎒 cho khoi trung
 -- ✅ V3.2 (SAFE): chong anti-cheat Error 267 "Invalid position" - glide teleport
---          chia cu nhay xa thanh nhieu buoc <= MaxStudsPerStep, nghi giua step;
---          mac dinh CoinDelay 1.5 / Timeout 3.5 / GlideStep 18 (uu tien AN TOAN)
+--          chia cu nhay xa thanh nhieu buoc <= MaxStudsPerStep, nghi giua step
+-- ✅ V3.3: glide THANH OPTIONAL, mac dinh TAT (teleport tuc thi = hanh vi V3).
+--          V3.2 glide lam acc di cham qua map -> phoi minh -> murderer giet
+--          truoc khi nhat coin -> daily ket. Chi bat SafeGlide=true neu chap
+--          nhan cham de doi lay ne 267. Mac dinh: tuc thi, farm chay ngon nhu V3.
 -- ========================================================================
 
 -- ========================================================================
@@ -1403,6 +1406,9 @@ local COINS_PER_TRIP = math.max(1, math.floor(tonumber(FT.CoinsPerTrip) or 1))
 -- nghi StepWait giua cac buoc -> server thay chuyen dong "muot", khong co cheat.
 local GLIDE_STEP     = tonumber(FT.MaxStudsPerStep) or 18    -- studs toi da moi buoc
 local GLIDE_WAIT     = tonumber(FT.StepWait) or 0.06         -- giay nghi giua cac buoc
+-- SafeGlide MAC DINH TAT: teleport tuc thi (nhu V3, farm chay ngon, tron duoi map
+-- hieu qua). Bat = glide chia buoc ne 267 NHUNG cham -> de chet khi phoi minh.
+local SAFE_GLIDE     = FT.SafeGlide == true
 
 local glideToPlatform  -- forward declare (gan = glideTo ngay sau khi dinh nghia)
 
@@ -1410,6 +1416,11 @@ local glideToPlatform  -- forward declare (gan = glideTo ngay sau khi dinh nghia
 -- Doan ngan (<= GLIDE_STEP) thi nhay thang 1 phat nhu cu.
 local function glideTo(targetCF)
     if not BadanPart then return end
+    if not SAFE_GLIDE then
+        -- Mac dinh: teleport tuc thi (hanh vi V3). Tron/nhat nhanh, khong phoi minh.
+        pcall(function() BadanPart.CFrame = targetCF end)
+        return
+    end
     local startPos = BadanPart.Position
     local goalPos  = targetCF.Position
     local dist = (goalPos - startPos).Magnitude
