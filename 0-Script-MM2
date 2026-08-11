@@ -24,6 +24,15 @@
 -- ✅ V2.3.2: weekly cham tran 26 -> kick som (het nguon shell weekly)
 -- ✅ V2.3.3: nhanh weekly-cap thanh VO DIEU KIEN (TH1): weekly >= 26 la dem 3p
 --            roi kick, bat ke daily/level/box; chua tran (TH2) farm binh thuong
+-- ✅ V2.3.4: log "[GoldBox] Pre-kick" LUON in (ke ca mo 0 hop) de tu chan doan;
+--            cho calibrate arg giua 2s -> 4s (FPS cap thap, replica cham)
+-- ✅ V2.4: toi uu farm coin - CoinDelay/CoinTimeout chinh duoc qua config,
+--          blacklist 8s coin ket (het vong lap 5s tu dam), CoinsPerTrip chain
+--          nhieu coin/chuyen, log "[Farm] Round truoc gom X coin" de do tran bag
+-- ✅ V2.4.1: hook CoinContainer (ChildAdded/Removed) - registry vi tri coin
+--            song, phan ung tuc thi khi coin spawn, bo quet map moi chu ky
+-- ✅ V2.4.2: dong UI moi "🪙 Coin: bag X/40 | map N" - bag tu CoinCollected,
+--            map = so coin dang song trong registry
 -- ========================================================================
 
 -- ========================================================================
@@ -166,8 +175,11 @@ local OpenCrateRemote    = RS.Remotes.Shop.OpenCrate
 local AutofarmStarted    = false
 local RoundEnded         = false
 local BagFull            = false
+local bagNow, bagMax     = 0, 0   -- so coin trong bag (cap nhat tu CoinCollected)
+local mapCoinCount       = 0      -- so coin dang nam trong registry map
 local startTime          = tick()
 local lastRoundStartTime = tick()
+local roundPeakBag       = 0   -- so coin cao nhat trong bag round nay (de log do tran)
 local isRoundActive      = false
 
 -- ========================================================================
@@ -634,22 +646,25 @@ makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.16,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
 -- Dynamic labels
-local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.25,0),
+local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.24,0),
     "🐚 Shells: -", SummerBlue, nil, true)
 
-local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.36,0),
+local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.33,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
 
-local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.46,0),
+local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.42,0),
     "📋 Daily Quest: -/-", SummerGreen, nil, false)
 
-local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.55,0),
+local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.50,0),
     "📅 Weekly Quest: -/-", Color3.fromRGB(180,130,255), nil, false)
 
-local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.65,0),
+local CoinLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.58,0),
+    "🪙 Coin: -/- | map -", Color3.fromRGB(255,215,120), nil, false)
+
+local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.66,0),
     "🕐 Online: 00:00:00", Color3.fromRGB(150,150,150), nil, false)
 
-local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.75,0),
+local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.74,0),
     "⚡ Status: Đang khởi động...", Color3.fromRGB(255,255,255), nil, false)
 
 -- Toggle button
@@ -762,6 +777,9 @@ task.spawn(function()
 
             local wqRaw, wqMax = getWeeklyProgress()
             WeeklyLabel.Text = "📅 Weekly Quest: " .. formatNumber(wqRaw) .. "/" .. formatNumber(wqMax)
+
+            local bagStr = (bagMax > 0) and (bagNow .. "/" .. bagMax) or tostring(bagNow)
+            CoinLabel.Text = "🪙 Coin: " .. bagStr .. " | map " .. mapCoinCount
 
             local elapsed = math.floor(tick() - startTime)
             local days  = math.floor(elapsed / 86400)
@@ -879,7 +897,7 @@ local function openGoldBoxOnce(boxId)
         local ok, r = pcall(function()
             return OpenCrateRemote:InvokeServer(boxId, cand, GB_CURRENCY)
         end)
-        task.wait(2)   -- doi server tru vang
+        task.wait(4)   -- doi server tru vang + replica cap nhat (FPS cap thap nen de du)
         if ok and (getGold() or 0) < before then
             gbTypeFor[boxId] = cand
             print("[GoldBox] " .. boxId .. " arg giua = '" .. cand .. "'")
@@ -928,9 +946,11 @@ local function drainGoldBoxes()
             task.wait(0.5)
         end
     end
-    if opened > 0 then
-        print(string.format("[GoldBox] Xong: mo %d hop, con %s vang", opened, tostring(getGold())))
-    end
+    -- LUON in tong ket de log tu khai: vang luc kick + nguong + so hop mo duoc.
+    -- vang < nguong & 0 hop = chua du tien (khong phai loi); vang >= nguong & 0 hop
+    -- = loi ky thuat (xem dong "mo that bai"/"Khong doc duoc vang" ngay tren)
+    print(string.format("[GoldBox] Pre-kick: vang %s | nguong %d+%d | mo %d hop",
+        tostring(getGold()), GB_PRICE, GB_KEEP, opened))
     return opened
 end
 
@@ -1348,6 +1368,15 @@ task.spawn(function()
     while true do createPlatform() task.wait(5) end
 end)
 
+-- V2.4: tham so toc do farm, chinh qua Config.FarmTuning
+local FT = (Config.FarmTuning and type(Config.FarmTuning) == "table") and Config.FarmTuning or {}
+local COIN_DELAY     = tonumber(FT.CoinDelay) or 1.7     -- giay nghi duoi platform giua cac chuyen
+local COIN_TIMEOUT   = tonumber(FT.CoinTimeout) or 5     -- giay toi da cho 1 coin
+local COINS_PER_TRIP = math.max(1, math.floor(tonumber(FT.CoinsPerTrip) or 1))
+
+-- Coin ket (touch khong an / nguoi khac giu) -> bo qua tam thoi, khoi chon lai lien tuc
+local skipUntil = setmetatable({}, { __mode = "k" })
+
 local function teleportToPlatform()
     local plat = workspace:FindFirstChild("Papan") or createPlatform()
     if BadanPart then
@@ -1369,20 +1398,83 @@ local function returncoincontainer()
     return nil
 end
 
--- FIX: lay coin gan nhat thay vi random shuffle
+-- ========================================================================
+-- V2.4.1: COIN REGISTRY - hook CoinContainer, giu san danh sach vi tri coin.
+-- Coin tren map la vat the TINH (spawn xong dung im) nen cache vi tri an toan.
+-- Loi: (1) coin moi spawn giua round vao registry TUC THI qua ChildAdded,
+--      (2) bo han 2 vong quet (workspace + GetChildren + doc Position) moi chu ky,
+--      (3) doi map round moi -> container cu chet -> tu re-hook, khong can lam gi.
+-- ========================================================================
+
+local coinPos      = {}   -- [coin instance] = Vector3
+local coinConns    = {}
+local curContainer = nil
+
+local function coinPosition(coin)
+    if coin:IsA("BasePart") then return coin.Position end
+    if coin:IsA("Model") then
+        local pp = coin.PrimaryPart or coin:FindFirstChildWhichIsA("BasePart")
+        if pp then return pp.Position end
+    end
+    return nil
+end
+
+local function unhookContainer()
+    for _, c in ipairs(coinConns) do pcall(function() c:Disconnect() end) end
+    coinConns    = {}
+    coinPos      = {}
+    curContainer = nil
+    mapCoinCount = 0
+end
+
+local function hookContainer(container)
+    unhookContainer()
+    curContainer = container
+    for _, coin in ipairs(container:GetChildren()) do
+        local p = coinPosition(coin)
+        if p then coinPos[coin] = p end
+    end
+    table.insert(coinConns, container.ChildAdded:Connect(function(coin)
+        task.defer(function()
+            local p = coinPosition(coin)
+            if not p then task.wait(0.2); p = coinPosition(coin) end  -- Model cho PrimaryPart stream
+            if p and coinPos[coin] == nil then
+                coinPos[coin] = p
+                mapCoinCount = mapCoinCount + 1
+            end
+        end)
+    end))
+    table.insert(coinConns, container.ChildRemoved:Connect(function(coin)
+        if coinPos[coin] ~= nil then mapCoinCount = mapCoinCount - 1 end
+        coinPos[coin] = nil
+    end))
+    local n = 0
+    for _ in pairs(coinPos) do n = n + 1 end
+    mapCoinCount = n
+    print("[Farm] Hook CoinContainer: " .. n .. " coin san co")
+end
+
+-- Container hien tai con song thi dung luon; chet (doi map) thi quet lai + re-hook
+local function getCoinContainer()
+    if curContainer and curContainer.Parent then return curContainer end
+    local c = returncoincontainer()
+    if c then hookContainer(c) end
+    return c
+end
+
+-- Coin gan nhat doc tu registry (khong quet GetChildren nua)
 local function getNearestCoin(container)
     if not BadanPart then return nil end
+    local myPos = BadanPart.Position
     local nearest, minDist = nil, math.huge
-    for _, coin in ipairs(container:GetChildren()) do
-        if coin:FindFirstChild("TouchInterest") then
-            local pos = coin:IsA("BasePart") and coin.Position
-                     or (coin:IsA("Model") and coin.PrimaryPart and coin.PrimaryPart.Position)
-            if pos then
-                local dist = (BadanPart.Position - pos).Magnitude
-                if dist < minDist then
-                    nearest = coin
-                    minDist  = dist
-                end
+    for coin, pos in pairs(coinPos) do
+        if coin.Parent == container
+        and coin:FindFirstChild("TouchInterest")
+        and not (skipUntil[coin] and skipUntil[coin] > tick()) then
+            local dist = (myPos - pos).Magnitude
+            if dist < minDist then
+                nearest = coin
+                minDist = dist
             end
         end
     end
@@ -1401,6 +1493,10 @@ end
 
 CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
     AutofarmStarted = true
+    local cur = tonumber(current)
+    bagNow = cur or bagNow
+    bagMax = tonumber(max) or bagMax
+    if cur and cur > roundPeakBag then roundPeakBag = cur end
     if tonumber(current) >= tonumber(max) then
         AutofarmStarted = false
         BagFull = true
@@ -1425,11 +1521,19 @@ CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
 end)
 
 RoundStartEvent.OnClientEvent:Connect(function()
+    if roundPeakBag > 0 then
+        print("[Farm] Round truoc gom " .. roundPeakBag .. " coin")
+    end
+    roundPeakBag = 0
     lastRoundStartTime = tick()
+    -- Pre-warm: map da load o thoi diem nay -> hook container luon de cycle farm
+    -- dau tien khoi ton phi quet map, va log dem coin in deu ngay dau round
+    task.delay(1, function() pcall(getCoinContainer) end)
     isRoundActive      = true
     AutofarmStarted    = true
     RoundEnded         = false
     BagFull            = false
+    bagNow             = 0
     StatusLabel.Text      = "⚡ Status: Đang farm..."
     StatusLabel.TextColor3 = SummerOrange
 end)
@@ -1476,33 +1580,43 @@ while true do
             if char and char:FindFirstChild("HumanoidRootPart") then
                 BadanPart = char.HumanoidRootPart
 
-                local coinContainer = returncoincontainer()
+                local coinContainer = getCoinContainer()
                 if coinContainer then
-                    -- FIX: coin gan nhat
-                    local coin = getNearestCoin(coinContainer)
-                    if coin then
+                    -- V2.4: nhat lien COINS_PER_TRIP coin moi chuyen; coin ke tiep
+                    -- do tu VI TRI HIEN TAI (dang dung o coin vua nhat) -> chain chuan
+                    local attempted = false
+                    for _ = 1, COINS_PER_TRIP do
+                        if BagFull then break end
+                        local coin = getNearestCoin(coinContainer)
+                        if not coin then break end
                         local cf = getCoinCFrame(coin)
-                        if cf then
-                            -- Teleport thang toi coin (tweenWithBodyVelocity cu la code chet)
-                            BadanPart.CFrame = cf
+                        if not cf then break end
+                        attempted = true
 
-                            local collectStart = tick()
-                            while coin.Parent == coinContainer
-                            and coin:FindFirstChild("TouchInterest")
-                            and (tick() - collectStart < 5) do
-                                pcall(function() BadanPart.CFrame = cf end)
-                                -- FIX: Touched (1) truoc, TouchEnded (0) sau
-                                pcall(function()
-                                    firetouchinterest(BadanPart, coin, 1)
-                                    task.wait(0.1)
-                                    firetouchinterest(BadanPart, coin, 0)
-                                end)
+                        BadanPart.CFrame = cf
+                        local collectStart = tick()
+                        while coin.Parent == coinContainer
+                        and coin:FindFirstChild("TouchInterest")
+                        and (tick() - collectStart < COIN_TIMEOUT) do
+                            pcall(function() BadanPart.CFrame = cf end)
+                            -- Touched (1) truoc, TouchEnded (0) sau
+                            pcall(function()
+                                firetouchinterest(BadanPart, coin, 1)
                                 task.wait(0.1)
-                            end
-
-                            teleportToPlatform()
-                            task.wait(1.7)
+                                firetouchinterest(BadanPart, coin, 0)
+                            end)
+                            task.wait(0.1)
                         end
+
+                        if coin.Parent == coinContainer and coin:FindFirstChild("TouchInterest") then
+                            -- Het timeout ma coin van con -> ket, bo qua 8s
+                            skipUntil[coin] = tick() + 8
+                        end
+                    end
+
+                    if attempted then
+                        teleportToPlatform()
+                        task.wait(COIN_DELAY)
                     end
                 end
             end
