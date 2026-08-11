@@ -33,6 +33,9 @@
 --            song, phan ung tuc thi khi coin spawn, bo quet map moi chu ky
 -- ✅ V2.4.2: dong UI moi "🪙 Coin: bag X/40 | map N" - bag tu CoinCollected,
 --            map = so coin dang song trong registry
+-- ✅ V3: ban phat hanh (noi dung = V2.4.2, doi ten file)
+-- ✅ V3.1: dong UI "💰 Vang: X" - so du vang trong tui (key theo GoldBox.Currency),
+--          dong bag doi icon sang 🎒 cho khoi trung
 -- ========================================================================
 
 -- ========================================================================
@@ -646,25 +649,28 @@ makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.16,0),
     "👤 Tên: " .. Player.Name, Color3.fromRGB(255,220,100), nil, false)
 
 -- Dynamic labels
-local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.24,0),
+local TokensLabel = makeLabel(bg, UDim2.new(1,0,0,65), UDim2.new(0,0,0.23,0),
     "🐚 Shells: -", SummerBlue, nil, true)
 
-local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.33,0),
+local CratesLabel = makeLabel(bg, UDim2.new(1,0,0,60), UDim2.new(0,0,0.30,0),
     "🎁 Crate Opened: -", Color3.fromRGB(255,220,0), nil, true)
 
-local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.42,0),
+local DailyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.375,0),
     "📋 Daily Quest: -/-", SummerGreen, nil, false)
 
-local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.50,0),
+local WeeklyLabel = makeLabel(bg, UDim2.new(1,0,0,55), UDim2.new(0,0,0.445,0),
     "📅 Weekly Quest: -/-", Color3.fromRGB(180,130,255), nil, false)
 
-local CoinLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.58,0),
-    "🪙 Coin: -/- | map -", Color3.fromRGB(255,215,120), nil, false)
+local CoinLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.515,0),
+    "🎒 Coin: -/- | map -", Color3.fromRGB(255,215,120), nil, false)
 
-local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.66,0),
+local GoldLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.585,0),
+    "💰 Vàng: -", Color3.fromRGB(255,200,60), nil, false)
+
+local OnlineLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.655,0),
     "🕐 Online: 00:00:00", Color3.fromRGB(150,150,150), nil, false)
 
-local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.74,0),
+local StatusLabel = makeLabel(bg, UDim2.new(1,0,0,50), UDim2.new(0,0,0.725,0),
     "⚡ Status: Đang khởi động...", Color3.fromRGB(255,255,255), nil, false)
 
 -- Toggle button
@@ -779,7 +785,22 @@ task.spawn(function()
             WeeklyLabel.Text = "📅 Weekly Quest: " .. formatNumber(wqRaw) .. "/" .. formatNumber(wqMax)
 
             local bagStr = (bagMax > 0) and (bagNow .. "/" .. bagMax) or tostring(bagNow)
-            CoinLabel.Text = "🪙 Coin: " .. bagStr .. " | map " .. mapCoinCount
+            CoinLabel.Text = "🎒 Coin: " .. bagStr .. " | map " .. mapCoinCount
+
+            -- So du vang: doc truc tiep tai day (getGold() khai bao SAU vong nay
+            -- trong file nen khong tham chieu duoc - cung logic 2 duong)
+            local goldVal = nil
+            local gpd = getProfileData()
+            if gpd then
+                local curKey = (Config.GoldBox and Config.GoldBox.Currency) or "Coins"
+                local gv = gpd[curKey]
+                if type(gv) == "number" then
+                    goldVal = gv
+                elseif gpd.Materials and gpd.Materials.Owned then
+                    goldVal = tonumber(gpd.Materials.Owned[curKey])
+                end
+            end
+            GoldLabel.Text = "💰 Vàng: " .. displayNum(goldVal)
 
             local elapsed = math.floor(tick() - startTime)
             local days  = math.floor(elapsed / 86400)
